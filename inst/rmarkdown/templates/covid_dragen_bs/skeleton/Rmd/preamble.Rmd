@@ -20,7 +20,11 @@ source(here("functions", "R_all_functions_v2.R"))
 #try to get it automagically
 mapping_file_fp <- here("metadata", list.files(here("metadata"), pattern = ".tsv|.csv"))
 
-### bcl2fastq and demultiplexing from BaseSpace
+### bcl2fastq info
+b2fq_c_fp <- here("Data", "bcl2fastq", "commands.tsv")
+b2fq_v_fp <- here("Data", "bcl2fastq", "bcl2fastqVersion.stderr.txt")
+
+### demultiplexing results from BaseSpace
 
 
 ### kmer fp
@@ -32,6 +36,26 @@ nextclade_fp = here("Data", "NextClade", "Data_export.csv")
 ### Pangolin
 pangolin_fp <- here("Data", "Pangolin", "Data_export.csv")
 
+
+```
+
+```{r load bcl2fq}
+
+bcl2fq_version <- read_delim(b2fq_v_fp, skip = 1, col_names = FALSE) %>%
+  slice(1) %>%
+  select(X2) %>%
+  pull()
+am here
+bcl2fq_flags <- read_delim(b2fq_c_fp, col_names = FALSE, col_types = cols(.default = "c"), delim = "--") %>%
+  slice(1) %>%
+  separate(select(., everything()), sep = " -")
+  mutate_all(funs(gsub("^", "--", .))) %>%
+
+
+bcl2fq_flags <- read_delim(b2fq_c_fp, col_names = FALSE, col_types = cols(.default = "c"), delim = " ") %>%
+  slice(1) %>%
+  select(where(function(x) all(!is.na(x)))) %>%
+  pivot_longer(cols = everything(), names_to = "options", values_to = "flags")
 
 ```
 
