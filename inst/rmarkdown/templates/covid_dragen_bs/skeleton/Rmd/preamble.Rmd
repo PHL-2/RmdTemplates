@@ -9,7 +9,23 @@ library(ghibli)
 
 ```{r functions}
 
-source(here("functions", "R_all_functions_v2.R"))
+source(here("functions", "R_all_functions_v3.R"))
+
+```
+
+```{r versions and dates}
+
+#if these numbers are missing, throw an error
+
+pangolin_version <-
+
+nextclade_version <- 
+  
+basespace_version <-
+  
+date_pipeline_was_run <- 
+  
+sequencing_machine <- "MiSeq"
 
 ```
 
@@ -25,7 +41,10 @@ b2fq_c_fp <- here("Data", "bcl2fastq", "commands.tsv")
 b2fq_v_fp <- here("Data", "bcl2fastq", "bcl2fastqVersion.stderr.txt")
 
 ### demultiplexing results from BaseSpace
-
+adaptertrimming_fp <- here("Data", "demux_reads", "AdapterTrimming.txt")
+demuxsum_fp <- here("Data", "demux_reads", "DemuxSummaryF1L1.txt")
+fastqsum_fp <- here("Data", "demux_reads", "FastqSummaryF1L1.txt")
+SampleSheet_fp <- here("Data", "demux_reads", "SampleSheetused.csv")
 
 ### kmer fp
 kmer_fp <- here("Data", "kmer", "Data_export.csv")
@@ -36,7 +55,6 @@ nextclade_fp = here("Data", "NextClade", "Data_export.csv")
 ### Pangolin
 pangolin_fp <- here("Data", "Pangolin", "Data_export.csv")
 
-
 ```
 
 ```{r load bcl2fq}
@@ -45,17 +63,69 @@ bcl2fq_version <- read_delim(b2fq_v_fp, skip = 1, col_names = FALSE) %>%
   slice(1) %>%
   select(X2) %>%
   pull()
-am here
-bcl2fq_flags <- read_delim(b2fq_c_fp, col_names = FALSE, col_types = cols(.default = "c"), delim = "--") %>%
-  slice(1) %>%
-  separate(select(., everything()), sep = " -")
-  mutate_all(funs(gsub("^", "--", .))) %>%
 
-
-bcl2fq_flags <- read_delim(b2fq_c_fp, col_names = FALSE, col_types = cols(.default = "c"), delim = " ") %>%
+#just reading in command file as one column
+bcl2fq_flags <- read_delim(b2fq_c_fp, col_names = FALSE, col_types = cols(.default = "c"), delim = ";") %>%
   slice(1) %>%
-  select(where(function(x) all(!is.na(x)))) %>%
-  pivot_longer(cols = everything(), names_to = "options", values_to = "flags")
+  mutate(X1 = gsub("^.*bcl2fastq", "bcl2fastq", X1)) %>%
+  mutate(X1 = gsub(" --", "\n\t--", X1)) %>%
+  mutate(X1 = gsub(" -", "\n\t-", X1)) %>%
+  pull()
+
+```
+
+```{r load read numbers}
+
+trimmin <- read_delim(adaptertrimming_fp) %>%
+  filter(!is.na(TrimmedBases))
+
+# read counts by sample number
+fastq_sum <- read_delim(fastqsum_fp) %>%
+  group_by(SampleNumber) %>%
+  summarise(total_raw_reads = sum(NumberOfReadsRaw), total_pass_filter_reads = sum(NumberOfReadsPF)) %>%
+  ungroup()
+
+# SampleSheet.csv loading
+
+sample_sheet <- load_sample_sheet(SampleSheet_fp)
+
+samp_sh_header <- data.frame(X1 = unlist(sample_sheet$Header)) %>%
+  mutate(col_names = gsub(",.*", "", X1)) %>%
+  mutate(col_names = gsub(" ", "_", col_names)) %>%
+  mutate(X1 = gsub(".*,", "", X1)) %>%
+  pivot_wider(names_from = "col_names", values_from = "X1")
+
+samp_sh_s <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE) %>%
+  #split each line into columns using row 1 as the column names
+  separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
+  slice(-1) %>%
+  rename(SampleName = "Sample_Name", SampleNumber = "BASESPACE_ONLY_ORIGINAL_SAMPLE_NUMBER") %>%
+  mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
+  select(SampleName, SampleNumber, I7_Index_ID, I5_Index_ID, Barcode_sequence, Sample_Type, Index_ID)
+
+#merge sample names with read counts
+samp_names <- read_delim(demuxsum_fp, col_names = FALSE) %>%
+  filter(grepl("Sample", X1)) %>%
+  t() %>%
+  as.data.frame(stringsAsFactors = FALSE) %>%
+  purrr::set_names(as.character(slice(., 1))) %>%
+  slice(-1) %>%
+  merge(fastq_sum, by = "SampleNumber", all = TRUE) %>%
+  merge(samp_sh_s, by = c("SampleName", "SampleNumber"), all = TRUE) %>%
+  mutate(percent_reads_passed_filter = total_pass_filter_reads/total_raw_reads) %>%
+  mutate(percent_of_lane = total_pass_filter_reads/sum(total_pass_filter_reads))
+
+top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
+  filter(is.na(X3)) %>%
+  select(X1, X2) %>%
+  filter(!is.na(X2)) %>%
+  rename(index_sequence = "X1", number_of_reads = "X2") %>%
+  mutate(number_of_reads = as.numeric(number_of_reads)) %>%
+  order_on_other_col(index_sequence, number_of_reads) %>%
+  slice(1:10) %>%
+  droplevels()
+
+#no exhaustive barcode sequence info and no FASTQC info? and no host read mapping info?
 
 ```
 
@@ -83,9 +153,6 @@ lookup <- c(subject_id = "SubjectID",
             sample_type = "SampleType",
             final_library_conc_ng_ul = "final_library_concentration_ng_ul")
 ctrl_regex <- "^EBneg.*|^Extract.*|^Vibriolambda.*|^Blank.*|^MockDNA.*|^DNAfreewater.*|^Geneblock.*|^Emptywell"
-
-am here, look for a 
-Put a ticket in for why i cant use the BaseSpace downloader
 
 s <- read_csv(mapping_file_fp) %>%
   filter(rowSums(is.na(.)|.=="") != ncol(.)) %>%
