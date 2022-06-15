@@ -96,38 +96,52 @@ BaseSpace uses the bcl2fastq command to generate FASTQ files from BCL files (raw
 Samples were sequenced on the `r sample_sh_header$instrument_type` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` run and demultiplexed on BaseSpace by the bcl2fastq command. The demultiplexing step involves matching the barcode sequences associated with each sample to the sequence each read is tagged with
 
 ```{r percent of reads that passed filter, echo=FALSE}
-samp_names %>%
+s %>%
   mutate(pf_percent=total_pass_filter_reads/total_raw_reads) %>%
-  ggplot(aes(x=pf_percent, fill = Sample_Type)) +
-    geom_histogram(binwidth=0.1, boundary=TRUE) +
+  ggplot(aes(x=pf_percent, fill = sample_type)) +
+    geom_histogram(binwidth=0.1, boundary=TRUE, color = "white") +
+    scale_fill_manual(values = ann_colors$sample_type) +
     scale_x_continuous(labels = scales::percent) +
     theme_bw() + 
+    theme(panel.grid = element_blank()) +
     labs(
       x="Percent of reads that passed filter",
-      y="Number of samples"
+      y="Number of samples", fill = "Sample Type"
     )
 ```
 
 ```{r reads_histogram, echo=FALSE}
-samp_names %>%
+s %>%
   mutate(num_seq=total_pass_filter_reads/1000000) %>%
   # remove reads that did not get assigned
-  filter(SampleName != "None") %>%
-  ggplot(aes(x=num_seq, fill = Sample_Type)) +
-    geom_histogram(binwidth=0.5, boundary=TRUE) +
+  filter(SampleID != "None") %>%
+  ggplot(aes(x=num_seq, fill = sample_type)) +
+    geom_histogram(binwidth=0.5, boundary=TRUE, color = "white") +
+    scale_fill_manual(values = ann_colors$sample_type) +
     theme_bw() + 
+    theme(panel.grid = element_blank()) +
     labs(
       x="Number of read pairs in sample (millions, M)",
-      y="Number of samples"
+      y="Number of samples",
+      fill = "Sample Type"
     )
 ```
 
 ```{r percent reads of lane, echo=FALSE}
-samp_names %>%
+reads_percent <- s %>%
   mutate(percent_of_lane = total_pass_filter_reads/sum(total_pass_filter_reads)) %>%
-  ggplot(aes(x = "", y = percent_of_lane, fill=Sample_Type)) +
-    geom_col() +
+  group_by(sample_type) %>%
+  mutate(tot_percent = sum(percent_of_lane)) %>%
+  ungroup() %>%
+  order_on_other_col(sample_type, tot_percent, decreasing = FALSE) %>%
+  order_on_other_col(SampleID, percent_of_lane) %>%
+  arrange(SampleID)
+
+reads_percent %>%
+  ggplot(aes(x = "", y = percent_of_lane, fill=sample_type)) +
+    geom_col(color = "white") +
     scale_y_continuous(labels = scales::percent) +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(reads_percent$sample_type), names(ann_colors$sample_type))]) +
     theme_bw() +
     theme(panel.grid = element_blank(),
           axis.ticks.x.bottom = element_blank()) +
@@ -163,6 +177,8 @@ These are the adapters: \newline
 ## Read counts and final library concentration of each sample
 
 ```{r, fig.width=10, fig.height=5}
+
+
 
 s %>%
   mutate(Read_Counts = ifelse(is.na(nonhost), 0, nonhost)) %>%
@@ -249,7 +265,14 @@ s %>%
       y="Plate row",
       fill="QC\nread\ncounts"
     )
+
+do a detection for each plate
+
 ```
+
+DRAGEN COVID Lineage App (on BaseSpace cloud) version `r dragen_covid_lineage_version` \newline
+Panogolin database version `r panogolin_database_version` \newline
+Lineage assignment software and version `r lineage_assignment_software_version`
 
 \elandscape
 
