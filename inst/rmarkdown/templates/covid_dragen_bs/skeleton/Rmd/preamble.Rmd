@@ -2,6 +2,7 @@
 ```{r libraries, message=FALSE, warning=FALSE}
 library(here)
 library(tidyverse)
+library(pander)
 library(kableExtra)
 library(ghibli)
 library(RColorBrewer)
@@ -14,20 +15,30 @@ source(here("functions", "R_all_functions_v3.R"))
 
 ```
 
-```{r versions and dates}
+```{r versions and dates manual inputs}
 
-#if these numbers are missing, throw an error
+#if these variables are missing, throw an error
 
-nextclade_version <- 
-  
-dragen_covid_lineage_version <-
-  
-bed_file_used <- 
-  
-date_pipeline_was_run <- 
+# YY-MM-DD
+date_pipeline_was_run <- "23-12-31"
 
+# N.N.N
+dragen_covid_lineage_version <- "1.1.1"
+
+# N.N.N
+nextclade_version <- "0.0.0"
+
+primer_select <- 3 # set variable as 1 for V3, 2 for V4, or 3 for V4.1
+
+artic_primer_scheme <- c("V3", "V4", "V4.1")[primer_select]
+
+bs_bed_file_used <- c("nCov-2019.bed", "artic_V4_primer_scheme_NC_045512.2.bed", "artic_v4.1_primers_nc045512.2.bed")[primer_select]
+
+# minimum acceptable number of reads
+min_reads <- 10000
+
+run_number <- 1
 ```
-
 
 ```{r file paths}
 
@@ -81,7 +92,9 @@ trimmin <- read_delim(adaptertrimming_fp) %>%
 # read counts by sample number
 fastq_sum <- read_delim(fastqsum_fp) %>%
   group_by(SampleNumber) %>%
-  summarise(total_raw_reads = sum(NumberOfReadsRaw), total_pass_filter_reads = sum(NumberOfReadsPF)) %>%
+  #PF means reads that have passed filter
+  summarise(total_raw_reads = sum(NumberOfReadsRaw),
+            read_counts = sum(NumberOfReadsPF)) %>%
   ungroup()
 
 # SampleSheet.csv loading
@@ -111,9 +124,9 @@ samp_reads <- read_delim(demuxsum_fp, col_names = FALSE) %>%
   slice(-1) %>%
   merge(fastq_sum, by = "SampleNumber", all = TRUE) %>%
   merge(samp_sh_s, by = c("SampleName", "SampleNumber"), all = TRUE) %>%
-  rename(SampleID = "SampleName") %>%
-  mutate(percent_reads_passed_filter = total_pass_filter_reads/total_raw_reads) %>%
-  mutate(percent_of_lane = total_pass_filter_reads/sum(total_pass_filter_reads)) %>%
+  rename(sample_id = "SampleName") %>%
+  mutate(percent_reads_passed_filter = read_counts/total_raw_reads) %>%
+  mutate(percent_of_lane = read_counts/sum(read_counts)) %>%
   mutate(Sample_Type = ifelse(is.na(Sample_Type), "NA", Sample_Type))
 
 top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
@@ -132,7 +145,8 @@ top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
 
 ```{r load data}
 
-kmer <- read_csv(kmer_fp)
+kmer <- read_csv(kmer_fp) %>%
+  mutate(`SARS-CoV-2` = factor(`SARS-CoV-2`, levels = c("ND", "Detected")))
 
 n_clade <- read_csv(nextclade_fp) %>%
   rename(nc_QC_status = "QC Status")
@@ -142,7 +156,7 @@ pango <- read_csv(pangolin_fp) %>%
 
 bs_results <- merge(kmer, pango, by.x = "Sample", by.y = "Taxon", all = TRUE) %>%
   merge(n_clade, by.x = "Sample", by.y = "seqName", all = TRUE) %>%
-  rename(SampleID = "Sample")
+  rename(sample_id = "Sample")
 #TODO: Add a check to see if positive control shows up as the correct variant
 
 
@@ -155,17 +169,29 @@ lineage_assignment_software_version <- gsub(paste0("v", panogolin_database_versi
 ```
 
 ```{r sample_sheet_import and columns, echo=FALSE}
-lookup <- c(subject_id = "SubjectID",
+lookup <- c(sample_id = "SampleID",
+            subject_id = "SubjectID",
             host_species = "HostSpecies",
             sample_type = "Sample_Type",
             final_library_conc_ng_ul = "final_library_concentration_ng_ul")
-ctrl_regex <- "^EBneg.*|^Extract.*|^Vibriolambda.*|^Blank.*|^MockDNA.*|^DNAfreewater.*|^Geneblock.*|^Emptywell"
+ctrl_regex <- "^EBneg.*|^Extract.*|^Vibriolambda.*|^Blank.*|^MockDNA.*|^DNAfreewater.*|^Geneblock.*|^Emptywell|Control"
 
-s <- samp_reads %>%
-  merge(bs_results, by = "SampleID", all = TRUE) %>%
+s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
+  #the following lines can be deleted once the code has been finalized
+  mutate(plate_row = ifelse(1:n() <= 12, "A", "B")) %>%
+  mutate(plate_column = rep(1:12, 2)[1:n()]) %>%
+  mutate(plate = 1) %>%
+  mutate(plate_coordinate = paste0(plate_row, plate_column)) %>%
+  mutate(final_library_conc_ng_ul = rnorm(n(), 20, 10)) %>%
+  mutate(dna_extract_conc_ng_ul = rnorm(n(), 10, 3)) %>%
+  mutate(ct = rnorm(n(), 20, 15))
+
+s <- s_meta %>%
+  merge(samp_reads, by = "sample_id", all = TRUE) %>%
+  merge(bs_results, by = "sample_id", all = TRUE) %>%
   rename(any_of(lookup)) %>%
-  filter(!grepl("#", SampleID)) %>%
-  mutate(isControl = grepl(ctrl_regex, SampleID, ignore.case = TRUE)) %>%
+  filter(!grepl("#", sample_id)) %>%
+  mutate(isControl = grepl(ctrl_regex, sample_id, ignore.case = TRUE)|grepl(ctrl_regex, sample_type, ignore.case = TRUE)) %>%
   #rearrange the sampletypes by ctrls first
   mutate(sample_type = factor(sample_type, levels =
                                unique(sample_type)[order(match(unique(sample_type), unique(sample_type)[grepl(ctrl_regex, gsub("-| ", "", unique(sample_type)), ignore.case = TRUE)]))])) %>%
@@ -194,12 +220,15 @@ show.text <- nrow(s) > 40
 ### Select specific groups to plot for QC
 ### ====================================
 s_toPlot <- s %>%
-  filter(`SARS-CoV-2` != "ND") %>%
-  mutate(SampleID = as.character(SampleID))
+  filter(sample_id != "None") %>%
+  mutate(sample_id = as.character(sample_id)) %>%
+  droplevels()
 
 ```
 
-```{r prop to test}
+```{r colors}
+
+ann_colors <- list()
 
 #variables to test and colors
 sg_toTest <- c("sample_type")
@@ -213,6 +242,12 @@ for(g in sg_toTest) {
 }
 
 #scales::show_col(ann_colors[[sg_toTest]])
+
+```
+
+```{r empty plate to plot}
+empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_column = rep(1:12, 8), plate = 1) %>%
+  mutate(plate_coordinate = paste0(plate_row, plate_column))
 
 ```
 

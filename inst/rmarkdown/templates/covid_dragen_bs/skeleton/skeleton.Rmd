@@ -48,19 +48,50 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 
 ```
 
+```{r index samples with barcodes child = 'metadata/munge/generate_barcodes_IDT.R', eval = FALSE}
+
+```
+
 ```{r child = 'Rmd/preamble.Rmd'}
 ```
 
 
-```{r, Samples error check 1, eval=FALSE}
+```{r versions check}
 ### ===========================
-###   check for missing samples
+###   check version input
 ### ===========================
+  
+if (date_pipeline_was_run == "") {
+  stop (simpleError("Please enter the date that the DRAGEN COVID Lineage App was run under the [date_pipeline_was_run] variable in the preamble"))
+} else if (is.na(as.Date(date_pipeline_was_run, "%Y-%m-%d")) | nchar(date_pipeline_was_run) == 8) {
+  stop (simpleError("Please enter the date into [date_pipeline_was_run] as YYYY-MM-DD"))
+}
 
-### possible issue 1: Samples found in the sample sheet but not in the feature table (0 reads)
+if (dragen_covid_lineage_version == "") {
+  stop (simpleError("Please input the version of the DRAGEN COVID Lineage App under [dragen_covid_lineage_version] in the preamble.
+                    This number can be found in the summary report page."))
+} else if (!grepl("^[0-9]+\\.[0-9]+\\.[0-9]+$", dragen_covid_lineage_version)) {
+  stop (simpleError("Please enter the version number into [dragen_covid_lineage_version] as N.N.N"))
+}
+
+if (nextclade_version == "") {
+  stop (simpleError("Please input the version of Nextclade under [nextclade_version] in the preamble"))
+} else if (!grepl("^[0-9]+\\.[0-9]+\\.[0-9]+$", nextclade_version)) {
+  stop (simpleError("Please enter the version number into [nextclade_version] as N.N.N"))
+}
+
+if (is.na(primer_select) | is.na(artic_primer_scheme) | is.na(bs_bed_file_used)) {
+  stop (simpleError("Please set the [primer_select] variable in the preamble as an integer from 1 to 3 according to the ARTIC primer scheme used for the library generation\n1: V3\n2: V4\n3: V4.1 (Experimental)"))
+}
+
+```
+
+```{r samples check}
+
+### possible issue 1: Samples found in the sample sheet but not in the results csv
 s_missing <- s %>%
-  filter(!SampleID %in% colnames(cts)) %>%
-  select(SampleID, sample_type, isControl)
+  filter(!sample_id %in% unique(bs_results$sample_id)) %>%
+  select(sample_id, sample_type, isControl)
 
 if (any(!s_missing$isControl)) {
   pander(filter(s_missing, !isControl), caption="These samples were in the sample sheet but not in the feature table.")
@@ -69,12 +100,11 @@ if (any(!s_missing$isControl)) {
 
 ```
 
-
-```{r, Samples error check 2, eval = FALSE}
-### possible issue 2: Samples found in the feature table but not in the sample sheet. There must be an error!
-in_counts_not_in_s <- setdiff(colnames(cts), s$SampleID)
-if (length(in_counts_not_in_s) > 0) {
-  stop (simpleError("These SampleID(s) are in the feature table, but not found in the sample sheet.", paste(in_counts_not_in_s, collapse=" ")))
+```{r, Samples error check 2}
+### possible issue 2: Samples found in the results csv but not in the sample sheet. There must be an error!
+in_results_not_in_s <- setdiff(unique(bs_results$sample_id), s$sample_id)
+if (length(in_results_not_in_s) > 0) {
+  stop (simpleError("These SampleID(s) are in the results csv, but not found in the sample sheet.", paste(in_results_not_in_s, collapse=" ")))
 }
 ```
 
@@ -97,7 +127,7 @@ Samples were sequenced on the `r sample_sh_header$instrument_type` as a `r paste
 
 ```{r percent of reads that passed filter, echo=FALSE}
 s %>%
-  mutate(pf_percent=total_pass_filter_reads/total_raw_reads) %>%
+  mutate(pf_percent=read_counts/total_raw_reads) %>%
   ggplot(aes(x=pf_percent, fill = sample_type)) +
     geom_histogram(binwidth=0.1, boundary=TRUE, color = "white") +
     scale_fill_manual(values = ann_colors$sample_type) +
@@ -112,9 +142,9 @@ s %>%
 
 ```{r reads_histogram, echo=FALSE}
 s %>%
-  mutate(num_seq=total_pass_filter_reads/1000000) %>%
+  mutate(num_seq=read_counts/1000000) %>%
   # remove reads that did not get assigned
-  filter(SampleID != "None") %>%
+  filter(sample_id != "None") %>%
   ggplot(aes(x=num_seq, fill = sample_type)) +
     geom_histogram(binwidth=0.5, boundary=TRUE, color = "white") +
     scale_fill_manual(values = ann_colors$sample_type) +
@@ -129,13 +159,13 @@ s %>%
 
 ```{r percent reads of lane, echo=FALSE}
 reads_percent <- s %>%
-  mutate(percent_of_lane = total_pass_filter_reads/sum(total_pass_filter_reads)) %>%
+  mutate(percent_of_lane = read_counts/sum(read_counts)) %>%
   group_by(sample_type) %>%
   mutate(tot_percent = sum(percent_of_lane)) %>%
   ungroup() %>%
   order_on_other_col(sample_type, tot_percent, decreasing = FALSE) %>%
-  order_on_other_col(SampleID, percent_of_lane) %>%
-  arrange(SampleID)
+  order_on_other_col(sample_id, percent_of_lane) %>%
+  arrange(sample_id)
 
 reads_percent %>%
   ggplot(aes(x = "", y = percent_of_lane, fill=sample_type)) +
@@ -178,33 +208,60 @@ These are the adapters: \newline
 
 ```{r, fig.width=10, fig.height=5}
 
-
-
 s %>%
-  mutate(Read_Counts = ifelse(is.na(nonhost), 0, nonhost)) %>%
-  droplevels() %>%
-  ggplot(aes(x = final_library_conc_ng_ul, y = Read_Counts, fill = sample_type)) +
+  ggplot(aes(x = final_library_conc_ng_ul, y = read_counts, fill = sample_type)) +
     geom_point(shape = 21) +
     geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    scale_fill_manual(values = ann_colors$sample_type) +
     theme_bw() + 
     scale_y_continuous(trans = "log10") +
     guides(fill = guide_legend(override.aes = list(shape = 21))) +
-    labs(y = "Read Counts", x = "Final library DNA conc (ng/uL)")
+    labs(y = "Read Counts", x = "Final library DNA conc (ng/uL)", fill = "Sample type")
 
 ```
 \newpage
-## Library concentration and read counts per plate
+## Library concentration,  read counts, CT values per plate
 
-The samples are processed on a 96-well plate. The figures illustrate the library concentration, read counts after demultiplexing and read counts after quality control / denoising steps for each well. The gray color represents NA values. 
+The samples are processed on a 96-well plate. The figures illustrate the CT values, library concentration, and read counts after demultiplexing. Wells without any samples are white while samples with low values begin with dark blue. 
 
 ```{r}
-s %>%
+empty_plate %>%
+  merge(s, by = c("plate_coordinate", "plate_row", "plate_column", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coordinate)) %>%
+  droplevels() %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  ggplot(aes(x=plate_column, y=fct_rev(plate_row), fill = ct)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 10) +
+    facet_wrap(~plate, ncol = 1) +
+    scale_fill_viridis_c(na.value = "white") +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill="CT values"
+    )
+
+```
+
+```{r}
+empty_plate %>%
+  merge(s, by = c("plate_coordinate", "plate_row", "plate_column", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coordinate)) %>%
+  droplevels() %>%
   mutate(plate = paste("Plate", plate)) %>%
   ggplot(aes(x=plate_column, y=fct_rev(plate_row), fill = final_library_conc_ng_ul)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 10) +
     facet_wrap(~plate, ncol = 1) +
-    scale_fill_viridis_c() +
+    scale_fill_viridis_c(na.value = "white") +
     scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
     theme_bw() +
     theme(
@@ -221,13 +278,16 @@ s %>%
 ```
 
 ```{r}
-s %>%
+empty_plate %>%
+  merge(s, by = c("plate_coordinate", "plate_row", "plate_column", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coordinate)) %>%
+  droplevels() %>%
   mutate(plate = paste("Plate", plate)) %>%
-  ggplot(aes(x=plate_column, y=fct_rev(plate_row), fill = input)) +
+  ggplot(aes(x=plate_column, y=fct_rev(plate_row), fill = read_counts)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 10) +
     facet_wrap(~plate, ncol = 1) +
-    scale_fill_viridis_c() +
+    scale_fill_viridis_c(na.value = "white") +
     scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
     theme_bw() +
     theme(
@@ -243,38 +303,115 @@ s %>%
     )
 ```
 
+\elandscape
 
-```{r}
-s %>%
-  mutate(plate = paste("Plate", plate)) %>%
-  ggplot(aes(x=plate_column, y=fct_rev(plate_row), fill = nonhost)) +
-    geom_tile(fill = "white") +
-    geom_point(shape = 21, size = 10) +
-    facet_wrap(~plate, ncol = 1) +
-    scale_fill_viridis_c() +
-    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
-    theme_bw() +
-    theme(
-      strip.background = element_blank(),
-      strip.placement = "outside",
-      panel.grid = element_blank(),
-      aspect.ratio = 0.66
-    ) +
-    labs(
-      x="",
-      y="Plate row",
-      fill="QC\nread\ncounts"
-    )
-
-do a detection for each plate
-
-```
+# Results section
 
 DRAGEN COVID Lineage App (on BaseSpace cloud) version `r dragen_covid_lineage_version` \newline
 Panogolin database version `r panogolin_database_version` \newline
 Lineage assignment software and version `r lineage_assignment_software_version`
 
-\elandscape
+## Kmer results (number of unique COVID fragments detected)
+
+```{r}
+
+s_toPlot %>%
+  ggplot(aes(x=`SARS-CoV-2`, fill = sample_type)) +
+    geom_bar(binwidth=0.1, boundary=TRUE, color = "white") +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(s_toPlot$sample_type), names(ann_colors$sample_type))]) +
+    theme_bw() + 
+    theme(panel.grid = element_blank()) +
+    labs(
+      x="COVID status",
+      y="Number of samples", fill = "Sample Type"
+    )
+
+```
+
+```{r}
+
+s_toPlot %>%
+  ggplot(aes(x=`SARS-CoV-2`, y = `SARS-CoV-2 Unique matching kmers`, fill = sample_type)) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_point(position = position_jitterdodge(), shape = 21) +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(s_toPlot$sample_type), names(ann_colors$sample_type))]) +
+    theme_bw() + 
+    theme(panel.grid = element_blank()) +
+    labs(
+      x="COVID status",
+      y="Unique kmer counts", fill = "Sample Type"
+    )
+
+```
+
+## Pangolin Lineage Results
+
+```{r}
+s_toPlot %>%
+  select(sample_id, Lineage, sample_type) %>%
+  mutate(fraction = 1/n()) %>%
+  mutate(variants = fct_lump(Lineage, 10, w = fraction)) %>% 
+  mutate(variants = reorder(variants, -fraction)) %>%
+  select(-Lineage) %>%
+  group_by(sample_type, variants) %>%
+  mutate(props = sum(fraction)) %>%
+  ungroup() %>%
+  unique() %>%
+  ggplot(aes(x=sample_type, y=props, fill=variants)) +
+    geom_bar(stat="identity", position = position_fill(reverse = TRUE)) +
+    facet_grid(.~sample_type, space="free", scales="free",
+               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
+    ggsci::scale_fill_d3(palette = "category20") +
+    scale_y_continuous(limits = c(0,1), expand=c(0,0), labels=scales:::percent) +
+    theme_classic() +
+    theme(
+      strip.background = element_rect(color = "white", size = 50),
+      strip.text = element_text(size = 12),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.title = element_text(hjust = 0.5)
+      ) +
+    labs(x="", y="Relative abundance", title = "Sample type", fill="Variants")
+
+```
+
+Samples with conflicts and ambiguity in variant assignments
+
+```{r}
+#this is a very long-winded way of calculating the conflicting variants. There should be shorter code
+s_toPlot %>%
+  select(sample_id, Conflict, Note, sample_type) %>%
+  mutate(Note = gsub(".*: ", "", Note)) %>%
+  separate(Note, into = c("variant1", "variant2"), sep = " ", extra = "merge") %>%
+  mutate(variant1_prop = gsub(".*\\(|\\)", "", variant1)) %>%
+  mutate(variant1_prop = unlist(lapply(variant1_prop, function(x) eval(parse(text=x))))) %>%
+  mutate(variant2_prop = gsub(".*\\(|\\)", "", variant2)) %>%
+  mutate(variant2_prop = unlist(lapply(variant2_prop, function(x) eval(parse(text=x))))) %>%
+  pivot_longer(cols = c("variant1_prop", "variant2_prop"), names_to = "variant_num", values_to = "props") %>%
+  mutate(variant = case_when(variant_num == "variant1_prop" ~ gsub("\\(.*", "", variant1),
+                             variant_num == "variant2_prop" ~ gsub("\\(.*", "", variant2),
+                             TRUE ~ NA_character_)) %>%
+  filter(!is.na(props)) %>%
+  ggplot(aes(x=props, y=sample_id, fill=variant)) +
+    geom_bar(stat="identity", position = position_fill(reverse = TRUE)) +
+    facet_grid(sample_type~., space="free", scales="free",
+               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
+    ggsci::scale_fill_d3(palette = "category20") +
+    scale_x_continuous(limits = c(0,1), expand=c(0,0), labels=scales:::percent) +
+    theme_classic() +
+    theme(
+      strip.background = element_blank(),
+      strip.text.y = element_text(angle = 0, size = 5)
+      ) +
+    labs(y="", x="Relative abundance", fill="")
+
+```
+
+## Nextclade assignments
+
+```{r}
+
+```
 
 # Appendix
 
@@ -283,9 +420,9 @@ Lineage assignment software and version `r lineage_assignment_software_version`
 ```{r trimmed reads, echo=FALSE}
 
 preprocess %>%
-  merge(select(s, SampleID, sample_type), by = "SampleID", all.x = TRUE) %>%
+  merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
   arrange(-both_kept) %>%
-  select(SampleID,
+  select(sample_id,
          sample_type,
          Input = input,
          Dropped = dropped,
@@ -299,11 +436,11 @@ preprocess %>%
 
 ```{r filtered reads, echo=FALSE}
 preprocess %>%
-  merge(select(s, SampleID, sample_type), by = "SampleID", all.x = TRUE) %>%
+  merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
   mutate(`Percent host reads` = 100 * host / (host + nonhost),
     `Percent host reads` = round(`Percent host reads`, 2)) %>%
   arrange(`Percent host reads`) %>%
-  select(SampleID,
+  select(sample_id,
          sample_type,
         `Host reads` = host,
         `Non-host reads` = nonhost,
