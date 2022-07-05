@@ -14,7 +14,8 @@ munging_fp <- here("metadata", "munge")
 ##############
 
 sequencing_date <- "2022-06-30" #YYYY-MM-DD
-prj_description <- "CovidSeq" #no spaces
+prj_description <- "CovidSeq_validation" #no spaces
+read_length <- "76"
 
 if(sequencing_date == "" | prj_description == "") {
   stop (simpleError(paste0("Please fill in the sequencing date or the short project description in ", munging_fp, "/generate_barcodes_IDT.R")))
@@ -45,9 +46,9 @@ barcodes <- read.csv(barcode_fp, stringsAsFactors = FALSE) %>%
   mutate(idt_plate_coord = paste0(Index_Plate, "_", Index_Plate_Well)) %>%
   select(idt_plate_coord, I7_Index_ID, index, index2)
 
-#####################
-# Load metadata sheet
-#####################
+#################################################
+# Load metadata sheet and merge with barcode file
+#################################################
 
 metadata_input_fp <- here(munging_fp, list.files(munging_fp, pattern = ".xlsx"))
 
@@ -59,7 +60,8 @@ read_sheet <- function(fp, sheet_name) {
     select(where(function(x) any(!is.na(x))))
 }
 
-qubit_sheet <- read_sheet(metadata_input_fp, "Qubit")
+qubit_sheet <- read_sheet(metadata_input_fp, "Qubit") %>%
+  mutate(qubit_date = as.character(qubit_date))
 index_sheet <- read_sheet(metadata_input_fp, "Index")
 library_sheet <- read_sheet(metadata_input_fp, "Library")
 extra_sheet <- read_sheet(metadata_input_fp, "Extra")
@@ -69,50 +71,108 @@ cols2merge <- c("sample_id", "plate", "plate_row", "plate_col", "plate_coord")
 metadata_sheet <- merge(qubit_sheet, index_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   merge(library_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   merge(extra_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
-  mutate(sequencing_date = sequencing_date)
+  #add in barcodes
+  merge(barcodes, by = "idt_plate_coord", all.x = TRUE) %>%
+  mutate(sequencing_date = sequencing_date) %>%
+  mutate(prj_descrip = prj_description)
+
+#############
+# Check sheet
+#############
 
 #throw error if missing these columns
 for(x in c(cols2merge,
-         "qubit_conc_ng_ul", "qubit_date",
-         "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
-         "library_conc_ng_ul",
-         "sample_type", "lane", "run_number")) {
+           "qubit_conc_ng_ul", "qubit_date",
+           "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
+           "library_conc_ng_ul",
+           "sample_type", "lane", "run_number",
+           "index", "index2",
+           "sequencing_date", "prj_descrip")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     stop(simpleError(paste0("Missing column [", x, "]!!! in the metadata sheet!")))
   }
+}
+
+print('Which lanes are sequenced?')
+print(unique(metadata_sheet$lane))
+
+print('Are the barcode columns unique?')
+if(length(unique(metadata_sheet$idt_plate_coord)) != dim(metadata_sheet)[1]) {
+  stop(simpleError("Barcode positions are not unique!"))
+}
+print(length(unique(metadata_sheet$idt_plate_coord)) == dim(metadata_sheet)[1])
+
+print('Number of barcodes?')
+print(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))))
+print('Number of samples?')
+print(length(unique(metadata_sheet$sample_id)))
+if(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))) != length(unique(metadata_sheet$sample_id))) {
+  stop(simpleError("Differing number of samples and barcodes!"))
+}
+
+print('Are the barcodes unique?')
+print(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))) == dim(metadata_sheet)[1])
+
+print('Are the sample names unique?')
+print(length(unique(metadata_sheet$sample_id)) == dim(metadata_sheet)[1])
+
+print('Are all the forward primers found?')
+print(sum(is.na(metadata_sheet$index)) == 0)
+
+print('Are all the reverse primers found?')
+print(sum(is.na(metadata_sheet$index2)) == 0)
+if(sum(is.na(c(metadata_sheet$index, metadata_sheet$index2))) != 0) {
+  stop(simpleError("Either the forward or reverse primers are NA!"))
+}
+
+print('Do all the sampleIDs start with a letter?')
+print(all(grepl("^[A-Za-z]", metadata_sheet$sample_id)))
+if(!all(grepl("^[A-Za-z]", metadata_sheet$sample_id))) {
+  stop(simpleError("Some Sample IDs do not start with a letter!"))
+}
+
+print('Are there period or space characters in the SampleID?')
+print(any(grepl(" |\\.", metadata_sheet$sample_id)))
+if(any(grepl(" |\\.", metadata_sheet$sample_id))) {
+  stop(simpleError("There are spaces or periods in the Sample IDs! Please fix"))
 }
 
 ####################
 # Write sample sheet
 ####################
 
+samp_sheet_2_write <- metadata_sheet %>%
+  # do not include lane in the sample sheet otherwise it will only demultiplex that sample in that specified lane, not in all lanes
+  select(sample_id, index, index2, I7_Index_ID) %>%
+  rename(Sample_ID = "sample_id", UDI_IndexID = "I7_Index_ID")
 
-#print(temp)
+sample_sheet_fp <- here("metadata", "munge", "SampleSheet.csv")
 
-#temp <- filter(temp, pooled)
+write_samp <- function(line2write) {
+  write(paste0(line2write, collapse = ","), file = sample_sheet_fp, append = TRUE)
+}
 
-print("Which section?")
-print(all_lanes[i])
-print('Are the barcode columns unique?')
-print(length(unique(paste0(temp$barcode_index_set, temp$barcode_coord))) == dim(temp)[1])
-print('Number of barcodes?')
-print(length(unique(paste0(temp$barcode_index_set, temp$barcode_coord))))
-print('Are the barcodes unique?')
-print(length(unique(paste0(temp$I7_index_seq, temp$I5_index_seq))) == dim(temp)[1])
-print('Are the sample names unique?')
-print(length(unique(temp$SampleID)) == dim(temp)[1])
-print('Are all the forward primers found?')
-print(sum(is.na(sample_sheet$temp$I7_index_seq)) == 0)
-print('Are all the reverse primers found?')
-print(sum(is.na(sample_sheet$temp$I5_index_seq)) == 0)
-print('Do all the sampleIDs start with a letter?')
-print(all(grepl("^[A-Za-z]", temp$SampleID)))
-print('Are there illegal characters in the SampleID?')
-print(any(grepl(" |_|-", temp$SampleID)))
+write("[Header]", file = sample_sheet_fp)
+write_samp(c("Experiment Name", prj_description))
+write_samp(c("Date", sequencing_date))
+write_samp(c("Workflow", "GenerateFASTQ"))
+write_samp(c("Library Prep Kit", "COVIDSeq for Surveillance"))
+write_samp(c("Index Kit", "COVIDSeq indexes_IDT for Illumina-PCR Indexes Set 1 2 3 4"))
+write_samp(c("Chemistry", "Amplicon"))
+write_samp("")
 
-merger sample sheet first with barcode
+write_samp("[Reads]")
+#writing read length twice for paired reads
+write_samp(read_length)
+write_samp(read_length)
+write_samp("")
 
-have a project destiption, date, index, index2, sampleid
+write_samp("[Settings]")
+write_samp(c("adapter", "CTGTCTCTTATACACATCT"))
+write_samp("")
+
+write_samp("[Data]")
+write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append = TRUE)
 
 ################################
 # Write sheet to metadata folder

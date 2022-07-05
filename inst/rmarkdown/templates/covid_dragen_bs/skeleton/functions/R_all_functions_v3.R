@@ -33,3 +33,10 @@ load_sample_sheet <- function(fp) {
   
 }
 
+## ========================
+##   End line with new line
+## ========================
+
+start_w_newline <- function(string) {
+  gsub("^", "\n", string)
+}
