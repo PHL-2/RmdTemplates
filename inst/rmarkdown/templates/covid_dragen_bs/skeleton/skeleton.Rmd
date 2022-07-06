@@ -37,7 +37,6 @@ opts_chunk$set(
   dpi=100,
   fig.width=6,
   fig.height=6,
-  fig.align = "center",
   dev.args = list(pdf = list(useDingbats = FALSE))
   )
 
@@ -48,7 +47,9 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 
 ```
 
-```{r index samples with barcodes child = 'metadata/munge/generate_barcodes_IDT.R', eval = FALSE}
+```{r generate SampleSheet and metadata, eval = FALSE}
+
+source('metadata/munge/generate_barcodes_IDT.R')
 
 ```
 
@@ -91,10 +92,11 @@ if (is.na(primer_select) | is.na(artic_primer_scheme) | is.na(bs_bed_file_used))
 ### possible issue 1: Samples found in the sample sheet but not in the results csv
 s_missing <- s %>%
   filter(!sample_id %in% unique(bs_results$sample_id)) %>%
-  select(sample_id, sample_type, isControl)
+  select(sample_id, sample_type, isControl) %>%
+  filter(sample_id != "None")
 
 if (any(!s_missing$isControl)) {
-  pander(filter(s_missing, !isControl), caption="These samples were in the sample sheet but not in the feature table.")
+  pander(filter(s_missing, !isControl), caption="These samples were in the sample sheet but had no results.")
   #stop (simpleError("Please fix"))
 }
 
@@ -112,18 +114,22 @@ if (length(in_results_not_in_s) > 0) {
 
 # Introduction
 
-This report summarizes the results of `r nrow(s)` COVID samples sequenced on `r run_date` and analyzed with BaseSpace DRAGEN Lineage App version `r basespace_version` on `r samp_sh_header$Date`. Results section contain lineage and clade information using panogolin version `r pangolin_version` (https://cov-lineages.org/resources/pangolin.html) and Nextclade version `r nextclade_version` (https://clades.nextstrain.org/)
+This report summarizes the results of `r nrow(s)` COVID samples sequenced on `r samp_sh_header$Date` and analyzed with BaseSpace DRAGEN Lineage App version `r dragen_covid_lineage_version` on `r date_pipeline_was_run`. Results section contain lineage and clade information using panogolin version `r panogolin_database_version` (https://cov-lineages.org/resources/pangolin.html) and Nextclade version `r nextclade_version` (https://clades.nextstrain.org/)
 
 # FASTQ generation, demultiplexing, and quality control
 
-## bcl2fastq
+<!-- ## bcl2fastq -->
 
-BaseSpace uses the bcl2fastq command to generate FASTQ files from BCL files (raw data files that contain sequence information and quality scores). bcl2fastq version `bcl2fq_version` was used to generate the FASTQ files using the command: \newline
-`r bcl2fq_flags`
+<!-- BaseSpace uses the bcl2fastq command to generate FASTQ files from BCL files (raw data files that contain sequence information and quality scores). bcl2fastq version `bcl2fq_version` was used to generate the FASTQ files using the command: \newline -->
+<!-- `r #bcl2fq_flags` -->
+
+## GenerateFASTQ
+
+The MiSeq machine uses the GenerateFASTQ workflow to demultiplex the samples and generate FASTQ files from BCL files (raw data files that contain sequence information and quality scores). `r workflow_name` version `r gen_fq_version` was used to generate the FASTQ files
 
 ## Number of read pairs per sample after demultiplexing
 
-Samples were sequenced on the `r sample_sh_header$instrument_type` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` run and demultiplexed on BaseSpace by the bcl2fastq command. The demultiplexing step involves matching the barcode sequences associated with each sample to the sequence each read is tagged with
+Samples were sequenced on the `r samp_sh_header$Instrument_type` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` length run and demultiplexed on BaseSpace by the GenerateFASTQ module. The demultiplexing step involves matching the barcode sequences associated with each sample to the sequence each read is tagged with
 
 ```{r percent of reads that passed filter, echo=FALSE}
 s %>%
@@ -144,7 +150,6 @@ s %>%
 s %>%
   mutate(num_seq=read_counts/1000000) %>%
   # remove reads that did not get assigned
-  filter(sample_id != "None") %>%
   ggplot(aes(x=num_seq, fill = sample_type)) +
     geom_histogram(binwidth=0.5, boundary=TRUE, color = "white") +
     scale_fill_manual(values = ann_colors$sample_type) +
@@ -171,7 +176,8 @@ reads_percent %>%
   ggplot(aes(x = "", y = percent_of_lane, fill=sample_type)) +
     geom_col(color = "white") +
     scale_y_continuous(labels = scales::percent) +
-    scale_fill_manual(values = ann_colors$sample_type[match(levels(reads_percent$sample_type), names(ann_colors$sample_type))]) +
+    #scale_fill_manual(values = ann_colors$sample_type[match(levels(reads_percent$sample_type), names(ann_colors$sample_type))]) +
+    scale_fill_manual(values = ann_colors$sample_type) +
     theme_bw() +
     theme(panel.grid = element_blank(),
           axis.ticks.x.bottom = element_blank()) +
@@ -209,8 +215,8 @@ These are the adapters: \newline
 ```{r, fig.width=10, fig.height=5}
 
 s %>%
-  ggplot(aes(x = final_library_conc_ng_ul, y = read_counts, fill = sample_type)) +
-    geom_point(shape = 21) +
+  ggplot(aes(x = library_conc_ng_ul, y = read_counts, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
     geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
     scale_fill_manual(values = ann_colors$sample_type) +
     theme_bw() + 
@@ -220,21 +226,26 @@ s %>%
 
 ```
 \newpage
-## Library concentration,  read counts, CT values per plate
+
+## Library concentration, read counts, `r covid_quant_unit` values per plate
 
 The samples are processed on a 96-well plate. The figures illustrate the CT values, library concentration, and read counts after demultiplexing. Wells without any samples are white while samples with low values begin with dark blue. 
 
 ```{r}
 empty_plate %>%
-  merge(s, by = c("plate_coordinate", "plate_row", "plate_column", "plate"), all = TRUE) %>%
-  filter(!is.na(plate_coordinate)) %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
   droplevels() %>%
   mutate(plate = paste("Plate", plate)) %>%
-  ggplot(aes(x=plate_column, y=fct_rev(plate_row), fill = ct)) +
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = ct)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 10) +
     facet_wrap(~plate, ncol = 1) +
-    scale_fill_viridis_c(na.value = "white") +
+    #if there is no covid quantity values, use the discrete fill
+    {
+      if(all(is.na(s$library_conc_ng_ul))) scale_fill_viridis_d(na.value = "white")
+      else scale_fill_viridis_c(na.value = "white")
+    } +
     scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
     theme_bw() +
     theme(
@@ -246,22 +257,27 @@ empty_plate %>%
     labs(
       x="",
       y="Plate row",
-      fill="CT values"
+      fill=paste(covid_quant_unit, "values")
     )
 
 ```
 
 ```{r}
+
 empty_plate %>%
-  merge(s, by = c("plate_coordinate", "plate_row", "plate_column", "plate"), all = TRUE) %>%
-  filter(!is.na(plate_coordinate)) %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
   droplevels() %>%
   mutate(plate = paste("Plate", plate)) %>%
-  ggplot(aes(x=plate_column, y=fct_rev(plate_row), fill = final_library_conc_ng_ul)) +
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = library_conc_ng_ul)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 10) +
     facet_wrap(~plate, ncol = 1) +
-    scale_fill_viridis_c(na.value = "white") +
+    #if there is no library concentration, use the discrete fill
+    {
+      if(all(is.na(s$library_conc_ng_ul))) scale_fill_viridis_d(na.value = "white")
+      else scale_fill_viridis_c(na.value = "white")
+    } +
     scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
     theme_bw() +
     theme(
@@ -279,11 +295,11 @@ empty_plate %>%
 
 ```{r}
 empty_plate %>%
-  merge(s, by = c("plate_coordinate", "plate_row", "plate_column", "plate"), all = TRUE) %>%
-  filter(!is.na(plate_coordinate)) %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
   droplevels() %>%
   mutate(plate = paste("Plate", plate)) %>%
-  ggplot(aes(x=plate_column, y=fct_rev(plate_row), fill = read_counts)) +
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = read_counts)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 10) +
     facet_wrap(~plate, ncol = 1) +
@@ -318,7 +334,8 @@ Lineage assignment software and version `r lineage_assignment_software_version`
 s_toPlot %>%
   ggplot(aes(x=`SARS-CoV-2`, fill = sample_type)) +
     geom_bar(binwidth=0.1, boundary=TRUE, color = "white") +
-    scale_fill_manual(values = ann_colors$sample_type[match(levels(s_toPlot$sample_type), names(ann_colors$sample_type))]) +
+    #scale_fill_manual(values = ann_colors$sample_type[match(levels(s_toPlot$sample_type), names(ann_colors$sample_type))]) +
+    scale_fill_manual(values = ann_colors$sample_type) +
     theme_bw() + 
     theme(panel.grid = element_blank()) +
     labs(
@@ -374,6 +391,7 @@ s_toPlot %>%
     labs(x="", y="Relative abundance", title = "Sample type", fill="Variants")
 
 ```
+\newpage
 
 Samples with conflicts and ambiguity in variant assignments
 
@@ -384,8 +402,11 @@ s_toPlot %>%
   mutate(Note = gsub(".*: ", "", Note)) %>%
   separate(Note, into = c("variant1", "variant2"), sep = " ", extra = "merge") %>%
   mutate(variant1_prop = gsub(".*\\(|\\)", "", variant1)) %>%
+  #not sure what this text means
+  filter(!grepl("Assigned", variant1_prop)) %>%
   mutate(variant1_prop = unlist(lapply(variant1_prop, function(x) eval(parse(text=x))))) %>%
   mutate(variant2_prop = gsub(".*\\(|\\)", "", variant2)) %>%
+  filter(!grepl("scorpio", variant2_prop)) %>%
   mutate(variant2_prop = unlist(lapply(variant2_prop, function(x) eval(parse(text=x))))) %>%
   pivot_longer(cols = c("variant1_prop", "variant2_prop"), names_to = "variant_num", values_to = "props") %>%
   mutate(variant = case_when(variant_num == "variant1_prop" ~ gsub("\\(.*", "", variant1),
@@ -401,7 +422,7 @@ s_toPlot %>%
     theme_classic() +
     theme(
       strip.background = element_blank(),
-      strip.text.y = element_text(angle = 0, size = 5)
+      strip.text.y = element_text(angle = 0)
       ) +
     labs(y="", x="Relative abundance", fill="")
 
@@ -413,38 +434,20 @@ s_toPlot %>%
 
 ```
 
+\newpage
+
 # Appendix
 
-## Number of reads before and after trimmming Illumina adapter sequences with Trimmomatic.
+## Number of reads before and after filtering
 
 ```{r trimmed reads, echo=FALSE}
 
-preprocess %>%
-  merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
-  arrange(-both_kept) %>%
+s %>%
+  arrange(-read_counts) %>%
   select(sample_id,
          sample_type,
-         Input = input,
-         Dropped = dropped,
-         `Both kept` = both_kept) %>%
-  kable_style()
-```
-
-\newpage
-
-## Number of reads before and after filtering of host genome sequence.
-
-```{r filtered reads, echo=FALSE}
-preprocess %>%
-  merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
-  mutate(`Percent host reads` = 100 * host / (host + nonhost),
-    `Percent host reads` = round(`Percent host reads`, 2)) %>%
-  arrange(`Percent host reads`) %>%
-  select(sample_id,
-         sample_type,
-        `Host reads` = host,
-        `Non-host reads` = nonhost,
-        `Percent host reads`) %>%
+         total_raw_reads,
+         read_counts) %>%
   kable_style()
 ```
 
@@ -460,16 +463,11 @@ dir.create(here("output", "basic_report"))
 sequencing_run_date <- gsub("_.*", "", basename(here()))
 project_name <- sub("^([^_]+)_", "", basename(here()), perl = TRUE)
 
-qc_report_fp <- here(paste(sequencing_run_date, "_" , project_name, "_QC_Report.Rmd", sep=""))
+qc_report_fp <- paste(sequencing_run_date, "_" , project_name, "_QC_Report.Rmd", sep="")
 qc_output_fp <- here("output", "basic_report", paste(project_name, '.QC.report.', Sys.Date(), '.pdf', sep=''))
 
-basic_report_fp <- here("Rmd", "basic_report.Rmd")
-basic_output_fp <- here("output", "basic_report", paste(project_name, '.basic.report.', Sys.Date(), '.pdf', sep=''))
-
-rmarkdown::render(qc_report_fp, output_file = qc_output_fp, "all")
-rmarkdown::render(basic_report_fp, output_file = basic_output_fp, "all")
+rmarkdown::render(qc_report_fp, output_file = qc_output_fp)
+rmarkdown::render(qc_report_fp, output_format = rmarkdown::md_document(variant = "markdown_github",
+                                                                       toc = TRUE), output_file = "README.md")
 
 ```
-
-
-

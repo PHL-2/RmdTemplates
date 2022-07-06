@@ -2,6 +2,7 @@
 ```{r libraries, message=FALSE, warning=FALSE}
 library(here)
 library(tidyverse)
+library(rvest)
 library(pander)
 library(kableExtra)
 library(ghibli)
@@ -19,16 +20,16 @@ source(here("functions", "R_all_functions_v3.R"))
 
 #if these variables are missing, throw an error
 
-# YY-MM-DD
-date_pipeline_was_run <- "23-12-31"
+# YYYY-MM-DD
+date_pipeline_was_run <- ""
 
 # N.N.N
-dragen_covid_lineage_version <- "1.1.1"
+dragen_covid_lineage_version <- ""
 
 # N.N.N
-nextclade_version <- "0.0.0"
+nextclade_version <- ""
 
-primer_select <- 3 # set variable as 1 for V3, 2 for V4, or 3 for V4.1
+primer_select <-  # set variable as 1 for V3, 2 for V4, or 3 for V4.1
 
 artic_primer_scheme <- c("V3", "V4", "V4.1")[primer_select]
 
@@ -38,6 +39,10 @@ bs_bed_file_used <- c("nCov-2019.bed", "artic_V4_primer_scheme_NC_045512.2.bed",
 min_reads <- 10000
 
 run_number <- 1
+
+covid_quant_select <-
+
+covid_quant_unit <- c("CT", "RLU")[covid_quant_select]
 ```
 
 ```{r file paths}
@@ -46,28 +51,31 @@ run_number <- 1
 #try to get it automagically
 mapping_file_fp <- here("metadata", list.files(here("metadata"), pattern = ".tsv|.csv"))
 
-### bcl2fastq info
-b2fq_c_fp <- here("Data", "bcl2fastq", "commands.tsv")
-b2fq_v_fp <- here("Data", "bcl2fastq", "bcl2fastqVersion.stderr.txt")
+### bcl2fastq info; right now, running GenerateFASTQ module on the MiSeq machine to generate fastq files. Use these files later, when switching to bcl2fastq
+#b2fq_c_fp <- here("Data", "bcl2fastq", "commands.tsv")
+#b2fq_v_fp <- here("Data", "bcl2fastq", "bcl2fastqVersion.stderr.txt")
+
+gen_fq_fp <- here("Data", "gen_fq", "CompletedJobInfo.xml")
 
 ### demultiplexing results from BaseSpace
 adaptertrimming_fp <- here("Data", "demux_reads", "AdapterTrimming.txt")
-demuxsum_fp <- here("Data", "demux_reads", "DemuxSummaryF1L1.txt")
+#demuxsum_fp <- here("Data", "demux_reads", "DemuxSummaryF1L1.txt")
+demuxsum_fp <- here("Data", "demux_reads", "DemultiplexSummaryF1L1.txt")
 fastqsum_fp <- here("Data", "demux_reads", "FastqSummaryF1L1.txt")
 SampleSheet_fp <- here("Data", "demux_reads", "SampleSheetused.csv")
 
 ### kmer fp
-kmer_fp <- here("Data", "kmer", "Data_export.csv")
+kmer_fp <- here("Data", "kmer", "Data export.csv")
 
 ### NextClade results fp
-nextclade_fp = here("Data", "NextClade", "Data_export.csv")
+nextclade_fp = here("Data", "NextClade", "Data export.csv")
 
 ### Pangolin
-pangolin_fp <- here("Data", "Pangolin", "Data_export.csv")
+pangolin_fp <- here("Data", "Pangolin", "Data export.csv")
 
 ```
 
-```{r load bcl2fq}
+```{r load bcl2fq, eval = FALSE}
 
 bcl2fq_version <- read_delim(b2fq_v_fp, skip = 1, col_names = FALSE) %>%
   slice(1) %>%
@@ -81,6 +89,20 @@ bcl2fq_flags <- read_delim(b2fq_c_fp, col_names = FALSE, col_types = cols(.defau
   mutate(X1 = gsub(" --", "\n\t--", X1)) %>%
   mutate(X1 = gsub(" -", "\n\t-", X1)) %>%
   pull()
+
+```
+
+```{r load GenerateFASTQ module}
+
+JobCompletedInfo <- xml2::read_xml(gen_fq_fp)
+
+workflow_name <- JobCompletedInfo %>%
+  html_elements("Analysis") %>%
+  html_text2()
+
+gen_fq_version <- JobCompletedInfo %>%
+  html_elements("WorkflowVersion") %>%
+  html_text2()
 
 ```
 
@@ -111,9 +133,15 @@ samp_sh_s <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE
   #split each line into columns using row 1 as the column names
   separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
   slice(-1) %>%
-  rename(SampleName = "Sample_Name", SampleNumber = "BASESPACE_ONLY_ORIGINAL_SAMPLE_NUMBER") %>%
+  #this is for bcl2fastq
+  #rename(SampleName = "Sample_Name", SampleNumber = "BASESPACE_ONLY_ORIGINAL_SAMPLE_NUMBER") %>%
+  #mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
+  #select(SampleName, I7_Index_ID, I5_Index_ID, Barcode_sequence, Sample_Type, Index_ID)
+  rename(SampleName = "Sample_Name", Index_ID = "I7_Index_ID") %>%
+  mutate(I7_Index_ID = index, I5_Index_ID = index2) %>%
   mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
-  select(SampleName, SampleNumber, I7_Index_ID, I5_Index_ID, Barcode_sequence, Sample_Type, Index_ID)
+  select(SampleName, I7_Index_ID, I5_Index_ID, Barcode_sequence, Index_ID) %>%
+  mutate(SampleName = gsub("_", "-", SampleName))
 
 #merge sample names with read counts
 samp_reads <- read_delim(demuxsum_fp, col_names = FALSE) %>%
@@ -122,24 +150,34 @@ samp_reads <- read_delim(demuxsum_fp, col_names = FALSE) %>%
   as.data.frame(stringsAsFactors = FALSE) %>%
   purrr::set_names(as.character(slice(., 1))) %>%
   slice(-1) %>%
+  filter(!is.na(SampleNumber)) %>%
   merge(fastq_sum, by = "SampleNumber", all = TRUE) %>%
-  merge(samp_sh_s, by = c("SampleName", "SampleNumber"), all = TRUE) %>%
+  #merge(samp_sh_s, by = c("SampleName", "SampleNumber"), all = TRUE) %>%
+  mutate(SampleName = gsub("_", "-", SampleName)) %>%
+  merge(samp_sh_s, by = "SampleName", all = TRUE) %>%
   rename(sample_id = "SampleName") %>%
   mutate(percent_reads_passed_filter = read_counts/total_raw_reads) %>%
-  mutate(percent_of_lane = read_counts/sum(read_counts)) %>%
-  mutate(Sample_Type = ifelse(is.na(Sample_Type), "NA", Sample_Type))
+  mutate(percent_of_lane = read_counts/sum(read_counts))
 
 top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
-  filter(is.na(X3)) %>%
-  select(X1, X2) %>%
+  # filter(is.na(X3)) %>%
+  # select(X1, X2) %>%
+  # filter(!is.na(X2)) %>%
+  # rename(index_sequence = "X1", number_of_reads = "X2") %>%
+  # mutate(number_of_reads = as.numeric(number_of_reads)) %>%
+  # order_on_other_col(index_sequence, number_of_reads) %>%
+  # slice(1:10) %>%
+  # droplevels()
+  filter(is.na(X4)) %>%
+  select(X1, X2, X3) %>%
   filter(!is.na(X2)) %>%
-  rename(index_sequence = "X1", number_of_reads = "X2") %>%
+  rename(index_sequence1 = "X1", index_sequence2 = "X2", number_of_reads = "X3") %>%
+  mutate(index_sequence = paste0(index_sequence1, "+", index_sequence2)) %>%
+  select(-c(index_sequence1, index_sequence2)) %>%
   mutate(number_of_reads = as.numeric(number_of_reads)) %>%
   order_on_other_col(index_sequence, number_of_reads) %>%
   slice(1:10) %>%
   droplevels()
-
-#no exhaustive barcode sequence info and no FASTQC info? and no host read mapping info?
 
 ```
 
@@ -157,14 +195,14 @@ pango <- read_csv(pangolin_fp) %>%
 bs_results <- merge(kmer, pango, by.x = "Sample", by.y = "Taxon", all = TRUE) %>%
   merge(n_clade, by.x = "Sample", by.y = "seqName", all = TRUE) %>%
   rename(sample_id = "Sample")
+
 #TODO: Add a check to see if positive control shows up as the correct variant
-
-
 #look for Vibrio campbellii taxa as positive control
 #has_pos_ctrl <- any(grepl("Vibrio campbellii", a))
 
-panogolin_database_version <- gsub("^.*v", "", unique(bs_results$Version)[!is.na(unique(bs_results$Version))])
+panogolin_database_version <- gsub("^.*v", "", unique(bs_results$Version)[!is.na(unique(bs_results$Version))])[1]
 lineage_assignment_software_version <- gsub(paste0("v", panogolin_database_version), "", unique(bs_results$Version)[!is.na(unique(bs_results$Version))])
+lineage_assignment_software_version <- lineage_assignment_software_version[grepl("PUSHER", lineage_assignment_software_version)]
 
 ```
 
@@ -176,19 +214,12 @@ lookup <- c(sample_id = "SampleID",
             final_library_conc_ng_ul = "final_library_concentration_ng_ul")
 ctrl_regex <- "^EBneg.*|^Extract.*|^Vibriolambda.*|^Blank.*|^MockDNA.*|^DNAfreewater.*|^Geneblock.*|^Emptywell|Control"
 
-s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
-  #the following lines can be deleted once the code has been finalized
-  mutate(plate_row = ifelse(1:n() <= 12, "A", "B")) %>%
-  mutate(plate_column = rep(1:12, 2)[1:n()]) %>%
-  mutate(plate = 1) %>%
-  mutate(plate_coordinate = paste0(plate_row, plate_column)) %>%
-  mutate(final_library_conc_ng_ul = rnorm(n(), 20, 10)) %>%
-  mutate(dna_extract_conc_ng_ul = rnorm(n(), 10, 3)) %>%
-  mutate(ct = rnorm(n(), 20, 15))
+s_meta <- read_delim(mapping_file_fp, delim = ",")
 
 s <- s_meta %>%
-  merge(samp_reads, by = "sample_id", all = TRUE) %>%
+  merge(samp_reads, by = c("sample_id", "Index_ID"), all = TRUE) %>%
   merge(bs_results, by = "sample_id", all = TRUE) %>%
+  mutate(read_counts = ifelse(is.na(read_counts), 0, read_counts), total_raw_reads = ifelse(is.na(total_raw_reads), 0, total_raw_reads)) %>%
   rename(any_of(lookup)) %>%
   filter(!grepl("#", sample_id)) %>%
   mutate(isControl = grepl(ctrl_regex, sample_id, ignore.case = TRUE)|grepl(ctrl_regex, sample_type, ignore.case = TRUE)) %>%
@@ -220,7 +251,7 @@ show.text <- nrow(s) > 40
 ### Select specific groups to plot for QC
 ### ====================================
 s_toPlot <- s %>%
-  filter(sample_id != "None") %>%
+  filter(!grepl("None|Undetermined", sample_id)) %>%
   mutate(sample_id = as.character(sample_id)) %>%
   droplevels()
 
@@ -236,7 +267,7 @@ sg_toTest <- c("sample_type")
 MononokeStart <- 3
 
 for(g in sg_toTest) {
-  lvls <- levels(s_toPlot[, g])
+  lvls <- c(levels(s_toPlot[, g]), NA)
   g_colors <- setNames(ghibli_palette("MononokeLight")[MononokeStart:(MononokeStart-1+length(lvls))], lvls)
   ann_colors[[g]] <- g_colors
 }
@@ -246,8 +277,8 @@ for(g in sg_toTest) {
 ```
 
 ```{r empty plate to plot}
-empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_column = rep(1:12, 8), plate = 1) %>%
-  mutate(plate_coordinate = paste0(plate_row, plate_column))
+empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_col = rep(1:12, 8), plate = 1) %>%
+  mutate(plate_coord = paste0(plate, "_", plate_row, plate_col))
 
 ```
 

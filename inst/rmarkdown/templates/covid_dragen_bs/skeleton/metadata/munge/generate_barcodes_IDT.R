@@ -1,6 +1,7 @@
 library(here)
 library(dplyr)
 library(readxl)
+library(readr)
 
 #This Rscript is currently written to generating the SampleSheet for the Local Run Manager Module on the MiSeq
 #https://support.illumina.com/downloads/local-run-manager-generate-fastq-module-v3.html
@@ -13,12 +14,14 @@ munging_fp <- here("metadata", "munge")
 # Manual input
 ##############
 
-sequencing_date <- "2022-06-30" #YYYY-MM-DD
-prj_description <- "CovidSeq_validation" #no spaces
+sequencing_date <- "" #YYYY-MM-DD
+prj_description <- "" #no spaces
+instrument_select <- NA #select 1 for MiSeq or 2 for NextSeq
+instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
 read_length <- "76"
 
-if(sequencing_date == "" | prj_description == "") {
-  stop (simpleError(paste0("Please fill in the sequencing date or the short project description in ", munging_fp, "/generate_barcodes_IDT.R")))
+if(sequencing_date == "" | prj_description == "" | any(is.na(instrument_type))) {
+  stop (simpleError(paste0("Please fill in the sequencing date, short project description, or correct instrument in ", munging_fp, "/generate_barcodes_IDT.R")))
 } else if (is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
   stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
 }
@@ -61,7 +64,8 @@ read_sheet <- function(fp, sheet_name) {
 }
 
 qubit_sheet <- read_sheet(metadata_input_fp, "Qubit") %>%
-  mutate(qubit_date = as.character(qubit_date))
+  #mutate this column as character if exists
+  mutate_at(vars(one_of('qubit_date')), as.character)
 index_sheet <- read_sheet(metadata_input_fp, "Index")
 library_sheet <- read_sheet(metadata_input_fp, "Library")
 extra_sheet <- read_sheet(metadata_input_fp, "Extra")
@@ -74,7 +78,9 @@ metadata_sheet <- merge(qubit_sheet, index_sheet, by = cols2merge, all = TRUE, s
   #add in barcodes
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE) %>%
   mutate(sequencing_date = sequencing_date) %>%
-  mutate(prj_descrip = prj_description)
+  mutate(prj_descrip = prj_description) %>%
+  mutate(instrument_type = instrument_type) %>%
+  mutate(read_length = read_length)
 
 #############
 # Check sheet
@@ -82,14 +88,21 @@ metadata_sheet <- merge(qubit_sheet, index_sheet, by = cols2merge, all = TRUE, s
 
 #throw error if missing these columns
 for(x in c(cols2merge,
-           "qubit_conc_ng_ul", "qubit_date",
            "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
-           "library_conc_ng_ul",
-           "sample_type", "lane", "run_number",
+           "sample_type",
            "index", "index2",
            "sequencing_date", "prj_descrip")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     stop(simpleError(paste0("Missing column [", x, "]!!! in the metadata sheet!")))
+  }
+}
+
+#make these columns NA if missing
+for(x in c("qubit_conc_ng_ul", "qubit_date",
+           "library_conc_ng_ul",
+           "lane", "run_number")) {
+  if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
+    metadata_sheet[[x]] <- NA
   }
 }
 
@@ -131,9 +144,9 @@ if(!all(grepl("^[A-Za-z]", metadata_sheet$sample_id))) {
   stop(simpleError("Some Sample IDs do not start with a letter!"))
 }
 
-print('Are there period or space characters in the SampleID?')
-print(any(grepl(" |\\.", metadata_sheet$sample_id)))
-if(any(grepl(" |\\.", metadata_sheet$sample_id))) {
+print('Are there periods, underscores, or space characters in the SampleID?')
+print(any(grepl(" |_|\\.", metadata_sheet$sample_id)))
+if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
   stop(simpleError("There are spaces or periods in the Sample IDs! Please fix"))
 }
 
@@ -159,6 +172,7 @@ write_samp(c("Workflow", "GenerateFASTQ"))
 write_samp(c("Library Prep Kit", "COVIDSeq for Surveillance"))
 write_samp(c("Index Kit", "COVIDSeq indexes_IDT for Illumina-PCR Indexes Set 1 2 3 4"))
 write_samp(c("Chemistry", "Amplicon"))
+write_samp(c("Instrument type", instrument_type))
 write_samp("")
 
 write_samp("[Reads]")
@@ -179,6 +193,3 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 ################################
 
 write.csv(metadata_sheet, file = here("metadata", paste0(sequencing_date, "_", prj_description, ".csv")), row.names = FALSE)
-
-
-
