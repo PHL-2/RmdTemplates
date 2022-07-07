@@ -32,17 +32,16 @@ nextclade_version <- ""
 primer_select <-  # set variable as 1 for V3, 2 for V4, or 3 for V4.1
 
 artic_primer_scheme <- c("V3", "V4", "V4.1")[primer_select]
-
 bs_bed_file_used <- c("nCov-2019.bed", "artic_V4_primer_scheme_NC_045512.2.bed", "artic_v4.1_primers_nc045512.2.bed")[primer_select]
+
+covid_quant_select <- 
+
+covid_quant_unit <- c("CT", "RLU")[covid_quant_select]
 
 # minimum acceptable number of reads
 min_reads <- 10000
 
 run_number <- 1
-
-covid_quant_select <-
-
-covid_quant_unit <- c("CT", "RLU")[covid_quant_select]
 ```
 
 ```{r file paths}
@@ -136,11 +135,11 @@ samp_sh_s <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE
   #this is for bcl2fastq
   #rename(SampleName = "Sample_Name", SampleNumber = "BASESPACE_ONLY_ORIGINAL_SAMPLE_NUMBER") %>%
   #mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
-  #select(SampleName, I7_Index_ID, I5_Index_ID, Barcode_sequence, Sample_Type, Index_ID)
-  rename(SampleName = "Sample_Name", Index_ID = "I7_Index_ID") %>%
+  #select(SampleName, I7_Index_ID, I5_Index_ID, Barcode_sequence, Sample_Type, UDI_Index_ID)
+  rename(SampleName = "Sample_Name", UDI_Index_ID = "I7_Index_ID") %>%
   mutate(I7_Index_ID = index, I5_Index_ID = index2) %>%
   mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
-  select(SampleName, I7_Index_ID, I5_Index_ID, Barcode_sequence, Index_ID) %>%
+  select(SampleName, I7_Index_ID, I5_Index_ID, Barcode_sequence, UDI_Index_ID) %>%
   mutate(SampleName = gsub("_", "-", SampleName))
 
 #merge sample names with read counts
@@ -186,14 +185,14 @@ top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
 kmer <- read_csv(kmer_fp) %>%
   mutate(`SARS-CoV-2` = factor(`SARS-CoV-2`, levels = c("ND", "Detected")))
 
-n_clade <- read_csv(nextclade_fp) %>%
-  rename(nc_QC_status = "QC Status")
+#n_clade <- read_csv(nextclade_fp) %>%
+#  rename(nc_QC_status = "QC Status")
 
 pango <- read_csv(pangolin_fp) %>%
   rename(pango_QC_status = "QC Status")
 
 bs_results <- merge(kmer, pango, by.x = "Sample", by.y = "Taxon", all = TRUE) %>%
-  merge(n_clade, by.x = "Sample", by.y = "seqName", all = TRUE) %>%
+  #merge(n_clade, by.x = "Sample", by.y = "seqName", all = TRUE) %>%
   rename(sample_id = "Sample")
 
 #TODO: Add a check to see if positive control shows up as the correct variant
@@ -217,7 +216,7 @@ ctrl_regex <- "^EBneg.*|^Extract.*|^Vibriolambda.*|^Blank.*|^MockDNA.*|^DNAfreew
 s_meta <- read_delim(mapping_file_fp, delim = ",")
 
 s <- s_meta %>%
-  merge(samp_reads, by = c("sample_id", "Index_ID"), all = TRUE) %>%
+  merge(samp_reads, by = c("sample_id", "UDI_Index_ID"), all = TRUE) %>%
   merge(bs_results, by = "sample_id", all = TRUE) %>%
   mutate(read_counts = ifelse(is.na(read_counts), 0, read_counts), total_raw_reads = ifelse(is.na(total_raw_reads), 0, total_raw_reads)) %>%
   rename(any_of(lookup)) %>%

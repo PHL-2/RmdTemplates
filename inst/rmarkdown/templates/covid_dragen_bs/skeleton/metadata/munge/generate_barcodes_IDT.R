@@ -47,7 +47,8 @@ barcodes <- read.csv(barcode_fp, stringsAsFactors = FALSE) %>%
   mutate(Index_Plate_Well = gsub("0", "", Index_Plate_Well)) %>%
   mutate(Index_Plate_Well = gsub("zzz", "0", Index_Plate_Well)) %>%
   mutate(idt_plate_coord = paste0(Index_Plate, "_", Index_Plate_Well)) %>%
-  select(idt_plate_coord, I7_Index_ID, index, index2)
+  rename(UDI_Index_ID = "I7_Index_ID") %>%
+  select(idt_plate_coord, UDI_Index_ID, index, index2)
 
 #################################################
 # Load metadata sheet and merge with barcode file
@@ -156,8 +157,8 @@ if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
 
 samp_sheet_2_write <- metadata_sheet %>%
   # do not include lane in the sample sheet otherwise it will only demultiplex that sample in that specified lane, not in all lanes
-  select(sample_id, index, index2, I7_Index_ID) %>%
-  rename(Sample_ID = "sample_id", UDI_IndexID = "I7_Index_ID")
+  select(sample_id, index, index2, UDI_Index_ID) %>%
+  rename(Sample_ID = "sample_id")
 
 sample_sheet_fp <- here("metadata", "munge", "SampleSheet.csv")
 
