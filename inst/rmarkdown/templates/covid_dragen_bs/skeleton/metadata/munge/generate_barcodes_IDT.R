@@ -16,8 +16,10 @@ munging_fp <- here("metadata", "munge")
 
 sequencing_date <- "" #YYYY-MM-DD
 prj_description <- "" #no spaces
+
 instrument_select <- NA #select 1 for MiSeq or 2 for NextSeq
 instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
+
 read_length <- "76"
 
 if(sequencing_date == "" | prj_description == "" | any(is.na(instrument_type))) {
