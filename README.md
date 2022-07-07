@@ -24,6 +24,6 @@ where [YY-MM-DD] is the date and [run_name] is the name of the sequencing run/sa
 
 ## Running the analysis
 
-To create a sequencing report, first fill out the metadata sheet located here: https://github.com/PHL-2/MetadataSheet
-Include this sheet in the munge folder and source the generate_barcodes_IDT.R Rscript (can also be done by running the relevant chunk in the [YY-MM-DD]_[run_name]_QC_Report.Rmd file)
+To create a sequencing report, first fill out the metadata sheet located here: https://github.com/PHL-2/MetadataSheet<br/>
+Include this sheet in the munge folder and source the generate_barcodes_IDT.R Rscript (can also be done by running the relevant chunk in the [YY-MM-DD]_[run_name]_QC_Report.Rmd file)<br/>
 Then run the last chunk in the [YY-MM-DD]_[run_name]_QC_Report.Rmd file
