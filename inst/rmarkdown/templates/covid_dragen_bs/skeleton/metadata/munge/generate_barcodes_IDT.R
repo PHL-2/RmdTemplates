@@ -63,7 +63,8 @@ read_sheet <- function(fp, sheet_name) {
     #filter rows where sample_id is NA
     filter(!is.na(sample_id)) %>%
     #filter empty columns
-    select(where(function(x) any(!is.na(x))))
+    select(where(function(x) any(!is.na(x)))) %>%
+    select(!matches("^\\.\\.\\."))
 }
 
 qubit_sheet <- read_sheet(metadata_input_fp, "Qubit") %>%
