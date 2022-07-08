@@ -80,7 +80,8 @@ metadata_sheet <- merge(qubit_sheet, index_sheet, by = cols2merge, all = TRUE, s
   merge(library_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   merge(extra_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   #add in barcodes
-  merge(barcodes, by = "idt_plate_coord", all.x = TRUE) %>%
+  merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
+  select(sample_id, everything()) %>%
   mutate(sequencing_date = sequencing_date) %>%
   mutate(prj_descrip = prj_description) %>%
   mutate(instrument_type = instrument_type) %>%
