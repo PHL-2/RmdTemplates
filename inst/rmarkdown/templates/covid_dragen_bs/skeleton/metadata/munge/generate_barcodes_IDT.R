@@ -61,7 +61,7 @@ metadata_input_fp <- here(munging_fp, list.files(munging_fp, pattern = ".xlsx"))
 read_sheet <- function(fp, sheet_name) {
   read_excel(fp, sheet = sheet_name) %>%
     #filter rows where sample_id is NA
-    filter(!is.na(sample_id)) %>%
+    filter(!is.na(sample_name)) %>%
     #filter empty columns
     select(where(function(x) any(!is.na(x)))) %>%
     select(!matches("^\\.\\.\\."))
@@ -71,45 +71,60 @@ qubit_sheet <- read_sheet(metadata_input_fp, "Qubit") %>%
   #mutate this column as character if exists
   mutate_at(vars(one_of('qubit_date')), as.character)
 index_sheet <- read_sheet(metadata_input_fp, "Index")
-library_sheet <- read_sheet(metadata_input_fp, "Library")
-extra_sheet <- read_sheet(metadata_input_fp, "Extra")
+sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
+extra_sheet <- read_sheet(metadata_input_fp, "Extra") %>%
+  #include date at the end of the isolate name; also use this as the sample_id when uploading to public repositories
+  mutate(isolate = gsub("$", paste0("/", gsub("-", "", sequencing_date)), isolate))
+submission_sheet <- read_sheet(metadata_input_fp, "Submission fields")
 
-cols2merge <- c("sample_id", "plate", "plate_row", "plate_col", "plate_coord")
+cols2merge <- c("sample_name", "plate", "plate_row", "plate_col", "plate_coord")
 
 metadata_sheet <- merge(qubit_sheet, index_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
-  merge(library_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
+  merge(sample_info_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   merge(extra_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
+  merge(submission_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   #add in barcodes
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
+  mutate(sample_id = gsub("_", "-", paste0(idt_plate_coord, "-", gsub("-", "", sequencing_date)))) %>%
   select(sample_id, everything()) %>%
   mutate(sequencing_date = sequencing_date) %>%
   mutate(prj_descrip = prj_description) %>%
   mutate(instrument_type = instrument_type) %>%
-  mutate(read_length = read_length)
+  mutate(read_length = read_length) %>%
+  mutate(environmental_material = ifelse(grepl("swab|control", sample_type), NA, environmental_material)) %>%
+  mutate(collection_device = ifelse(grepl("waste water|control", sample_type), NA, collection_device)) %>%
+  #remove empty columns again
+  select(where(function(x) any(!is.na(x))))
 
 #############
 # Check sheet
 #############
 
 #throw error if missing these columns
-for(x in c(cols2merge,
+for(x in c(cols2merge, "sample_id",
            "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
-           "sample_type",
-           "index", "index2",
-           "sequencing_date", "prj_descrip")) {
+           "sample_type", "sample_collected_by",
+           "organism", "host_scientific_name", "host_diease",
+           "isolation_source", "isolate", "sequence_submitted_by",
+           "geo_loc_name_region", "geo_loc_name_country", "geo_loc_name_state_province_territory",
+           "index", "index2", "UDI_Index_ID",
+           "sequencing_date", "prj_descrip", "instrument_type", "read_length")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     stop(simpleError(paste0("Missing column [", x, "]!!! in the metadata sheet!")))
   }
 }
 
 #make these columns NA if missing
-for(x in c("qubit_conc_ng_ul", "qubit_date",
+for(x in c("qubit_conc_ng_ul",
            "library_conc_ng_ul",
            "lane", "run_number")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     metadata_sheet[[x]] <- NA
   }
 }
+
+print('What do the sample_id look like?')
+print(unique(metadata_sheet$sample_id))
 
 print('Which lanes are sequenced?')
 print(unique(metadata_sheet$lane))
@@ -152,7 +167,7 @@ if(!all(grepl("^[A-Za-z]", metadata_sheet$sample_id))) {
 print('Are there periods, underscores, or space characters in the SampleID?')
 print(any(grepl(" |_|\\.", metadata_sheet$sample_id)))
 if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
-  stop(simpleError("There are spaces or periods in the Sample IDs! Please fix"))
+  stop(simpleError("There are spaces, underscores, or periods in the Sample IDs! Please fix"))
 }
 
 ####################

@@ -18,6 +18,14 @@ output:
 
 \tableofcontents
 
+```{r only run this chunk once to install, eval=FALSE}
+### ================
+### packages install
+### ================
+install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork"))
+
+```
+
 <!-- ========================================================== -->
 <!--   Beginning of Preamble : Preamble seldom requires change  -->
 <!-- ========================================================== -->
@@ -129,14 +137,14 @@ The MiSeq machine uses the GenerateFASTQ workflow to demultiplex the samples and
 
 ## Number of read pairs per sample after demultiplexing
 
-Samples were sequenced on the `r samp_sh_header$Instrument_type` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` length run and demultiplexed on BaseSpace by the GenerateFASTQ module. The demultiplexing step involves matching the barcode sequences associated with each sample to the sequence each read is tagged with
+Samples were sequenced on the `r samp_sh_header$instrument_type` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` length run and demultiplexed on BaseSpace by the GenerateFASTQ module. The demultiplexing step involves matching the barcode sequences associated with each sample to the sequence each read is tagged with
 
 ```{r percent of reads that passed filter, echo=FALSE}
 s %>%
   mutate(pf_percent=read_counts/total_raw_reads) %>%
   ggplot(aes(x=pf_percent, fill = sample_type)) +
     geom_histogram(binwidth=0.1, boundary=TRUE, color = "white") +
-    scale_fill_manual(values = ann_colors$sample_type) +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(s$sample_type), names(ann_colors$sample_type))]) +
     scale_x_continuous(labels = scales::percent) +
     theme_bw() + 
     theme(panel.grid = element_blank()) +
@@ -152,7 +160,7 @@ s %>%
   # remove reads that did not get assigned
   ggplot(aes(x=num_seq, fill = sample_type)) +
     geom_histogram(binwidth=0.5, boundary=TRUE, color = "white") +
-    scale_fill_manual(values = ann_colors$sample_type) +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(s$sample_type), names(ann_colors$sample_type))]) +
     theme_bw() + 
     theme(panel.grid = element_blank()) +
     labs(
@@ -176,8 +184,7 @@ reads_percent %>%
   ggplot(aes(x = "", y = percent_of_lane, fill=sample_type)) +
     geom_col(color = "white") +
     scale_y_continuous(labels = scales::percent) +
-    #scale_fill_manual(values = ann_colors$sample_type[match(levels(reads_percent$sample_type), names(ann_colors$sample_type))]) +
-    scale_fill_manual(values = ann_colors$sample_type) +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(reads_percent$sample_type), names(ann_colors$sample_type))]) +
     theme_bw() +
     theme(panel.grid = element_blank(),
           axis.ticks.x.bottom = element_blank()) +
@@ -210,40 +217,92 @@ These are the adapters: \newline
 
 \blandscape
 
-## Read counts and final library concentration of each sample
+## Read counts and DNA concentration of each sample
+
+```{r, fig.width=10, fig.height=5, eval = has_CT}
+
+s %>%
+  ggplot(aes(x = CT, y = read_counts, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(s$sample_type), names(ann_colors$sample_type))]) +
+    theme_bw() + 
+    scale_y_continuous(trans = "log10") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(y = "Read Counts", x = "CT value", fill = "Sample type")
+
+```
+
+```{r, fig.width=10, fig.height=5, eval = has_RLU}
+
+s %>%
+  ggplot(aes(x = RLU, y = read_counts, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(s$sample_type), names(ann_colors$sample_type))]) +
+    theme_bw() + 
+    scale_y_continuous(trans = "log10") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(y = "Read Counts", x = "RLU value", fill = "Sample type")
+
+```
 
 ```{r, fig.width=10, fig.height=5}
 
 s %>%
-  ggplot(aes(x = library_conc_ng_ul, y = read_counts, fill = sample_type)) +
+  ggplot(aes(x = qubit_conc_ng_ul, y = read_counts, fill = sample_type)) +
     geom_point(shape = 21, size = 3) +
     geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
-    scale_fill_manual(values = ann_colors$sample_type) +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(s$sample_type), names(ann_colors$sample_type))]) +
     theme_bw() + 
     scale_y_continuous(trans = "log10") +
     guides(fill = guide_legend(override.aes = list(shape = 21))) +
-    labs(y = "Read Counts", x = "Final library DNA conc (ng/uL)", fill = "Sample type")
+    labs(y = "Read Counts", x = "DNA conc (ng/uL)", fill = "Sample type")
+
+```
+
+```{r, fig.width=10, fig.height=5, eval = has_CT}
+
+s %>%
+  ggplot(aes(x = CT, y = qubit_conc_ng_ul, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(s$sample_type), names(ann_colors$sample_type))]) +
+    theme_bw() + 
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(x = "CT value", y = "DNA conc (ng/uL)", fill = "Sample type")
+
+```
+
+```{r, fig.width=10, fig.height=5, eval = has_RLU}
+
+s %>%
+  ggplot(aes(x = RLU, y = qubit_conc_ng_ul, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(s$sample_type), names(ann_colors$sample_type))]) +
+    theme_bw() + 
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(x = "RLU value", y = "DNA conc (ng/uL)", fill = "Sample type")
 
 ```
 \newpage
 
-## Library concentration, read counts, `r covid_quant_unit` values per plate
+## DNA concentration and read counts values per plate
 
-The samples are processed on a 96-well plate. The figures illustrate the CT values, library concentration, and read counts after demultiplexing. Wells without any samples are white while samples with low values begin with dark blue. 
+The samples are processed on a 96-well plate. The figures illustrate the sample_information, DNA concentration, and read counts after demultiplexing. Wells without any samples are white while samples with low values begin with dark blue. 
 
-```{r}
+```{r, eval = has_CT}
 empty_plate %>%
   merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
   filter(!is.na(plate_coord)) %>%
   droplevels() %>%
   mutate(plate = paste("Plate", plate)) %>%
-  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = ct)) +
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = CT)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 10) +
     facet_wrap(~plate, ncol = 1) +
     #if there is no covid quantity values, use the discrete fill
     {
-      if(all(is.na(s$library_conc_ng_ul))) scale_fill_viridis_d(na.value = "white")
+      if(all(is.na(s$qubit_conc_ng_ul))) scale_fill_viridis_d(na.value = "white")
       else scale_fill_viridis_c(na.value = "white")
     } +
     scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
@@ -257,7 +316,38 @@ empty_plate %>%
     labs(
       x="",
       y="Plate row",
-      fill=paste(covid_quant_unit, "values")
+      fill="CT values"
+    )
+
+```
+
+```{r, eval = has_RLU}
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  droplevels() %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = RLU)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 10) +
+    facet_wrap(~plate, ncol = 1) +
+    #if there is no covid quantity values, use the discrete fill
+    {
+      if(all(is.na(s$qubit_conc_ng_ul))) scale_fill_viridis_d(na.value = "white")
+      else scale_fill_viridis_c(na.value = "white")
+    } +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill="RLU values"
     )
 
 ```
@@ -269,13 +359,13 @@ empty_plate %>%
   filter(!is.na(plate_coord)) %>%
   droplevels() %>%
   mutate(plate = paste("Plate", plate)) %>%
-  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = library_conc_ng_ul)) +
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = qubit_conc_ng_ul)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 10) +
     facet_wrap(~plate, ncol = 1) +
-    #if there is no library concentration, use the discrete fill
+    #if there is no DNA concentration, use the discrete fill
     {
-      if(all(is.na(s$library_conc_ng_ul))) scale_fill_viridis_d(na.value = "white")
+      if(all(is.na(s$qubit_conc_ng_ul))) scale_fill_viridis_d(na.value = "white")
       else scale_fill_viridis_c(na.value = "white")
     } +
     scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
@@ -289,7 +379,7 @@ empty_plate %>%
     labs(
       x="",
       y="Plate row",
-      fill="Library\nconcentration\n(ng/ul)"
+      fill="DNA\nconcentration\n(ng/ul)"
     )
 ```
 
@@ -334,8 +424,7 @@ Lineage assignment software and version `r lineage_assignment_software_version`
 s_toPlot %>%
   ggplot(aes(x=`SARS-CoV-2`, fill = sample_type)) +
     geom_bar(binwidth=0.1, boundary=TRUE, color = "white") +
-    #scale_fill_manual(values = ann_colors$sample_type[match(levels(s_toPlot$sample_type), names(ann_colors$sample_type))]) +
-    scale_fill_manual(values = ann_colors$sample_type) +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(s_toPlot$sample_type), names(ann_colors$sample_type))]) +
     theme_bw() + 
     theme(panel.grid = element_blank()) +
     labs(
@@ -365,20 +454,21 @@ s_toPlot %>%
 
 ```{r}
 s_toPlot %>%
-  select(sample_id, Lineage, sample_type) %>%
+  select(sample_id, lineage, sample_type) %>%
+  group_by(sample_type) %>%
   mutate(fraction = 1/n()) %>%
-  mutate(variants = fct_lump(Lineage, 10, w = fraction)) %>% 
-  mutate(variants = reorder(variants, -fraction)) %>%
-  select(-Lineage) %>%
-  group_by(sample_type, variants) %>%
-  mutate(props = sum(fraction)) %>%
   ungroup() %>%
-  unique() %>%
+  mutate(variants = fct_lump(lineage, 10, w = fraction)) %>% 
+  select(-lineage) %>%
+  group_by(sample_type, variants) %>%
+  summarize(props = sum(fraction)) %>%
+  ungroup() %>%
+  mutate(variants = factor(variants, levels = names(ann_colors$variants))) %>%
   ggplot(aes(x=sample_type, y=props, fill=variants)) +
     geom_bar(stat="identity", position = position_fill(reverse = TRUE)) +
     facet_grid(.~sample_type, space="free", scales="free",
-               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
-    ggsci::scale_fill_d3(palette = "category20") +
+               labeller = labeller(.default = function(x) {gsub(" ", "\n", x)}, .multi_line = FALSE)) +
+    scale_fill_manual(values = ann_colors$variants) +
     scale_y_continuous(limits = c(0,1), expand=c(0,0), labels=scales:::percent) +
     theme_classic() +
     theme(
@@ -388,7 +478,9 @@ s_toPlot %>%
       axis.ticks.x = element_blank(),
       plot.title = element_text(hjust = 0.5)
       ) +
-    labs(x="", y="Relative abundance", title = "Sample type", fill="Variants")
+    labs(x="", y="Relative abundance", title = "Sample type", fill="Variants") +
+    guides(fill = guide_legend(reverse=T, order = 1)) +
+  who_label_lab
 
 ```
 \newpage
@@ -409,22 +501,28 @@ s_toPlot %>%
   filter(!grepl("scorpio", variant2_prop)) %>%
   mutate(variant2_prop = unlist(lapply(variant2_prop, function(x) eval(parse(text=x))))) %>%
   pivot_longer(cols = c("variant1_prop", "variant2_prop"), names_to = "variant_num", values_to = "props") %>%
-  mutate(variant = case_when(variant_num == "variant1_prop" ~ gsub("\\(.*", "", variant1),
+  mutate(variants = case_when(variant_num == "variant1_prop" ~ gsub("\\(.*", "", variant1),
                              variant_num == "variant2_prop" ~ gsub("\\(.*", "", variant2),
                              TRUE ~ NA_character_)) %>%
   filter(!is.na(props)) %>%
-  ggplot(aes(x=props, y=sample_id, fill=variant)) +
+  mutate(variants = factor(variants, levels = names(ann_colors$variants))) %>%
+  order_on_other_col(sample_id, variants, decreasing = F) %>%
+  ggplot(aes(x=props, y=sample_id, fill=variants)) +
     geom_bar(stat="identity", position = position_fill(reverse = TRUE)) +
-    facet_grid(sample_type~., space="free", scales="free",
-               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
-    ggsci::scale_fill_d3(palette = "category20") +
+    facet_grid(.~sample_type, space="free", scales="free",
+               labeller = labeller(.default = function(x) {gsub(" ", "\n", x)}, .multi_line = FALSE)) +
+    #facet_grid(sample_type~., space="free", scales="free",
+    #           labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
+    scale_fill_manual(values = ann_colors$variants) +
     scale_x_continuous(limits = c(0,1), expand=c(0,0), labels=scales:::percent) +
     theme_classic() +
     theme(
       strip.background = element_blank(),
       strip.text.y = element_text(angle = 0)
       ) +
-    labs(y="", x="Relative abundance", fill="")
+    labs(y="", x="Relative abundance", fill="Variants") +
+    guides(fill = guide_legend(reverse=T, order = 1)) +
+  who_label_lab
 
 ```
 
@@ -451,6 +549,18 @@ s %>%
   kable_style()
 ```
 
+```{r data export}
+dir.create(here("epi"))
+
+# Export the data for EPI's
+s_toPlot %>%
+  filter(!grepl("control", sample_type, ignore.case = TRUE)) %>%
+  select(sample_name, sample_collected_by, sequencing_date, lineage, scorpio) %>%
+  arrange(sample_collected_by, sample_name) %>%
+  rename(accession_number = "sample_name", who_label = "scorpio") %>%
+  write_csv(here("epi", paste(sequencing_run_date, project_name, "PHL_sequencing_results.csv", sep = "_")))
+
+```
 
 ```{r Generate time stamped report, eval=FALSE, include=FALSE}
 #notes
@@ -464,10 +574,10 @@ sequencing_run_date <- gsub("_.*", "", basename(here()))
 project_name <- sub("^([^_]+)_", "", basename(here()), perl = TRUE)
 
 qc_report_fp <- paste(sequencing_run_date, "_" , project_name, "_QC_Report.Rmd", sep="")
-qc_output_fp <- here("output", "basic_report", paste(project_name, '.QC.report.', Sys.Date(), '.pdf', sep=''))
+qc_output_fp <- here("output", "basic_report", paste(Sys.Date(), "_", project_name, '.QC.report.', sequencing_run_date, '.pdf', sep=''))
 
 rmarkdown::render(qc_report_fp, output_file = qc_output_fp)
-rmarkdown::render(qc_report_fp, output_format = rmarkdown::md_document(variant = "markdown_github",
-                                                                       toc = TRUE), output_file = "README.md")
+rmarkdown::render(qc_report_fp, output_file = "README.md",
+                  output_format = rmarkdown::md_document(variant = "markdown_github", toc = TRUE))
 
 ```
