@@ -496,6 +496,7 @@ s_toPlot %>%
   mutate(variant1_prop = gsub(".*\\(|\\)", "", variant1)) %>%
   #not sure what this text means
   filter(!grepl("Assigned", variant1_prop)) %>%
+  #calculate the parentheses as a numeric
   mutate(variant1_prop = unlist(lapply(variant1_prop, function(x) eval(parse(text=x))))) %>%
   mutate(variant2_prop = gsub(".*\\(|\\)", "", variant2)) %>%
   filter(!grepl("scorpio", variant2_prop)) %>%

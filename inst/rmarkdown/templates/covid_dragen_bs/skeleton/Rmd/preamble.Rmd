@@ -49,9 +49,8 @@ mapping_file_fp <- here("metadata", list.files(here("metadata"), pattern = ".tsv
 #b2fq_c_fp <- here("Data", "bcl2fastq", "commands.tsv")
 #b2fq_v_fp <- here("Data", "bcl2fastq", "bcl2fastqVersion.stderr.txt")
 
-gen_fq_fp <- here("Data", "gen_fq", "CompletedJobInfo.xml")
-
 ### demultiplexing results from BaseSpace
+gen_fq_fp <- here("Data", "demux_reads", "CompletedJobInfo.xml")
 adaptertrimming_fp <- here("Data", "demux_reads", "AdapterTrimming.txt")
 #demuxsum_fp <- here("Data", "demux_reads", "DemuxSummaryF1L1.txt")
 demuxsum_fp <- here("Data", "demux_reads", "DemultiplexSummaryF1L1.txt")
@@ -208,7 +207,16 @@ pango <- read_csv(pangolin_fp) %>%
   mutate(`Median Coverage` = gsub("\\(.*", "", `Median Coverage`)) %>%
   mutate(`Median Coverage` = gsub("$", "X", `Median Coverage`)) %>%
   mutate(`Scorpio Call` = gsub(" \\(.*", "", `Scorpio Call`)) %>%
-  mutate(`Scorpio Call` = gsub("Probable ", "", `Scorpio Call`))
+  mutate(`Scorpio Call` = gsub("Probable ", "", `Scorpio Call`)) %>%
+  #version is messed up from converting an Excel to .csv format. The version seems to be input as a date
+  mutate(Version = gsub(" 00:00:00$", "", Version)) %>%
+  mutate(pango_software_v = gsub("^.*v|^.*v0", "", Version)) %>%
+  mutate(pango_software_v = gsub("/|/20", ".", pango_software_v)) %>%
+  mutate(pango_software_v = gsub("\\.0", "\\.", pango_software_v)) %>%
+  #get the version between the two 'v'
+  mutate(lineage_v = gsub("^.*-v", "", Version)) %>%
+  mutate(lineage_v = gsub("v.*$", "", lineage_v)) %>%
+  mutate(lineage_assign = gsub("-v.*", "", Version))
 
 bs_results <- merge(kmer, pango, by.x = "Sample", by.y = "Taxon", all = TRUE) %>%
   #merge(n_clade, by.x = "Sample", by.y = "seqName", all = TRUE) %>%
@@ -218,9 +226,8 @@ bs_results <- merge(kmer, pango, by.x = "Sample", by.y = "Taxon", all = TRUE) %>
 #look for Vibrio campbellii taxa as positive control
 #has_pos_ctrl <- any(grepl("Vibrio campbellii", a))
 
-panogolin_database_version <- gsub("^.*v", "", unique(bs_results$Version)[!is.na(unique(bs_results$Version))])[1]
-lineage_assignment_software_version <- gsub(paste0("v", panogolin_database_version), "", unique(bs_results$Version)[!is.na(unique(bs_results$Version))])
-lineage_assignment_software_version <- lineage_assignment_software_version[grepl("PUSHER", lineage_assignment_software_version)]
+panogolin_database_version <- unique(bs_results$pango_software_v)[1]
+lineage_assignment_software_version <- paste0(paste0(unique(bs_results$lineage_assign)[!is.na(unique(bs_results$lineage_assign))], collapse = "/"), " v", unique(bs_results$lineage_v)[1])
 
 ```
 
@@ -316,9 +323,19 @@ ann_colors[["who_label"]] <- c()
 
 for(variant in sort(unique(s$scorpio)[!is.na(unique(s$scorpio))])) {
   
+  #only coloring first two variants
   variant_list <- s %>%
     filter(scorpio == variant) %>%
-    select(lineage) %>%
+    select(Note) %>%
+    mutate(Note = gsub(".*: ", "", Note)) %>%
+    separate(Note, into = c("variant1", "variant2"), sep = " ", extra = "merge") %>%
+    #not sure what this text means
+    filter(!grepl("Assigned", variant1)) %>%
+    filter(!grepl("scorpio", variant2)) %>%
+    pivot_longer(cols = c("variant1", "variant2"), names_to = "variant_num", values_to = "variants") %>%
+    mutate(variants = gsub("\\(.*", "", variants)) %>%
+    select(variants) %>%
+    filter(!is.na(variants)) %>%
     unique() %>%
     pull() %>%
     str_sort(numeric = TRUE)
