@@ -186,7 +186,7 @@ write_samp <- function(line2write) {
 }
 
 write("[Header]", file = sample_sheet_fp)
-write_samp(c("Experiment Name", prj_description))
+write_samp(c("Experiment Name", paste0(prj_description, "_", sequencing_date)))
 write_samp(c("Date", sequencing_date))
 write_samp(c("Workflow", "GenerateFASTQ"))
 write_samp(c("Library Prep Kit", "COVIDSeq for Surveillance"))

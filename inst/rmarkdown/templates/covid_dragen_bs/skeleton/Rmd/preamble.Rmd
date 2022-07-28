@@ -137,7 +137,7 @@ samp_sh_check <- samp_sh_s <- data.frame(X1 = unlist(sample_sheet$Data), strings
 
 #if any of the barcode ID's dont match, raise an error
 if(!all(c(samp_sh_check$I7_ID, samp_sh_check$I7_ID))) {
-  stop(simpleError("One of the barcode ID's don't match! Check samp_sh_check variable"))
+  stop(simpleError("One of the barcode ID's don't match! Check samp_sh_check dataframe"))
 }
 
 samp_sh_s <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE) %>%
@@ -163,7 +163,6 @@ samp_reads <- read_delim(demuxsum_fp, col_names = FALSE) %>%
   slice(-1) %>%
   filter(!is.na(SampleNumber)) %>%
   merge(fastq_sum, by = "SampleNumber", all = TRUE) %>%
-  #merge(samp_sh_s, by = c("SampleName", "SampleNumber"), all = TRUE) %>%
   rename(sample_id = "SampleName") %>%
   mutate(sample_id = gsub("_", "-", sample_id)) %>%
   mutate(sample_id = ifelse(sample_id == "None", "Undetermined", sample_id)) %>%
@@ -173,18 +172,11 @@ samp_reads <- read_delim(demuxsum_fp, col_names = FALSE) %>%
 
 
 top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
-  # filter(is.na(X3)) %>%
-  # select(X1, X2) %>%
-  # filter(!is.na(X2)) %>%
-  # rename(index_sequence = "X1", number_of_reads = "X2") %>%
-  # mutate(number_of_reads = as.numeric(number_of_reads)) %>%
-  # order_on_other_col(index_sequence, number_of_reads) %>%
-  # slice(1:10) %>%
-  # droplevels()
-  filter(is.na(X4)) %>%
-  select(X1, X2, X3) %>%
-  filter(!is.na(X2)) %>%
-  rename(index_sequence1 = "X1", index_sequence2 = "X2", number_of_reads = "X3") %>%
+  filter(is.na(X6)) %>%
+  filter(!is.na(X4)) %>%
+  rename(index_sequence1 = "X1", index_sequence2 = "X3", number_of_reads = "X5") %>%
+  filter(!grepl("###", index_sequence1)) %>%
+  select(run, index_sequence1, index_sequence2, number_of_reads) %>%
   mutate(index_sequence = paste0(index_sequence1, "+", index_sequence2)) %>%
   select(-c(index_sequence1, index_sequence2)) %>%
   mutate(number_of_reads = as.numeric(number_of_reads)) %>%
@@ -208,7 +200,7 @@ pango <- read_csv(pangolin_fp) %>%
   mutate(`Median Coverage` = gsub("$", "X", `Median Coverage`)) %>%
   mutate(`Scorpio Call` = gsub(" \\(.*", "", `Scorpio Call`)) %>%
   mutate(`Scorpio Call` = gsub("Probable ", "", `Scorpio Call`)) %>%
-  #version is messed up from converting an Excel to .csv format. The version seems to be input as a date
+  #version is messed up from converting an Excel to .csv format. The version seems to be reformmatted as a date
   mutate(Version = gsub(" 00:00:00$", "", Version)) %>%
   mutate(pango_software_v = gsub("^.*v|^.*v0", "", Version)) %>%
   mutate(pango_software_v = gsub("/|/20", ".", pango_software_v)) %>%
