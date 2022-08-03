@@ -170,6 +170,23 @@ s %>%
     )
 ```
 
+```{r}
+
+s %>%
+  ggplot(aes(y=read_counts, x=sample_type, fill = sample_type)) +
+    geom_boxplot() +
+    geom_point(shape = 21, position = position_jitter(width = 0.2)) +
+    scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
+    scale_fill_manual(values = ann_colors$sample_type[match(levels(s$sample_type), names(ann_colors$sample_type))]) +
+    theme_bw() + 
+    theme(panel.grid = element_blank()) +
+    labs(
+      y="Read counts",
+      x="", fill = "Sample Type"
+    )
+
+```
+
 ```{r percent reads of lane, echo=FALSE}
 reads_percent <- s %>%
   mutate(percent_of_lane = read_counts/sum(read_counts)) %>%
@@ -219,7 +236,7 @@ These are the adapters: \newline
 
 ## Read counts and DNA concentration of each sample
 
-```{r, fig.width=10, fig.height=5, eval = has_CT}
+```{r, fig.width=10, fig.height=5, eval = if(!has_extra){FALSE}else{has_CT}}
 
 s %>%
   ggplot(aes(x = CT, y = read_counts, fill = sample_type)) +
@@ -233,7 +250,7 @@ s %>%
 
 ```
 
-```{r, fig.width=10, fig.height=5, eval = has_RLU}
+```{r, fig.width=10, fig.height=5, eval = if(!has_extra){FALSE}else{has_RLU}}
 
 s %>%
   ggplot(aes(x = RLU, y = read_counts, fill = sample_type)) +
@@ -261,7 +278,7 @@ s %>%
 
 ```
 
-```{r, fig.width=10, fig.height=5, eval = has_CT}
+```{r, fig.width=10, fig.height=5, eval = if(!has_extra){FALSE}else{has_CT}}
 
 s %>%
   ggplot(aes(x = CT, y = qubit_conc_ng_ul, fill = sample_type)) +
@@ -273,7 +290,7 @@ s %>%
 
 ```
 
-```{r, fig.width=10, fig.height=5, eval = has_RLU}
+```{r, fig.width=10, fig.height=5, eval = if(!has_extra){FALSE}else{has_RLU}}
 
 s %>%
   ggplot(aes(x = RLU, y = qubit_conc_ng_ul, fill = sample_type)) +
@@ -290,7 +307,7 @@ s %>%
 
 The samples are processed on a 96-well plate. The figures illustrate the sample_information, DNA concentration, and read counts after demultiplexing. Wells without any samples are white while samples with low values begin with dark blue. 
 
-```{r, eval = has_CT}
+```{r, eval = if(!has_extra){FALSE}else{has_CT}}
 empty_plate %>%
   merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
   filter(!is.na(plate_coord)) %>%
@@ -321,7 +338,7 @@ empty_plate %>%
 
 ```
 
-```{r, eval = has_RLU}
+```{r, eval = if(!has_extra){FALSE}else{has_RLU}}
 empty_plate %>%
   merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
   filter(!is.na(plate_coord)) %>%
@@ -452,6 +469,30 @@ s_toPlot %>%
 
 ## Pangolin Lineage Results
 
+### Coverage
+
+```{r}
+s_toPlot %>%
+  select(sample_type, coverage, `Coverage >= 30x`) %>%
+  rename(cov_percent = "Coverage >= 30x") %>%
+  mutate(coverage = as.numeric(gsub(".$", "", coverage))) %>%
+  mutate(cov_percent = as.numeric(gsub(".$", "", cov_percent))/100) %>%
+  ggplot(aes(x = coverage, y = cov_percent, fill = sample_type)) +
+    geom_point(shape = 21) +
+    scale_y_continuous(labels=scales:::percent) +
+      theme_classic() +
+      theme(
+        strip.background = element_rect(color = "white", size = 50)
+        ) +
+      labs(x="Median coverage", y="Percentage of genome\nwith >= 30X coverage", fill="Sample Type") +
+      guides(fill = guide_legend(reverse=T, order = 1))
+
+```
+
+\newpage
+
+### Variant assignments
+
 ```{r}
 s_toPlot %>%
   select(sample_id, lineage, sample_type) %>%
@@ -480,26 +521,25 @@ s_toPlot %>%
       ) +
     labs(x="", y="Relative abundance", title = "Sample type", fill="Variants") +
     guides(fill = guide_legend(reverse=T, order = 1)) +
-  who_label_lab
+  who_legend
 
 ```
 \newpage
 
-Samples with conflicts and ambiguity in variant assignments
+### Samples with conflicts and ambiguity in variant assignments
 
 ```{r}
 #this is a very long-winded way of calculating the conflicting variants. There should be shorter code
 s_toPlot %>%
-  select(sample_id, Conflict, Note, sample_type) %>%
+  select(sample_id, Conflict, Note, sample_type, nc_QC_status) %>%
   mutate(Note = gsub(".*: ", "", Note)) %>%
   separate(Note, into = c("variant1", "variant2"), sep = " ", extra = "merge") %>%
   mutate(variant1_prop = gsub(".*\\(|\\)", "", variant1)) %>%
   #not sure what this text means
   filter(!grepl("Assigned", variant1_prop)) %>%
-  #calculate the parentheses as a numeric
   mutate(variant1_prop = unlist(lapply(variant1_prop, function(x) eval(parse(text=x))))) %>%
   mutate(variant2_prop = gsub(".*\\(|\\)", "", variant2)) %>%
-  filter(!grepl("scorpio", variant2_prop)) %>%
+  filter(!grepl("scorpio found insufficient support", variant2_prop)) %>%
   mutate(variant2_prop = unlist(lapply(variant2_prop, function(x) eval(parse(text=x))))) %>%
   pivot_longer(cols = c("variant1_prop", "variant2_prop"), names_to = "variant_num", values_to = "props") %>%
   mutate(variants = case_when(variant_num == "variant1_prop" ~ gsub("\\(.*", "", variant1),
@@ -507,10 +547,11 @@ s_toPlot %>%
                              TRUE ~ NA_character_)) %>%
   filter(!is.na(props)) %>%
   mutate(variants = factor(variants, levels = names(ann_colors$variants))) %>%
-  order_on_other_col(sample_id, variants, decreasing = F) %>%
+  mutate(nc_QC_status = factor(nc_QC_status, levels = c("good", "mediocre", "bad"))) %>%
+  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(nc_QC_status, variants, decreasing = FALSE)]))) %>%
   ggplot(aes(x=props, y=sample_id, fill=variants)) +
     geom_bar(stat="identity", position = position_fill(reverse = TRUE)) +
-    facet_grid(.~sample_type, space="free", scales="free",
+    facet_grid(nc_QC_status~sample_type, space="free", scales="free",
                labeller = labeller(.default = function(x) {gsub(" ", "\n", x)}, .multi_line = FALSE)) +
     #facet_grid(sample_type~., space="free", scales="free",
     #           labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
@@ -523,11 +564,39 @@ s_toPlot %>%
       ) +
     labs(y="", x="Relative abundance", fill="Variants") +
     guides(fill = guide_legend(reverse=T, order = 1)) +
-  who_label_lab
+  who_legend
 
 ```
 
-## Nextclade assignments
+## Nextclade
+
+### Coverage and QC scores
+
+```{r}
+s_toPlot %>%
+  select(sample_type, coverage, `Coverage >= 30x`, nc_QC_status) %>%
+  filter(!is.na(coverage)) %>%
+  rename(cov_percent = "Coverage >= 30x") %>%
+  mutate(coverage = as.numeric(gsub(".$", "", coverage))) %>%
+  mutate(cov_percent = as.numeric(gsub(".$", "", cov_percent))/100) %>%
+  mutate(nc_QC_status = factor(nc_QC_status, levels = c("good", "mediocre", "bad"))) %>%
+  ggplot(aes(x = nc_QC_status, y = cov_percent)) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_point(aes(fill = coverage, shape = sample_type), position = position_jitterdodge(jitter.width = 1), size = 3) +
+    scale_shape_manual(values = 21:(21+length(ann_colors$sample_type))) +
+    scale_fill_viridis_c() +
+    scale_y_continuous(labels=scales:::percent) +
+      
+    theme_classic() +
+    theme(
+      strip.background = element_rect(color = "white", size = 50)
+    ) +
+    labs(x="NextClade QC Status", y="Percentage of genome\nwith >= 30X coverage", fill = "Median\nCoverage (X)", shape = "Sample Type") +
+    guides(fill = guide_legend(reverse=T, order = 1, override.aes = list(shape = 21)))
+
+```
+
+### Mutations
 
 ```{r}
 
@@ -556,6 +625,7 @@ dir.create(here("epi"))
 # Export the data for EPI's
 s_toPlot %>%
   filter(!grepl("control", sample_type, ignore.case = TRUE)) %>%
+  filter(nc_QC_status != "bad") %>%
   select(sample_name, sample_collected_by, sequencing_date, lineage, scorpio) %>%
   arrange(sample_collected_by, sample_name) %>%
   rename(accession_number = "sample_name", who_label = "scorpio") %>%

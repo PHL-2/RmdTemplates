@@ -191,8 +191,8 @@ top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
 kmer <- read_csv(kmer_fp) %>%
   mutate(`SARS-CoV-2` = factor(`SARS-CoV-2`, levels = c("ND", "Detected")))
 
-#n_clade <- read_csv(nextclade_fp) %>%
-#  rename(nc_QC_status = "QC Status")
+n_clade <- read_csv(nextclade_fp) %>%
+  rename(nc_QC_status = "QC Status")
 
 pango <- read_csv(pangolin_fp) %>%
   rename(pango_QC_status = "QC Status") %>%
@@ -211,7 +211,7 @@ pango <- read_csv(pangolin_fp) %>%
   mutate(lineage_assign = gsub("-v.*", "", Version))
 
 bs_results <- merge(kmer, pango, by.x = "Sample", by.y = "Taxon", all = TRUE) %>%
-  #merge(n_clade, by.x = "Sample", by.y = "seqName", all = TRUE) %>%
+  merge(n_clade, by.x = "Sample", by.y = "seqName", all = TRUE) %>%
   rename(sample_id = "Sample")
 
 #TODO: Add a check to see if positive control shows up as the correct variant
@@ -352,7 +352,7 @@ names(ann_colors[["variants"]]) <- c(NA, names(ann_colors[["variants"]])[-1])
 
 #scales::show_col(ann_colors[["variants"]])
 
-who_label_lab <- data.frame(x = 1, y = 1, fill_col = names(ann_colors[["who_label"]])) %>%
+who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_colors[["who_label"]])) %>%
   ggplot(aes(x = x, y = y, fill = fill_col)) +
     geom_bar(stat="identity", position = position_fill(reverse = TRUE), alpha = 0) +
     scale_fill_manual(values = ann_colors$who_label) +
