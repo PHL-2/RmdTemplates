@@ -17,7 +17,7 @@ munging_fp <- here("metadata", "munge")
 sequencing_date <- "" #YYYY-MM-DD
 prj_description <- "" #no spaces
 
-instrument_select <- NA #select 1 for MiSeq or 2 for NextSeq
+instrument_select <-  #select 1 for MiSeq or 2 for NextSeq
 instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
 
 read_length <- "76"
@@ -52,11 +52,11 @@ barcodes <- read.csv(barcode_fp, stringsAsFactors = FALSE) %>%
   rename(UDI_Index_ID = "I7_Index_ID") %>%
   select(idt_plate_coord, UDI_Index_ID, index, index2)
 
-#################################################
-# Load metadata sheet and merge with barcode file
-#################################################
+#####################
+# Load metadata sheet
+#####################
 
-metadata_input_fp <- here(munging_fp, list.files(munging_fp, pattern = ".xlsx"))
+metadata_input_fp <- here(munging_fp, "sequencing_metadata", list.files(here(munging_fp, "sequencing_metadata"), pattern = ".xlsx"))
 
 read_sheet <- function(fp, sheet_name) {
   read_excel(fp, sheet = sheet_name) %>%
@@ -72,21 +72,66 @@ qubit_sheet <- read_sheet(metadata_input_fp, "Qubit") %>%
   mutate_at(vars(one_of('qubit_date')), as.character)
 index_sheet <- read_sheet(metadata_input_fp, "Index")
 sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
-extra_sheet <- read_sheet(metadata_input_fp, "Extra") %>%
-  #include date at the end of the isolate name; also use this as the sample_id when uploading to public repositories
-  mutate(isolate = gsub("$", paste0("/", gsub("-", "", sequencing_date)), isolate))
 submission_sheet <- read_sheet(metadata_input_fp, "Submission fields")
+
+###################################################################################
+# Load the metadata sheet from epidemiologists and merge with sample metadata sheet
+# Make sure these sheets are not uploaded to GitHub
+###################################################################################
+
+PHL_fp <- here(munging_fp, "extra_metadata", list.files(here(munging_fp, "extra_metadata"), pattern = ".xlsx"))
+
+PHL_data <- read_excel(PHL_fp, skip = 1) %>%
+  rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER") %>%
+  select(sample_name, sample_collection_date, age, gender, zip_char, priority) %>%
+  #filter rows where sample_id is NA
+  filter(!is.na(sample_name)) %>%
+  #filter empty columns
+  select(where(function(x) any(!is.na(x)))) %>%
+  select(!matches("^\\.\\.\\.")) %>%
+  #use the first day of the week (starting on Monday) as the sample_collection_date
+  mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week"))) %>%
+  mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:7, 9)), Inf),
+                            labels = c("0 - 9", paste(seq(10, 70, by = 10), "-",as.numeric(paste0(1:7, 9))), "80+"),
+                            include.lowest = TRUE)) %>%
+  #don't include age because it may be PHI if included with zipcode and gender
+  select(-age)
+
+###################################################
+# Load the monthly RLU report
+# Make sure these sheets are not uploaded to GitHub
+###################################################
+
+RLU_fp <- here(munging_fp, "extra_metadata", list.files(here(munging_fp, "extra_metadata"), pattern = ".csv"))
+
+RLU_data <- read_csv(RLU_fp) %>%
+  rename(sample_name = "Sample ID") %>%
+  select(sample_name, RLU) %>%
+  #filter rows where sample_id is NA
+  filter(!is.na(sample_name)) %>%
+  #filter empty columns
+  select(where(function(x) any(!is.na(x)))) %>%
+  select(!matches("^\\.\\.\\."))
+
+###########################
+# Merge all metadata sheets
+###########################
 
 cols2merge <- c("sample_name", "plate", "plate_row", "plate_col", "plate_coord")
 
+#merge all the individual sheets
 metadata_sheet <- merge(qubit_sheet, index_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   merge(sample_info_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
-  merge(extra_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   merge(submission_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   #add in barcodes
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
-  mutate(sample_id = gsub("_", "-", paste0(idt_plate_coord, "-", gsub("-", "", sequencing_date)))) %>%
+  #merge the metadata from epi's
+  merge(PHL_data, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
+  #merge the RLU data
+  merge(RLU_data, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
+  mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", idt_plate_coord, "-", gsub("-", "", sequencing_date)))) %>%
   select(sample_id, everything()) %>%
+  arrange(plate, plate_col, plate_row) %>%
   mutate(sequencing_date = sequencing_date) %>%
   mutate(prj_descrip = prj_description) %>%
   mutate(instrument_type = instrument_type) %>%
@@ -104,11 +149,11 @@ metadata_sheet <- merge(qubit_sheet, index_sheet, by = cols2merge, all = TRUE, s
 for(x in c(cols2merge, "sample_id",
            "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
            "sample_type", "sample_collected_by",
-           "organism", "host_scientific_name", "host_diease",
-           "isolation_source", "isolate", "sequence_submitted_by",
-           "geo_loc_name_region", "geo_loc_name_country", "geo_loc_name_state_province_territory",
+           "organism", "host_scientific_name", "host_disease", "isolation_source",
+           "sequence_submitted_by", "geo_loc_name_region", "geo_loc_name_country", "geo_loc_name_state_province_territory",
            "index", "index2", "UDI_Index_ID",
-           "sequencing_date", "prj_descrip", "instrument_type", "read_length")) {
+           "sequencing_date", "prj_descrip", "instrument_type", "read_length",
+           "sample_collection_date", "host_age_bin", "gender", "zip_char", "priority")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     stop(simpleError(paste0("Missing column [", x, "]!!! in the metadata sheet!")))
   }

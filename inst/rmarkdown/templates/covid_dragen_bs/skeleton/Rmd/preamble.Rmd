@@ -66,10 +66,6 @@ nextclade_fp = here("Data", "NextClade", "Data export.csv")
 ### Pangolin
 pangolin_fp <- here("Data", "Pangolin", "Data export.csv")
 
-### additional metadata
-extra_file_fp <- here("metadata", "extra_metadata", list.files(here("metadata", "extra_metadata"), pattern = ".tsv|.csv"))
-has_extra <- length(extra_file_fp) > 0
-
 ```
 
 ```{r load bcl2fq, eval = FALSE}
@@ -176,7 +172,7 @@ top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
   filter(!is.na(X4)) %>%
   rename(index_sequence1 = "X1", index_sequence2 = "X3", number_of_reads = "X5") %>%
   filter(!grepl("###", index_sequence1)) %>%
-  select(run, index_sequence1, index_sequence2, number_of_reads) %>%
+  select(index_sequence1, index_sequence2, number_of_reads) %>%
   mutate(index_sequence = paste0(index_sequence1, "+", index_sequence2)) %>%
   select(-c(index_sequence1, index_sequence2)) %>%
   mutate(number_of_reads = as.numeric(number_of_reads)) %>%
@@ -192,7 +188,9 @@ kmer <- read_csv(kmer_fp) %>%
   mutate(`SARS-CoV-2` = factor(`SARS-CoV-2`, levels = c("ND", "Detected")))
 
 n_clade <- read_csv(nextclade_fp) %>%
-  rename(nc_QC_status = "QC Status")
+  rename(nc_QC_status = "QC Status") %>%
+  mutate(n_VOC = gsub(".*\\(|\\).*", "", clade)) %>%
+  mutate(n_VOC = gsub("^19A$", "Reference", n_VOC))
 
 pango <- read_csv(pangolin_fp) %>%
   rename(pango_QC_status = "QC Status") %>%
@@ -200,6 +198,7 @@ pango <- read_csv(pangolin_fp) %>%
   mutate(`Median Coverage` = gsub("$", "X", `Median Coverage`)) %>%
   mutate(`Scorpio Call` = gsub(" \\(.*", "", `Scorpio Call`)) %>%
   mutate(`Scorpio Call` = gsub("Probable ", "", `Scorpio Call`)) %>%
+  mutate(`Scorpio Call` = ifelse(is.na(`Scorpio Call`) & Lineage == "B", "Reference", `Scorpio Call`)) %>%
   #version is messed up from converting an Excel to .csv format. The version seems to be reformmatted as a date
   mutate(Version = gsub(" 00:00:00$", "", Version)) %>%
   mutate(pango_software_v = gsub("^.*v|^.*v0", "", Version)) %>%
@@ -208,15 +207,12 @@ pango <- read_csv(pangolin_fp) %>%
   #get the version between the two 'v'
   mutate(lineage_v = gsub("^.*-v", "", Version)) %>%
   mutate(lineage_v = gsub("v.*$", "", lineage_v)) %>%
-  mutate(lineage_assign = gsub("-v.*", "", Version))
+  mutate(lineage_assign = gsub("-v.*", "", Version)) %>%
+  mutate(coverage_num = as.numeric(gsub("%", "", `Coverage >= 30x`)))
 
 bs_results <- merge(kmer, pango, by.x = "Sample", by.y = "Taxon", all = TRUE) %>%
   merge(n_clade, by.x = "Sample", by.y = "seqName", all = TRUE) %>%
   rename(sample_id = "Sample")
-
-#TODO: Add a check to see if positive control shows up as the correct variant
-#look for Vibrio campbellii taxa as positive control
-#has_pos_ctrl <- any(grepl("Vibrio campbellii", a))
 
 panogolin_database_version <- unique(bs_results$pango_software_v)[1]
 lineage_assignment_software_version <- paste0(paste0(unique(bs_results$lineage_assign)[!is.na(unique(bs_results$lineage_assign))], collapse = "/"), " v", unique(bs_results$lineage_v)[1])
@@ -240,7 +236,11 @@ s <- s_meta %>%
   rename(any_of(lookup)) %>%
   filter(!grepl("#", sample_id)) %>%
   mutate(isControl = grepl(ctrl_regex, sample_id, ignore.case = TRUE)|grepl(ctrl_regex, sample_type, ignore.case = TRUE)) %>%
-  mutate(sample_type = ifelse(sample_id == "Undetermined", "Unassigned reads", sample_type)) %>%
+    #make a new sample type based on if there were pangolin and nextclade results. DRAGEN App uses the <90 on the COVID targets as their threshold
+  #Based on their manual, targets seem to be "amplicons" or regions of longer stretches of DNA that are unique to COVID (longer than their 32 k-mers that they use for k-mer detection)
+  mutate(sample_type = case_when(((`SARS-CoV-2 Targets` < 90) & !grepl("control", sample_type)) ~ paste0(sample_type, " - No Variant Calls"),
+                              grepl("^Undetermined$", sample_id) ~ "Unassigned reads",
+                              TRUE ~ sample_type)) %>%
   #rearrange the sampletypes by ctrls first
   mutate(sample_type = factor(sample_type, levels =
                                unique(sample_type)[order(match(unique(sample_type), unique(sample_type)[grepl(ctrl_regex, gsub("-| ", "", unique(sample_type)), ignore.case = TRUE)]))])) %>%
@@ -264,27 +264,18 @@ if(length(header_idx)>1){
 show.text <- nrow(s) > 40
 ```
 
-```{r add more metadata, eval = has_extra}
-
-extra_data <- read_delim(extra_file_fp)
-
-s <- merge(s, extra_data, by = "sample_name", all = TRUE) %>%
-  #remove samples without a UDI position but keep Undetermined
-  filter(!is.na(UDI_Index_ID)|grepl("Undetermined", sample_id))
+```{r for basic report}
 
 has_CT <- any(grepl("^CT$", colnames(s)))
 
 has_RLU <- any(grepl("^RLU$", colnames(s)))
 
-```
-
-
-```{r for basic report}
 ### ====================================
 ### Select specific groups to plot for QC
 ### ====================================
 s_toPlot <- s %>%
   filter(!grepl("None|Undetermined", sample_id)) %>%
+  filter(!grepl(" - No Variant Calls$", sample_type)) %>%
   mutate(sample_id = as.character(sample_id)) %>%
   droplevels()
 
@@ -321,9 +312,9 @@ for(variant in sort(unique(s$scorpio)[!is.na(unique(s$scorpio))])) {
     select(Note) %>%
     mutate(Note = gsub(".*: ", "", Note)) %>%
     separate(Note, into = c("variant1", "variant2"), sep = " ", extra = "merge") %>%
-    #not sure what this text means
     filter(!grepl("Assigned", variant1)) %>%
-    filter(!grepl("scorpio", variant2)) %>%
+    filter(!grepl("scorpio found insufficient support.*", variant2)) %>%
+    mutate(variant2 = gsub("scorpio lineage | conflicts with inference lineage .*", "", variant2)) %>%
     pivot_longer(cols = c("variant1", "variant2"), names_to = "variant_num", values_to = "variants") %>%
     mutate(variants = gsub("\\(.*", "", variants)) %>%
     select(variants) %>%
