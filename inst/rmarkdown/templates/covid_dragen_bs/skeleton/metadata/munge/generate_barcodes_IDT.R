@@ -45,15 +45,22 @@ if(sequencing_date == "" | prj_description == "" | any(is.na(instrument_type))) 
 #https://support.illumina.com/sequencing/sequencing_kits/idt-nextera-dna-udi/product-files.html
 #Illumina Experiment Manager barcode sequences for the NextSeq2000 have different i5 sequences
 
-barcodes <- read.csv(barcode_fp, stringsAsFactors = FALSE) %>%
-  #change all ending 0 to another character
-  mutate(Index_Plate_Well = gsub("0$", "zzz", Index_Plate_Well)) %>%
-  #remove the middle 0 in the plate positions
-  mutate(Index_Plate_Well = gsub("0", "", Index_Plate_Well)) %>%
-  mutate(Index_Plate_Well = gsub("zzz", "0", Index_Plate_Well)) %>%
-  mutate(idt_plate_coord = paste0(Index_Plate, "_", Index_Plate_Well)) %>%
-  rename(UDI_Index_ID = "I7_Index_ID") %>%
-  select(idt_plate_coord, UDI_Index_ID, index, index2)
+barcodes <- tryCatch(
+  {
+    read.csv(barcode_fp, stringsAsFactors = FALSE) %>%
+      #change all ending 0 to another character
+      mutate(Index_Plate_Well = gsub("0$", "zzz", Index_Plate_Well)) %>%
+      #remove the middle 0 in the plate positions
+      mutate(Index_Plate_Well = gsub("0", "", Index_Plate_Well)) %>%
+      mutate(Index_Plate_Well = gsub("zzz", "0", Index_Plate_Well)) %>%
+      mutate(idt_plate_coord = paste0(Index_Plate, "_", Index_Plate_Well)) %>%
+      rename(UDI_Index_ID = "I7_Index_ID") %>%
+      select(idt_plate_coord, UDI_Index_ID, index, index2)
+  },
+  error = function(e) {
+    stop (simpleError("The nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv file needs to sit in a [metadata_templates/metadata_references] directory path above this project directory"))
+  }
+)
 
 #####################
 # Load metadata sheet

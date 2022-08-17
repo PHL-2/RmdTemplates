@@ -13,6 +13,7 @@ library(patchwork)
 
 ```{r functions}
 
+#this file needs to sit in a [aux_files/functions] directory path above this project directory
 source(gsub(basename(here()), "aux_files/functions/R_all_functions_v3.R", here()))
 
 ```
