@@ -59,7 +59,7 @@ barcodes <- read.csv(barcode_fp, stringsAsFactors = FALSE) %>%
 # Load metadata sheet
 #####################
 
-metadata_input_fp <- here("metadata", list.files(here("metadata"), pattern = ".xlsx"))
+metadata_input_fp <- here("metadata", "munge", list.files(here("metadata", "munge"), pattern = ".xlsx"))
 
 read_sheet <- function(fp, sheet_name) {
   read_excel(fp, sheet = sheet_name) %>%

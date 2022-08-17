@@ -57,7 +57,7 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 
 ```{r generate SampleSheet and metadata, eval = FALSE}
 
-source('metadata/munge/generate_barcodes_IDT.R')
+source("metadata/munge/generate_barcodes_IDT.R")
 
 ```
 
@@ -791,13 +791,13 @@ s %>%
 #rmarkdown::render('ronen_stein_Report_shotgun.Rmd',output_file = paste('CEASE.report.', Sys.Date(), '.pdf', sep=''))
 library(here)
 rstudioapi::documentSaveAll()
-dir.create(here("output", "basic_report"))
+dir.create(here("output"))
 
 sequencing_run_date <- gsub("_.*", "", basename(here()))
 project_name <- sub("^([^_]+)_", "", basename(here()), perl = TRUE)
 
 qc_report_fp <- paste(sequencing_run_date, "_" , project_name, "_QC_Report.Rmd", sep="")
-qc_output_fp <- here("output", "basic_report", paste(sequencing_run_date, "_", project_name, '.QC.report_gen.on.', Sys.Date(), '.pdf', sep=''))
+qc_output_fp <- here("output", paste(sequencing_run_date, "_", project_name, '.QC.report_gen.on.', Sys.Date(), '.pdf', sep=''))
 
 rmarkdown::render(qc_report_fp, output_file = qc_output_fp)
 rmarkdown::render(qc_report_fp, output_file = "README.md",
