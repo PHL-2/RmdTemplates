@@ -19,52 +19,45 @@ source(here("functions", "R_all_functions_v3.R"))
 
 ```{r versions and dates manual inputs}
 
-#if these variables are missing, throw an error
+sequencing_date <- sort(list.dirs(here("Runs"), recursive = FALSE, full.names = FALSE), decreasing = TRUE)
+sequencing_date <- sequencing_date[!grepl("test_run", sequencing_date)][1]
+prj_dir <- here("Runs", sequencing_date)
 
-# YYYY-MM-DD
-date_pipeline_was_run <- ""
+if(is.na(prj_dir)) {
+  stop (simpleError("Generate the metadata sheet and config files first using the generate_barcodes_IDT.R script"))
+}
 
-# N.N.N
-dragen_covid_lineage_version <- ""
+source(here(prj_dir, "config", "COVIDSeq_config.R"))
 
-# N.N.N
-nextclade_version <- ""
-
-primer_select <-  # set variable as 1 for V3, 2 for V4, or 3 for V4.1
-
-artic_primer_scheme <- c("V3", "V4", "V4.1")[primer_select]
-bs_bed_file_used <- c("nCov-2019.bed", "artic_V4_primer_scheme_NC_045512.2.bed", "artic_v4.1_primers_nc045512.2.bed")[primer_select]
-
-# minimum acceptable number of reads
-min_reads <- 10000
 ```
 
 ```{r file paths}
 
 ### mapping file path
 #try to get it automagically
-mapping_file_fp <- here("metadata", list.files(here("metadata"), pattern = ".tsv|.csv"))
+
+mapping_file_fp <- here(prj_dir, "metadata", list.files(here(prj_dir, "metadata"), pattern = ".csv"))
 
 ### bcl2fastq info; right now, running GenerateFASTQ module on the MiSeq machine to generate fastq files. Use these files later, when switching to bcl2fastq
-#b2fq_c_fp <- here("Data", "bcl2fastq", "commands.tsv")
-#b2fq_v_fp <- here("Data", "bcl2fastq", "bcl2fastqVersion.stderr.txt")
+#b2fq_c_fp <- here(prj_dir, "Data", "bcl2fastq", "commands.tsv")
+#b2fq_v_fp <- here(prj_dir, "Data", "bcl2fastq", "bcl2fastqVersion.stderr.txt")
 
 ### demultiplexing results from BaseSpace
-gen_fq_fp <- here("Data", "demux_reads", "CompletedJobInfo.xml")
-adaptertrimming_fp <- here("Data", "demux_reads", "AdapterTrimming.txt")
-#demuxsum_fp <- here("Data", "demux_reads", "DemuxSummaryF1L1.txt")
-demuxsum_fp <- here("Data", "demux_reads", "DemultiplexSummaryF1L1.txt")
-fastqsum_fp <- here("Data", "demux_reads", "FastqSummaryF1L1.txt")
-SampleSheet_fp <- here("Data", "demux_reads", "SampleSheetused.csv")
+gen_fq_fp <- here(prj_dir, "Data", "demux_reads", "CompletedJobInfo.xml")
+adaptertrimming_fp <- here(prj_dir, "Data", "demux_reads", "AdapterTrimming.txt")
+#demuxsum_fp <- here(prj_dir, "Data", "demux_reads", "DemuxSummaryF1L1.txt")
+demuxsum_fp <- here(prj_dir, "Data", "demux_reads", "DemultiplexSummaryF1L1.txt")
+fastqsum_fp <- here(prj_dir, "Data", "demux_reads", "FastqSummaryF1L1.txt")
+SampleSheet_fp <- here(prj_dir, "Data", "demux_reads", "SampleSheetused.csv")
 
 ### kmer fp
-kmer_fp <- here("Data", "kmer", "Data export.csv")
+kmer_fp <- here(prj_dir, "Data", "kmer", "Data export.csv")
 
 ### NextClade results fp
-nextclade_fp = here("Data", "NextClade", "Data export.csv")
+nextclade_fp = here(prj_dir, "Data", "NextClade", "Data export.csv")
 
 ### Pangolin
-pangolin_fp <- here("Data", "Pangolin", "Data export.csv")
+pangolin_fp <- here(prj_dir, "Data", "Pangolin", "Data export.csv")
 
 ```
 
