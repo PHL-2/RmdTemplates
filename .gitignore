@@ -6,3 +6,4 @@ metadata/
 epi/
 extra_metadata/*
 *.pdf
+cp2admin.R

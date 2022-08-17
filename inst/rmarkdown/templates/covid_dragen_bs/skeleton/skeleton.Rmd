@@ -803,4 +803,14 @@ rmarkdown::render(qc_report_fp, output_file = qc_output_fp)
 rmarkdown::render(qc_report_fp, output_file = "README.md",
                   output_format = rmarkdown::md_document(variant = "markdown_github", toc = TRUE))
 
+#save some files if this script exists
+tryCatch(
+  {
+    source(gsub(basename(here()), "cp2admin.R", here()))
+  }, error = function(e) 
+  {
+    
+  }
+)
+
 ```
