@@ -13,7 +13,7 @@ library(patchwork)
 
 ```{r functions}
 
-source(here("functions", "R_all_functions_v3.R"))
+source(gsub(basename(here()), "aux_files/functions/R_all_functions_v3.R", here()))
 
 ```
 

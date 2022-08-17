@@ -14,13 +14,19 @@ munging_fp <- here("metadata", "munge")
 # Manual input
 ##############
 
-sequencing_date <- "" #YYYY-MM-DD
-prj_description <- "" #no spaces
+prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
-instrument_select <-  #select 1 for MiSeq or 2 for NextSeq
+instrument_select <- 1 #select 1 for MiSeq or 2 for NextSeq
 instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
 
 read_length <- "76"
+
+#file location of the nextera udi indices
+#don't have to change this if the file sits in a the metadata_templates/metadata_references directories in the parent directory of the project
+barcode_fp <- gsub(basename(here()), "metadata_templates/metadata_references/nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv", here())
+
+#sequencing date will get grabbed from the R project name
+sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
 if(sequencing_date == "" | prj_description == "" | any(is.na(instrument_type))) {
   stop (simpleError(paste0("Please fill in the sequencing date, short project description, or correct instrument in ", munging_fp, "/generate_barcodes_IDT.R")))
@@ -39,9 +45,6 @@ if(sequencing_date == "" | prj_description == "" | any(is.na(instrument_type))) 
 #https://support.illumina.com/sequencing/sequencing_kits/idt-nextera-dna-udi/product-files.html
 #Illumina Experiment Manager barcode sequences for the NextSeq2000 have different i5 sequences
 
-#local index sequences
-barcode_fp <- here(munging_fp, "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
-
 barcodes <- read.csv(barcode_fp, stringsAsFactors = FALSE) %>%
   #change all ending 0 to another character
   mutate(Index_Plate_Well = gsub("0$", "zzz", Index_Plate_Well)) %>%
@@ -56,7 +59,7 @@ barcodes <- read.csv(barcode_fp, stringsAsFactors = FALSE) %>%
 # Load metadata sheet
 #####################
 
-metadata_input_fp <- here(munging_fp, "sequencing_metadata", list.files(here(munging_fp, "sequencing_metadata"), pattern = ".xlsx"))
+metadata_input_fp <- here("metadata", list.files(here("metadata"), pattern = ".xlsx"))
 
 read_sheet <- function(fp, sheet_name) {
   read_excel(fp, sheet = sheet_name) %>%
@@ -72,14 +75,13 @@ qubit_sheet <- read_sheet(metadata_input_fp, "Qubit") %>%
   mutate_at(vars(one_of('qubit_date')), as.character)
 index_sheet <- read_sheet(metadata_input_fp, "Index")
 sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
-submission_sheet <- read_sheet(metadata_input_fp, "Submission fields")
 
 ###################################################################################
 # Load the metadata sheet from epidemiologists and merge with sample metadata sheet
 # Make sure these sheets are not uploaded to GitHub
 ###################################################################################
 
-PHL_fp <- here(munging_fp, "extra_metadata", list.files(here(munging_fp, "extra_metadata"), pattern = ".xlsx"))
+PHL_fp <- here("metadata", "extra_metadata", list.files(here("metadata", "extra_metadata"), pattern = ".xlsx"))
 
 PHL_data <- read_excel(PHL_fp, skip = 1) %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER") %>%
@@ -91,8 +93,8 @@ PHL_data <- read_excel(PHL_fp, skip = 1) %>%
   select(!matches("^\\.\\.\\.")) %>%
   #use the first day of the week (starting on Monday) as the sample_collection_date
   mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week"))) %>%
-  mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:7, 9)), Inf),
-                            labels = c("0 - 9", paste(seq(10, 70, by = 10), "-",as.numeric(paste0(1:7, 9))), "80+"),
+  mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:6, 9)), Inf),
+                            labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
                             include.lowest = TRUE)) %>%
   #don't include age because it may be PHI if included with zipcode and gender
   select(-age)
@@ -102,7 +104,7 @@ PHL_data <- read_excel(PHL_fp, skip = 1) %>%
 # Make sure these sheets are not uploaded to GitHub
 ###################################################
 
-RLU_fp <- here(munging_fp, "extra_metadata", list.files(here(munging_fp, "extra_metadata"), pattern = ".csv"))
+RLU_fp <- here("metadata", "extra_metadata", list.files(here("metadata", "extra_metadata"), pattern = ".csv"))
 
 RLU_data <- read_csv(RLU_fp) %>%
   rename(sample_name = "Sample ID") %>%
@@ -122,7 +124,6 @@ cols2merge <- c("sample_name", "plate", "plate_row", "plate_col", "plate_coord")
 #merge all the individual sheets
 metadata_sheet <- merge(qubit_sheet, index_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   merge(sample_info_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
-  merge(submission_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   #add in barcodes
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
   #merge the metadata from epi's
@@ -150,7 +151,6 @@ for(x in c(cols2merge, "sample_id",
            "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
            "sample_type", "sample_collected_by",
            "organism", "host_scientific_name", "host_disease", "isolation_source",
-           "sequence_submitted_by", "geo_loc_name_region", "geo_loc_name_country", "geo_loc_name_state_province_territory",
            "index", "index2", "UDI_Index_ID",
            "sequencing_date", "prj_descrip", "instrument_type", "read_length",
            "sample_collection_date", "host_age_bin", "gender", "zip_char", "priority")) {
@@ -214,6 +214,15 @@ print(any(grepl(" |_|\\.", metadata_sheet$sample_id)))
 if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
   stop(simpleError("There are spaces, underscores, or periods in the Sample IDs! Please fix"))
 }
+
+##########################
+# Generate project folders
+##########################
+
+dir.create(here("Data", "demux_reads"), recursive = TRUE)
+dir.create(here("Data", "kmer"), recursive = TRUE)
+dir.create(here("Data", "NextClade"), recursive = TRUE)
+dir.create(here("Data", "Pangolin"), recursive = TRUE)
 
 ####################
 # Write sample sheet
