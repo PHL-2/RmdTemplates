@@ -8,30 +8,24 @@ library(readr)
 #BCL Convert may require a different SampleSheet format
 #https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/bcl_convert/bcl-convert-v3-7-5-software-guide-1000000163594-00.pdf
 
-munging_fp <- here("metadata_template")
-references_fp <- here("metadata_references")
+munging_fp <- here("metadata", "munge")
 
 ##############
 # Manual input
 ##############
 
-instrument_select <- 1 #select 1 for MiSeq or 2 for NextSeq
+sequencing_date <- "" #YYYY-MM-DD
+prj_description <- "" #no spaces
+
+instrument_select <-  #select 1 for MiSeq or 2 for NextSeq
 instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
 
 read_length <- "76"
 
-prj_description <- "COVIDSeq" #no spaces
-
-#End manual input
-files_in_metadata <-list.files(here(munging_fp), pattern = ".xlsx")
-metadata_input_fp <- files_in_metadata[!grepl("~|sequencing_metadata_sheet.xlsx", files_in_metadata)]
-
-sequencing_date <- gsub("\\.xlsx$", "", metadata_input_fp) #YYYY-MM-DD
-
 if(sequencing_date == "" | prj_description == "" | any(is.na(instrument_type))) {
-  stop (simpleError(paste0("Please fill in the short project description, or correct instrument in ", munging_fp, "/generate_barcodes_IDT.R")))
+  stop (simpleError(paste0("Please fill in the sequencing date, short project description, or correct instrument in ", munging_fp, "/generate_barcodes_IDT.R")))
 } else if (is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
-  stop (simpleError("Please make a copy of the metadata template, fill it with the sample info, and rename the file as the sequencing_date in [YYYY-MM-DD] format"))
+  stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
 }
 
 
@@ -46,7 +40,7 @@ if(sequencing_date == "" | prj_description == "" | any(is.na(instrument_type))) 
 #Illumina Experiment Manager barcode sequences for the NextSeq2000 have different i5 sequences
 
 #local index sequences
-barcode_fp <- here(references_fp, "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
+barcode_fp <- here(munging_fp, "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
 barcodes <- read.csv(barcode_fp, stringsAsFactors = FALSE) %>%
   #change all ending 0 to another character
@@ -62,7 +56,7 @@ barcodes <- read.csv(barcode_fp, stringsAsFactors = FALSE) %>%
 # Load metadata sheet
 #####################
 
-metadata_input_fp <- here(munging_fp, list.files(here(munging_fp), pattern = paste0(sequencing_date, ".xlsx")))
+metadata_input_fp <- here(munging_fp, "sequencing_metadata", list.files(here(munging_fp, "sequencing_metadata"), pattern = ".xlsx"))
 
 read_sheet <- function(fp, sheet_name) {
   read_excel(fp, sheet = sheet_name) %>%
@@ -78,6 +72,7 @@ qubit_sheet <- read_sheet(metadata_input_fp, "Qubit") %>%
   mutate_at(vars(one_of('qubit_date')), as.character)
 index_sheet <- read_sheet(metadata_input_fp, "Index")
 sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
+submission_sheet <- read_sheet(metadata_input_fp, "Submission fields")
 
 ###################################################################################
 # Load the metadata sheet from epidemiologists and merge with sample metadata sheet
@@ -85,10 +80,6 @@ sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
 ###################################################################################
 
 PHL_fp <- here(munging_fp, "extra_metadata", list.files(here(munging_fp, "extra_metadata"), pattern = ".xlsx"))
-
-if(length(PHL_fp) > 1) {
-  stop (simpleError("There is more than one weekly sample list provided by the epidemiologist (in xlsx format). Only provide one"))
-}
 
 PHL_data <- read_excel(PHL_fp, skip = 1) %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER") %>%
@@ -100,8 +91,8 @@ PHL_data <- read_excel(PHL_fp, skip = 1) %>%
   select(!matches("^\\.\\.\\.")) %>%
   #use the first day of the week (starting on Monday) as the sample_collection_date
   mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week"))) %>%
-  mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:6, 9)), Inf),
-                            labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
+  mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:7, 9)), Inf),
+                            labels = c("0 - 9", paste(seq(10, 70, by = 10), "-",as.numeric(paste0(1:7, 9))), "80+"),
                             include.lowest = TRUE)) %>%
   #don't include age because it may be PHI if included with zipcode and gender
   select(-age)
@@ -112,10 +103,6 @@ PHL_data <- read_excel(PHL_fp, skip = 1) %>%
 ###################################################
 
 RLU_fp <- here(munging_fp, "extra_metadata", list.files(here(munging_fp, "extra_metadata"), pattern = ".csv"))
-
-if(length(RLU_fp) > 1) {
-  stop (simpleError("There is more than one RLU monthly report in the extra_metadata directory (in csv format). Only provide one"))
-}
 
 RLU_data <- read_csv(RLU_fp) %>%
   rename(sample_name = "Sample ID") %>%
@@ -135,6 +122,7 @@ cols2merge <- c("sample_name", "plate", "plate_row", "plate_col", "plate_coord")
 #merge all the individual sheets
 metadata_sheet <- merge(qubit_sheet, index_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   merge(sample_info_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
+  merge(submission_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   #add in barcodes
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
   #merge the metadata from epi's
@@ -162,6 +150,7 @@ for(x in c(cols2merge, "sample_id",
            "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
            "sample_type", "sample_collected_by",
            "organism", "host_scientific_name", "host_disease", "isolation_source",
+           "sequence_submitted_by", "geo_loc_name_region", "geo_loc_name_country", "geo_loc_name_state_province_territory",
            "index", "index2", "UDI_Index_ID",
            "sequencing_date", "prj_descrip", "instrument_type", "read_length",
            "sample_collection_date", "host_age_bin", "gender", "zip_char", "priority")) {
@@ -226,24 +215,6 @@ if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
   stop(simpleError("There are spaces, underscores, or periods in the Sample IDs! Please fix"))
 }
 
-##################################################
-# Generate project folders and move original files
-##################################################
-
-dir.create(here("Runs", sequencing_date, "metadata", "munge"), recursive = TRUE)
-
-#move the metadata file
-file.rename(metadata_input_fp, here("Runs", sequencing_date, "metadata", "munge", paste0(sequencing_date, ".xlsx")))
-
-dir.create(here("Runs", sequencing_date, "Data", "demux_reads"), recursive = TRUE)
-dir.create(here("Runs", sequencing_date, "Data", "kmer"), recursive = TRUE)
-dir.create(here("Runs", sequencing_date, "Data", "NextClade"), recursive = TRUE)
-dir.create(here("Runs", sequencing_date, "Data", "Pangolin"), recursive = TRUE)
-
-dir.create(here("Runs", sequencing_date, "config"), recursive = TRUE)
-covid_config_fp <- here("Runs", sequencing_date, "config", "COVIDSeq_config.R")
-file.copy(here("metadata_template", "COVIDSeq_config.R"), covid_config_fp)
-
 ####################
 # Write sample sheet
 ####################
@@ -253,7 +224,7 @@ samp_sheet_2_write <- metadata_sheet %>%
   select(sample_id, index, index2, UDI_Index_ID) %>%
   rename(Sample_ID = "sample_id")
 
-sample_sheet_fp <- here("Runs", sequencing_date, "metadata", "munge", "SampleSheet.csv")
+sample_sheet_fp <- here("metadata", "munge", "SampleSheet.csv")
 
 write_samp <- function(line2write) {
   write(paste0(line2write, collapse = ","), file = sample_sheet_fp, append = TRUE)
@@ -286,4 +257,4 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 # Write sheet to metadata folder
 ################################
 
-write.csv(metadata_sheet, file = here("Runs", sequencing_date, "metadata", paste0(sequencing_date, "_", prj_description, ".csv")), row.names = FALSE)
+write.csv(metadata_sheet, file = here("metadata", paste0(sequencing_date, "_", prj_description, ".csv")), row.names = FALSE)

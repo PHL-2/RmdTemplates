@@ -57,11 +57,11 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 
 ```{r generate SampleSheet and metadata, eval = FALSE}
 
-source('metadata_template/generate_barcodes_IDT.R')
+source('metadata/munge/generate_barcodes_IDT.R')
 
 ```
 
-```{r child = 'preamble.Rmd'}
+```{r child = 'Rmd/preamble.Rmd'}
 ```
 
 
@@ -662,9 +662,7 @@ s_toPlot %>%
 ```
 
 ```{r data export}
-dir.create(here(prj_dir, "upload", "epi"), recursive = TRUE)
-dir.create(here(prj_dir, "upload", "gisaid"), recursive = TRUE)
-dir.create(here(prj_dir, "upload", "sra"), recursive = TRUE)
+dir.create(here("epi"))
 
 # Export the data for EPI's
 epi_report <- s_toPlot %>%
@@ -679,75 +677,7 @@ epi_report <- s_toPlot %>%
   rename(accession_number = "sample_name", who_label = "scorpio")
 
 epi_report %>%
-  write_csv(here(prj_dir, "upload", "epi", paste(sequencing_date, "COVIDSeq_PHL_sequencing_results.csv", sep = "_")))
-
-# Export the data for GISAID upload
-gisaid <- s_toPlot %>%
-  #filter out controls
-  filter(!grepl("control", sample_type, ignore.case = TRUE)) %>%
-  #filter out bad results
-  filter(nc_QC_status != "bad") %>%
-  #filter out mediocre results with lower coverages
-  filter(!(nc_QC_status == "mediocre" & coverage_num < 80)) %>%
-  mutate(`Virus name` = paste0("hCoV-2/USA/", sample_id, "/", str_sub(sequencing_date, 1, 4))) %>%
-  mutate(Type = "betacoronavirus", `Passage details/history` = "Original", Location = "North America/USA/Pennsylvania",
-         `Patient age` = "Unknown", `Patient status` = "Unknown", `Sequencing technology` = paste0("Illumina ", instrument_type),
-         `Assembly method` = paste0("DRAGEN COVID Lineage ", dragen_covid_lineage_version),
-         `Submitting lab` = "Philadelphia Department of Public Health",
-         Address = "500 S. Broad Street, Philadelphia, PA 19146 USA") %>%
-  mutate(Host = ifelse(host_scientific_name == "Homo sapiens", "Human", NA)) %>%
-  rename(`Collection date` = "sample_collection_date", Gender = "gender", Coverage = "coverage", `Originating lab` = "sample_collected_by", `Specimen source` = "sample_type") %>%
-  select(`Virus name`, Type, `Passage details/history`, `Collection date`, Location, Host, Gender, `Patient age`, `Patient status`,
-         `Specimen source`, `Sequencing technology`, `Assembly method`, Coverage, `Originating lab`, `Submitting lab`, Address)
-
-gisaid %>%
-  write_csv(here(prj_dir, "upload", "gisaid", paste(sequencing_date, "COVIDSeq_PHL2_GISAID_upload.csv", sep = "_")))
-
-# Export the data for SRA upload
-bio_sample <- s_toPlot %>%
-  #filter out controls
-  filter(!grepl("control", sample_type, ignore.case = TRUE)) %>%
-  #filter out bad results
-  filter(nc_QC_status != "bad") %>%
-  #filter out mediocre results with lower coverages
-  filter(!(nc_QC_status == "mediocre" & coverage_num < 80)) %>%
-  select(-c(sample_name)) %>%
-  mutate(isolate = paste0("SARS-CoV-2/USA/", sample_id, "/", str_sub(sequencing_date, 1, 4))) %>%
-  mutate(GISAID_virus_name = paste0("hCoV-2/USA/", sample_id, "/", str_sub(sequencing_date, 1, 4))) %>%
-  mutate(geo_loc_name = "USA: PA", sequenced_by = "phl.sequencing@phila.gov", purpose_of_sampling = "Surveillance [GENEPIO:0100004]",
-         isolation_source = paste0(isolation_source, "; See additional sample source fields for further information")) %>%
-  rename(sample_name = "sample_id", collected_by = "sample_collected_by", collection_date = "sample_collection_date",
-         host_age = "host_age_bin", host = "host_scientific_name", host_sex = "gender") %>%
-  select(sample_name, organism, isolate, collected_by, collection_date, geo_loc_name, GISAID_virus_name, sequenced_by,
-         purpose_of_sampling, isolation_source, collection_device,
-         host_age, host, host_disease, host_sex)
-
-bio_sample %>%
-  write_csv(here(prj_dir, "upload", "sra", paste(sequencing_date, "COVIDSeq_PHL2_BioSample_upload.csv", sep = "_")))
-
-# Export the data for SRA upload
-sra <- s_toPlot %>%
-  #filter out controls
-  filter(!grepl("control", sample_type, ignore.case = TRUE)) %>%
-  #filter out bad results
-  filter(nc_QC_status != "bad") %>%
-  #filter out mediocre results with lower coverages
-  filter(!(nc_QC_status == "mediocre" & coverage_num < 80)) %>%
-  mutate(Title = paste0("Sequencing of ", tolower(organism), " from ", tolower(sample_type))) %>%
-  mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC V4 primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
-  mutate(Filename = paste0(sample_id, "_S", SampleNumber, "_L00", lane, "_R1_001.fastq.gz")) %>%
-  mutate(Filename2 = paste0(sample_id, "_S", SampleNumber, "_L00", lane, "_R2_001.fastq.gz")) %>%
-  mutate(Platform = "ILLUMINA", instrument_model = paste0("Illumina ", instrument_type), library_strategy = "AMPLICON",
-         library_source = "Viral RNA", library_selection = "PCR", library_layout = "PAIRED", Filetype = "fastq",
-         sequencing_protocol_name = "ARTIC Network Protocol V4",
-         raw_sequence_data_processing_method = paste0("DRAGEN COVID Lineage ", dragen_covid_lineage_version),
-         sequence_submitter_contact_email = "phl.sequencing@phila.gov") %>%
-  rename(Library_ID = "sample_id") %>%
-  select(Library_ID, Title, Platform, instrument_model, library_strategy, library_source, library_selection, library_layout, design_description,
-         Filetype, Filename, Filename2, sequencing_protocol_name, raw_sequence_data_processing_method, sequence_submitter_contact_email)
-
-sra %>%
-  write_csv(here(prj_dir, "upload", "sra", paste(sequencing_date, "COVIDSeq_PHL2_BioSample_upload.csv", sep = "_")))
+  write_csv(here("epi", paste(sequencing_run_date, project_name, "PHL_sequencing_results.csv", sep = "_")))
 
 #just a check to see if number of samples match
 n_samples_report <- s %>%
@@ -791,18 +721,16 @@ s %>%
 #rmarkdown::render('ronen_stein_Report_shotgun.Rmd',output_file = paste('CEASE.report.', Sys.Date(), '.pdf', sep=''))
 library(here)
 rstudioapi::documentSaveAll()
+dir.create(here("output", "basic_report"))
 
-sequencing_date <- sort(list.dirs(here("Runs"), recursive = FALSE, full.names = FALSE), decreasing = TRUE)
-sequencing_date <- sequencing_date[!grepl("test_run", sequencing_date)][1]
-prj_dir <- here("Runs", sequencing_date)
+sequencing_run_date <- gsub("_.*", "", basename(here()))
+project_name <- sub("^([^_]+)_", "", basename(here()), perl = TRUE)
 
-project_name <- basename(here())
+qc_report_fp <- paste(sequencing_run_date, "_" , project_name, "_QC_Report.Rmd", sep="")
+qc_output_fp <- here("output", "basic_report", paste(sequencing_run_date, "_", project_name, '.QC.report_gen.on.', Sys.Date(), '.pdf', sep=''))
 
-qc_report_fp <- paste0(project_name, ".Rmd")
-qc_output_fp <- paste(sequencing_date, "_COVIDSeq.QC.report_gen.on.", Sys.Date(), ".pdf", sep="")
-
-rmarkdown::render(qc_report_fp, output_file = here(prj_dir, qc_output_fp))
-rmarkdown::render(qc_report_fp, output_file = here(prj_dir, "README.md"),
+rmarkdown::render(qc_report_fp, output_file = qc_output_fp)
+rmarkdown::render(qc_report_fp, output_file = "README.md",
                   output_format = rmarkdown::md_document(variant = "markdown_github", toc = TRUE))
 
 ```

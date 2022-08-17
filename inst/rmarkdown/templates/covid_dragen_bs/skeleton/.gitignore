@@ -1,8 +1,0 @@
-metadata/
-epi/
-extra_metadata/*
-*.pdf
-.Rhistory
-.Rproj.user/
-.RData
-.Ruserdata
