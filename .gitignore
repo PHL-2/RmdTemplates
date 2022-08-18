@@ -2,8 +2,8 @@
 .Rhistory
 .RData
 .Ruserdata
-metadata/
+#metadata/
 epi/
-extra_metadata/*
+#extra_metadata/*
 *.pdf
 cp2admin.R
