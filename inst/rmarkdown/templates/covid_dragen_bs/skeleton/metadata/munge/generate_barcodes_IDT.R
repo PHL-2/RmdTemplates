@@ -22,8 +22,8 @@ instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
 read_length <- "76"
 
 #file location of the nextera udi indices
-#don't have to change this if the file sits in a the metadata_templates/metadata_references directories in the parent directory of the project
-barcode_fp <- file.path(dirname(here()), "metadata_templates", "metadata_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
+#don't have to change this if the file sits in a the metadata_references directory in the parent directory of the project
+barcode_fp <- file.path(dirname(here()), "metadata_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
 #sequencing date will get grabbed from the R project name
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
