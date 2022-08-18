@@ -525,6 +525,7 @@ s_toPlot %>%
 
 ```{r variant assignments, fig.height=9, fig.width=7}
 s_toPlot %>%
+  filter(pango_QC_status != "fail") %>%
   select(sample_id, lineage, sample_type) %>%
   group_by(sample_type) %>%
   mutate(fraction = 1/n()) %>%
@@ -563,6 +564,7 @@ s_toPlot %>%
 ```{r multiple variant assignments, fig.height=9, fig.width=8}
 
 s_toPlot %>%
+  filter(pango_QC_status != "fail") %>%
   select(sample_id, Conflict, Note, sample_type, nc_QC_status, coverage_num) %>%
   #remove "Usher placements" text in the front of Note
   mutate(Note = gsub("^.*: ", "", Note)) %>%
@@ -674,6 +676,7 @@ epi_report <- s_toPlot %>%
   filter(nc_QC_status != "bad") %>%
   #filter out mediocre results with lower coverages
   filter(!(nc_QC_status == "mediocre" & coverage_num < 80)) %>%
+  filter(pango_QC_status != "fail") %>%
   select(sample_name, sample_collected_by, sequencing_date, lineage, scorpio) %>%
   arrange(sample_collected_by, sample_name) %>%
   rename(accession_number = "sample_name", who_label = "scorpio")
@@ -689,6 +692,7 @@ gisaid <- s_toPlot %>%
   filter(nc_QC_status != "bad") %>%
   #filter out mediocre results with lower coverages
   filter(!(nc_QC_status == "mediocre" & coverage_num < 80)) %>%
+  filter(pango_QC_status != "fail") %>%
   mutate(`Virus name` = paste0("hCoV-2/USA/", sample_id, "/", str_sub(sequencing_run_date, 1, 4))) %>%
   mutate(Type = "betacoronavirus", `Passage details/history` = "Original", Location = "North America/USA/Pennsylvania",
          `Patient age` = "Unknown", `Patient status` = "Unknown", `Sequencing technology` = paste0("Illumina ", instrument_type),
@@ -711,6 +715,7 @@ bio_sample <- s_toPlot %>%
   filter(nc_QC_status != "bad") %>%
   #filter out mediocre results with lower coverages
   filter(!(nc_QC_status == "mediocre" & coverage_num < 80)) %>%
+  filter(pango_QC_status != "fail") %>%
   select(-c(sample_name)) %>%
   mutate(isolate = paste0("SARS-CoV-2/USA/", sample_id, "/", str_sub(sequencing_run_date, 1, 4))) %>%
   mutate(GISAID_virus_name = paste0("hCoV-2/USA/", sample_id, "/", str_sub(sequencing_run_date, 1, 4))) %>%
@@ -733,6 +738,7 @@ sra <- s_toPlot %>%
   filter(nc_QC_status != "bad") %>%
   #filter out mediocre results with lower coverages
   filter(!(nc_QC_status == "mediocre" & coverage_num < 80)) %>%
+  filter(pango_QC_status != "fail") %>%
   mutate(Title = paste0("Sequencing of ", tolower(organism), " from ", tolower(sample_type))) %>%
   mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC V4 primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
   mutate(Filename = paste0(sample_id, "_S", SampleNumber, "_L00", lane, "_R1_001.fastq.gz")) %>%
@@ -757,6 +763,7 @@ n_samples_report <- s %>%
   filter(!is.na(nc_QC_status)) %>%
   filter(nc_QC_status != "bad") %>%
   filter(!(nc_QC_status == "mediocre" & coverage_num < 80)) %>%
+  filter(pango_QC_status != "fail") %>%
   nrow()
 
 ```
@@ -776,7 +783,7 @@ s %>%
   arrange(-read_counts) %>%
   mutate(sample_id = cell_spec(sample_id, "latex",
                                color = case_when(((grepl("control|Unassigned reads", sample_type)) | (!(sample_id %in% s_toPlot$sample_id))) ~ "red",
-                                                 ((grepl("bad", nc_QC_status)) | (grepl("mediocre", nc_QC_status) & coverage_num < 80)) ~ "orange",
+                                                 ((grepl("bad", nc_QC_status)) | (grepl("mediocre", nc_QC_status) & coverage_num < 80) | (grepl("fail", pango_QC_status))) ~ "orange",
                                                  TRUE ~ "black"))) %>%
   select(sample_id,
          sample_type,
