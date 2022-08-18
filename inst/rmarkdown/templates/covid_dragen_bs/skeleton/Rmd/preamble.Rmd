@@ -16,7 +16,7 @@ library(patchwork)
 #this file needs to sit in a [aux_files/functions] directory path above this project directory
 tryCatch(
   {
-    source(gsub(basename(here()), "aux_files/functions/R_all_functions_v3.R", here()))
+    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
   },
   error = function(e) {
   stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))

@@ -23,7 +23,7 @@ read_length <- "76"
 
 #file location of the nextera udi indices
 #don't have to change this if the file sits in a the metadata_templates/metadata_references directories in the parent directory of the project
-barcode_fp <- gsub(basename(here()), "metadata_templates/metadata_references/nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv", here())
+barcode_fp <- file.path(dirname(here()), "metadata_templates", "metadata_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
 #sequencing date will get grabbed from the R project name
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
@@ -156,13 +156,13 @@ metadata_sheet <- merge(qubit_sheet, index_sheet, by = cols2merge, all = TRUE, s
 #throw error if missing these columns
 for(x in c(cols2merge, "sample_id",
            "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
-           "sample_type", "sample_collected_by",
+           "sample_type", "sample_collected_by", "PHL_sample_received_date",
            "organism", "host_scientific_name", "host_disease", "isolation_source",
            "index", "index2", "UDI_Index_ID",
            "sequencing_date", "prj_descrip", "instrument_type", "read_length",
            "sample_collection_date", "host_age_bin", "gender", "zip_char", "priority")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
-    stop(simpleError(paste0("Missing column [", x, "]!!! in the metadata sheet!")))
+    stop(simpleError(paste0("Missing column [", x, "] in the metadata sheet template!!!")))
   }
 }
 
