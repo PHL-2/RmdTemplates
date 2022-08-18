@@ -2,7 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
-metadata/
+#metadata/
 epi/
 extra_metadata/*
 *.pdf
