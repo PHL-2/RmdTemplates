@@ -5,5 +5,7 @@
 metadata/
 epi/
 extra_metadata/*
+data/*
+!data/bs_results.tsv
 *.pdf
 cp2admin.R

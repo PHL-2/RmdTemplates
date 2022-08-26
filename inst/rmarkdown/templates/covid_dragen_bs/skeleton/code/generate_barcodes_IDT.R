@@ -23,7 +23,7 @@ read_length <- "76"
 
 #file location of the nextera udi indices
 #don't have to change this if the file sits in a the metadata_references directory in the parent directory of the project
-barcode_fp <- file.path(dirname(here()), "metadata_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
+barcode_fp <- file.path(dirname(here()), "aux_files", "metadata_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
 #sequencing date will get grabbed from the R project name
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
@@ -58,7 +58,7 @@ barcodes <- tryCatch(
       select(idt_plate_coord, UDI_Index_ID, index, index2)
   },
   error = function(e) {
-    stop (simpleError("The nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv file needs to sit in a [metadata_templates/metadata_references] directory path above this project directory"))
+    stop (simpleError("The nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv file needs to sit in an [aux_files/metadata_references] directory path above this project directory"))
   }
 )
 
@@ -66,7 +66,7 @@ barcodes <- tryCatch(
 # Load metadata sheet
 #####################
 
-metadata_input_fp <- here("metadata", "munge", list.files(here("metadata", "munge"), pattern = ".xlsx"))
+metadata_input_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
 
 read_sheet <- function(fp, sheet_name) {
   read_excel(fp, sheet = sheet_name) %>%
@@ -88,7 +88,7 @@ sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
 # Make sure these sheets are not uploaded to GitHub
 ###################################################################################
 
-PHL_fp <- here("metadata", "extra_metadata", list.files(here("metadata", "extra_metadata"), pattern = ".xlsx"))
+PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".xlsx", full.names = TRUE)
 
 PHL_data <- read_excel(PHL_fp, skip = 1) %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER") %>%
@@ -111,7 +111,7 @@ PHL_data <- read_excel(PHL_fp, skip = 1) %>%
 # Make sure these sheets are not uploaded to GitHub
 ###################################################
 
-RLU_fp <- here("metadata", "extra_metadata", list.files(here("metadata", "extra_metadata"), pattern = ".csv"))
+RLU_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".csv", full.names = TRUE)
 
 RLU_data <- read_csv(RLU_fp) %>%
   rename(sample_name = "Sample ID") %>%
@@ -226,10 +226,8 @@ if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
 # Generate project folders
 ##########################
 
-dir.create(here("Data", "demux_reads"), recursive = TRUE)
-dir.create(here("Data", "kmer"), recursive = TRUE)
-dir.create(here("Data", "NextClade"), recursive = TRUE)
-dir.create(here("Data", "Pangolin"), recursive = TRUE)
+dir.create(here("data", "demux_reads"), recursive = TRUE)
+dir.create(here("data", "processed_bs"), recursive = TRUE)
 
 ####################
 # Write sample sheet

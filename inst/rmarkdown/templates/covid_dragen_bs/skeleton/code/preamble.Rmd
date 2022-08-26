@@ -1,0 +1,534 @@
+
+```{r libraries, message=FALSE, warning=FALSE}
+library(here)
+library(tidyverse)
+library(rvest)
+library(pander)
+library(kableExtra)
+library(ggsci)
+library(RColorBrewer)
+library(patchwork)
+
+```
+
+```{r versions and dates manual inputs}
+
+#file path of the parent directory holding the sequencing run folders
+sequencing_folder_fp <- "Z:/MiSeq_runs/COVIDSeq"
+
+#full file path of the git shell executable
+sh_exe_fp <- "C:/Users/vincent.tu/AppData/Local/Programs/Git/bin/sh.exe"
+
+#application to run on basespace
+app2run <- "DRAGEN COVID Lineage"
+
+primer_select <- 2 # set variable as 1 for V3, 2 for V4, or 3 for V4.1
+
+artic_primer_scheme <- c("ncov2019", "articv4", "articv4.1")[primer_select]
+bs_bed_file_used <- c("nCov-2019.bed", "artic_V4_primer_scheme_NC_045512.2.bed", "artic_v4.1_primers_nc045512.2.bed")[primer_select]
+
+# minimum acceptable number of reads
+min_reads <- 500000
+
+# need to download and import basespace data for each sample?
+dl_n_import_data <- TRUE
+
+```
+
+```{r functions and load signature}
+
+#this file needs to sit in a [aux_files/functions] directory path above this project directory
+tryCatch(
+  {
+    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+  },
+  error = function(e) {
+  stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+  }
+)
+
+#this file needs to sit in a [aux_files/signature] directory path above this project directory
+tryCatch(
+  {
+    signature_fp <- list.files(file.path(dirname(here()), "aux_files", "signature"), pattern = ".png|.jpeg|.tif*|.gif", full.names = TRUE)
+    tag <- signature_fp[!grepl("blank.png", signature_fp)]
+    blank <- signature_fp[grepl("blank.png", signature_fp)]
+  },
+  error = function(e) {
+  stop (simpleError("The signature image file needs to sit in a [aux_files/signature] directory path above this project directory"))
+  }
+)
+
+```
+
+```{r find newest run folder}
+
+#get the newly added run folder
+run_folder <- sequencing_folder_fp %>%
+  list.files(full.names = T) %>%
+  file.info() %>%
+  filter(mtime == max(mtime)) %>%
+  rownames()
+
+folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
+  as.Date(format = "%Y%m%d")
+
+if(folder_date != gsub("_.*", "", basename(here()))) {
+ stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+}
+
+project_name <- basename(here())
+
+```
+
+```{r upload data to basespace and run the app, eval = dl_n_import_data}
+
+list_of_indexes <- list.files(run_folder, pattern = "*I[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)
+
+#if there are index files in the run folder, move them somewhere else
+if(length(list_of_indexes) > 0) {
+  
+  #make index folder by replace the slashes
+  dir.create(file.path(dirname(dirname(list_of_indexes[1])), "indices"), recursive = TRUE)
+  
+  for(index in list_of_indexes) {
+    file.rename(index, file.path(dirname(dirname(list_of_indexes[1])), "indices", basename(index)))
+  }
+
+}
+
+bs_upload_shell_fp <- file.path(dirname(here()), "aux_files", "shell_scripts", "bs_cli_commands.sh")
+
+fastq_folder <- dirname(list.files(run_folder, pattern = "R[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)[1])
+
+
+
+tryCatch(
+  {
+    #have to put the character vectors in quotes for them to run on shell
+    (shell_std_out <- system2(sh_exe_fp,                                             #the git shell executable on windows
+                              args = c(                                              #some arguments need to be in quotes to be passed to shell
+                                shQuote(bs_upload_shell_fp, type = "cmd"),           #the shell script to run
+                                project_name,                                        #argument $1
+                                fastq_folder,                                        #argument $2
+                                shQuote(app2run, type = "sh"),                       #argument $3
+                                artic_primer_scheme,                                 #argument $4
+                                shQuote(here("data", "processed_bs"), type = "cmd")  #argument $5
+                             ), stdout = TRUE))
+  },
+  error = function(e) {
+    print("If there's an error that pops up saying you need to accept the license, actually run the newest version of the DRAGEN COVID Lineage App once to accept license (you can abort it and return to using the shell script)")
+  }
+)
+
+# YYYY-MM-DD
+app_run_date <- as.character(as.Date(shell_std_out[length(shell_std_out)]))
+
+# N.N.N
+dragen_app_version <- shell_std_out[length(shell_std_out)-1]
+
+cp_list <- c(list.files(here(run_folder, "Alignment_1"), pattern = "CompletedJobInfo.xml", recursive = TRUE, full.names = TRUE),
+             list.files(here(run_folder, "Alignment_1"), pattern = "AdapterTrimming.txt", recursive = TRUE, full.names = TRUE),
+             list.files(here(run_folder, "Alignment_1"), pattern = "DemultiplexSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
+             list.files(here(run_folder, "Alignment_1"), pattern = "FastqSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
+             list.files(here(run_folder, "Alignment_1"), pattern = "SampleSheetUsed.csv", recursive = TRUE, full.names = TRUE))
+
+sapply(cp_list, file.copy, here("data", "demux_reads"))
+
+```
+
+```{r file paths for metadata and reads}
+
+### mapping file path
+#try to get it automagically
+mapping_file_fp <- list.files(here("metadata"), pattern = ".tsv|.csv", full.names = TRUE)
+
+### demultiplexing results from BaseSpace
+gen_fq_fp <- here("data", "demux_reads", "CompletedJobInfo.xml")
+adaptertrimming_fp <- here("data", "demux_reads", "AdapterTrimming.txt")
+demuxsum_fp <- here("data", "demux_reads", "DemultiplexSummaryF1L1.txt")
+fastqsum_fp <- here("data", "demux_reads", "FastqSummaryF1L1.txt")
+SampleSheet_fp <- here("data", "demux_reads", "SampleSheetUsed.csv")
+
+```
+
+```{r load bcl2fq, eval = FALSE}
+
+bcl2fq_version <- read_delim(b2fq_v_fp, skip = 1, col_names = FALSE) %>%
+  slice(1) %>%
+  select(X2) %>%
+  pull()
+
+#just reading in command file as one column
+bcl2fq_flags <- read_delim(b2fq_c_fp, col_names = FALSE, col_types = cols(.default = "c"), delim = ";") %>%
+  slice(1) %>%
+  mutate(X1 = gsub("^.*bcl2fastq", "bcl2fastq", X1)) %>%
+  mutate(X1 = gsub(" --", "\n\t--", X1)) %>%
+  mutate(X1 = gsub(" -", "\n\t-", X1)) %>%
+  pull()
+
+```
+
+```{r load GenerateFASTQ module}
+
+JobCompletedInfo <- xml2::read_xml(gen_fq_fp)
+
+workflow_name <- JobCompletedInfo %>%
+  html_elements("Analysis") %>%
+  html_text2()
+
+gen_fq_version <- JobCompletedInfo %>%
+  html_elements("WorkflowVersion") %>%
+  html_text2()
+
+```
+
+```{r load read numbers}
+
+trimmin <- read_delim(adaptertrimming_fp) %>%
+  filter(!is.na(TrimmedBases))
+
+# read counts by sample number
+fastq_sum <- read_delim(fastqsum_fp) %>%
+  group_by(SampleNumber) %>%
+  #PF means reads that have passed filter
+  summarise(total_raw_reads = sum(NumberOfReadsRaw),
+            read_counts = sum(NumberOfReadsPF)) %>%
+  ungroup()
+
+# SampleSheet.csv loading
+
+sample_sheet <- load_sample_sheet(SampleSheet_fp)
+
+samp_sh_header <- data.frame(X1 = unlist(sample_sheet$Header)) %>%
+  mutate(col_names = gsub(",.*", "", X1)) %>%
+  mutate(col_names = gsub(" ", "_", col_names)) %>%
+  mutate(X1 = gsub(".*,", "", X1)) %>%
+  pivot_wider(names_from = "col_names", values_from = "X1")
+
+samp_sh_check <- samp_sh_s <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE) %>%
+  #split each line into columns using row 1 as the column names
+  separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
+  slice(-1) %>%
+  rename(sample_id = "Sample_ID") %>%
+  mutate(I7_ID = I7_Index_ID == UDI_Index_ID) %>%
+  mutate(I5_ID = I5_Index_ID == UDI_Index_ID) %>%
+  select(UDI_Index_ID, I7_ID, I5_ID)
+
+#if any of the barcode ID's dont match, raise an error
+if(!all(c(samp_sh_check$I7_ID, samp_sh_check$I7_ID))) {
+  stop(simpleError("One of the barcode ID's don't match! Check samp_sh_check dataframe"))
+}
+
+samp_sh_s <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE) %>%
+  #split each line into columns using row 1 as the column names
+  separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
+  slice(-1) %>%
+  #this is for bcl2fastq
+  #rename(SampleName = "Sample_Name", SampleNumber = "BASESPACE_ONLY_ORIGINAL_SAMPLE_NUMBER") %>%
+  #mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
+  #select(SampleName, I7_Index_ID, I5_Index_ID, Barcode_sequence, Sample_Type, UDI_Index_ID)
+  rename(sample_id = "Sample_ID") %>%
+  mutate(I7_Index_ID = index, I5_Index_ID = index2) %>%
+  mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
+  select(sample_id, I7_Index_ID, I5_Index_ID, Barcode_sequence, UDI_Index_ID) %>%
+  mutate(sample_id = gsub("_", "-", sample_id))
+
+#merge sample names with read counts
+samp_reads <- read_delim(demuxsum_fp, col_names = FALSE) %>%
+  filter(grepl("Sample", X1)) %>%
+  t() %>%
+  as.data.frame(stringsAsFactors = FALSE) %>%
+  purrr::set_names(as.character(slice(., 1))) %>%
+  slice(-1) %>%
+  filter(!is.na(SampleNumber)) %>%
+  merge(fastq_sum, by = "SampleNumber", all = TRUE) %>%
+  rename(sample_id = "SampleName") %>%
+  mutate(sample_id = gsub("_", "-", sample_id)) %>%
+  mutate(sample_id = ifelse(sample_id == "None", "Undetermined", sample_id)) %>%
+  merge(samp_sh_s, by = "sample_id", all = TRUE) %>%
+  mutate(percent_reads_passed_filter = read_counts/total_raw_reads) %>%
+  mutate(percent_of_lane = read_counts/sum(read_counts))
+
+
+top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
+  filter(is.na(X6)) %>%
+  filter(!is.na(X4)) %>%
+  rename(index_sequence1 = "X1", index_sequence2 = "X3", number_of_reads = "X5") %>%
+  filter(!grepl("###", index_sequence1)) %>%
+  select(index_sequence1, index_sequence2, number_of_reads) %>%
+  mutate(index_sequence = paste0(index_sequence1, "+", index_sequence2)) %>%
+  select(-c(index_sequence1, index_sequence2)) %>%
+  mutate(number_of_reads = as.numeric(number_of_reads)) %>%
+  order_on_other_col(index_sequence, number_of_reads) %>%
+  slice(1:10) %>%
+  droplevels()
+
+```
+
+```{r load coverage and program versions, eval = dl_n_import_data}
+
+cov_files_fps <- list.files(here("data", "processed_bs"), pattern = "_report_metrics.json", recursive = TRUE, full.names = TRUE)
+
+#reading in json like a csv and then handling it in a hacky way
+coverage <- cov_files_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_csv(.$FileName, col_names = FALSE)) %>%
+  ungroup() %>%
+  select(-c(FileName)) %>%
+  mutate(X5 = ifelse(is.na(X5), X4, X5)) %>%
+  mutate(X4 = ifelse(grepl("^callability_threshold: ", X4), X3, X4)) %>%
+  mutate(X3 = ifelse(grepl("^result: ", X3), NA, X3)) %>%
+  mutate(X9 = gsub("NC_045512.2: ", "", X9)) %>%
+  mutate_all(~gsub('\\{|\\}|\\"', '', .)) %>%
+  #rename columns with text by picking a row without any NA's and gsubbing the colon and everything after
+  `names<-`(replace(names(.),
+                    1:ncol(.),
+                    (filter(., if_all(everything(), ~ !is.na(.x))) %>% slice(1) %>% gsub(":.*", "", .)))) %>%
+  mutate_all(~gsub('.*: ', '', .)) %>%
+  rename(pct_genome_coverage_over_30x = "pct_of_genome_with_coverage_30x_inf", sample_id = "sample", pango_pusher_data_version = "pangolin_version") %>%
+  mutate(pct_genome_coverage_over_30x = as.numeric(pct_genome_coverage_over_30x)/100) %>%
+  mutate(median_coverage = gsub(".0$", "X", median_coverage))
+
+```
+
+```{r load kmer results, eval = dl_n_import_data}
+
+kmer_files_fps <- list.files(here("data", "processed_bs"), pattern = ".detect.report.csv", recursive = TRUE, full.names = TRUE)
+
+kmer <- kmer_files_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName, col_names = FALSE)) %>%
+  ungroup() %>%
+  select(-c(FileName, X1)) %>%
+  pivot_wider(names_from = "X3", values_from = "X4") %>%
+  rename_with(~str_replace(., "SARS-CoV2", "SARS-CoV-2")) %>%
+  rename(sample_id = "X2", `SARS-CoV-2 Total Reference Kmers` = "SARS-CoV-2 Kmers", `SARS-CoV-2 Targets found` = "SARS-CoV-2 Targets") %>%
+  mutate(`SARS-CoV-2` = ifelse(`SARS-CoV-2` == "+", "Positive", "Negative")) %>%
+  mutate(`SARS-CoV-2` = factor(`SARS-CoV-2`, levels = c("Positive", "Negative"))) %>%
+  mutate(across(!sample_id & !`SARS-CoV-2`, as.numeric))
+
+```
+
+```{r load Pangolin results, eval = dl_n_import_data}
+
+pango_files_fps <- list.files(here("data", "processed_bs"), pattern = ".lineage_report.csv", recursive = TRUE, full.names = TRUE)
+
+pango <- pango_files_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName, col_names = TRUE)) %>%
+  ungroup() %>%
+  select(-c(FileName)) %>%
+  rename(pango_qc_status = "qc_status", sample_id = "taxon") %>%
+  mutate(scorpio_lineage = gsub(".* \\(|-like.*|Unassigned.*", "", scorpio_call)) %>%
+  mutate(scorpio_call = gsub(" \\(.*", "", scorpio_call)) %>%
+  mutate(scorpio_call = gsub("Probable ", "", scorpio_call)) %>%
+  mutate(scorpio_call = ifelse(is.na(scorpio_call) & lineage == "B", "Reference", scorpio_call))
+
+```
+
+```{r load NextClade results, eval = dl_n_import_data}
+
+nc_files_fps <- list.files(here("data", "processed_bs"), pattern = ".nextclade.tsv", recursive = TRUE, full.names = TRUE)
+
+next_clade <- nc_files_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName, col_names = TRUE)) %>%
+  ungroup() %>%
+  select(-c(FileName)) %>%
+  rename(nc_qc_status = "qc.overallStatus", sample_id = "seqName") %>%
+  mutate(nc_VOC = gsub(".*\\(|\\).*", "", clade)) %>%
+  mutate(nc_VOC = gsub("^19A$", "Reference", nc_VOC))
+
+```
+
+
+```{r write bs_results, eval = dl_n_import_data}
+
+merge(coverage, kmer, by = "sample_id", all = TRUE) %>%
+  merge(pango, by = "sample_id", all = TRUE) %>%
+  merge(next_clade, by = "sample_id", all = TRUE) %>%
+  mutate(date_pipeline_was_run = app_run_date) %>%
+  mutate(dragen_covid_lineage_version = dragen_app_version) %>%
+  write_delim(here("data", "bs_results.tsv"), delim = "\t")
+
+```
+
+```{r load data}
+
+bs_results <- read_tsv(here("data", "bs_results.tsv"))
+
+pangolin_software_version <- as.character(unique(bs_results[!is.na(bs_results$pangolin_version), "pangolin_version"]))
+
+lineage_assignment_software_version <- paste0(unique(bs_results$version)[!is.na(unique(bs_results$version))], collapse = "/")
+
+scorpio_software_version <- paste0(unique(bs_results$scorpio_version)[!is.na(unique(bs_results$scorpio_version))], collapse = "/")
+
+constellation_version <- gsub("^v", "", paste0(unique(bs_results$constellation_version)[!is.na(unique(bs_results$constellation_version))], collapse = "/"))
+
+nextclade_version <- as.character(gsub(".* ", "", unique(bs_results[!is.na(bs_results$nextclade_version), "nextclade_version"])))
+
+date_pipeline_was_run <- unique(bs_results$date_pipeline_was_run)
+
+dragen_covid_lineage_version <- unique(bs_results$dragen_covid_lineage_version)
+
+```
+
+```{r sample_sheet_import and columns, echo=FALSE}
+
+ctrl_regex <- "EBneg|Extract|Vibriolambda|Blank|MockDNA|DNAfreewater|Geneblock|Emptywell|Control|POS|NEG|PC|NC"
+
+sample_type_fct <- c("Unassigned reads", "Empty well control", "Mock DNA positive control")
+
+s_meta <- read_delim(mapping_file_fp, delim = ",")
+
+s <- s_meta %>%
+  merge(samp_reads, by = c("sample_id", "UDI_Index_ID"), all = TRUE) %>%
+  merge(bs_results, by = "sample_id", all = TRUE) %>%
+  mutate(read_counts = ifelse(is.na(read_counts), 0, read_counts), total_raw_reads = ifelse(is.na(total_raw_reads), 0, total_raw_reads)) %>%
+  mutate(isControl = grepl(ctrl_regex, sample_id, ignore.case = TRUE)|grepl(ctrl_regex, sample_type, ignore.case = TRUE)) %>%
+  #make a new sample type based on if there were pangolin and nextclade results. DRAGEN App uses the <90 on the COVID targets as their threshold
+  #Based on their manual, targets seem to be "amplicons" or regions of longer stretches of DNA that are unique to COVID (longer than their 32 k-mers that they use for k-mer detection)
+  mutate(sample_type = case_when(grepl("^Undetermined$", sample_id) ~ sample_type_fct[1],
+                                 ((`SARS-CoV-2 Targets found` < 90) & !isControl) ~ paste0(sample_type, " - No Variant Calls"),
+                                 TRUE ~ sample_type)) %>%
+  #rearrange the sampletypes by ctrls first
+  mutate(sample_type = factor(sample_type, levels = c(sample_type_fct,
+                                                      sort(unique(sample_type)[!grepl(paste0(sample_type_fct, collapse = "|"), unique(sample_type))])))) %>%
+  droplevels()
+
+color_by <- NULL
+shape_by <- NULL
+quality_by <- "sample_type"
+potential_headers <- c("study_group", "study_day", "subject_id",
+                       "current_antibiotics", "host_species", "cage_number") #pick 2
+header_idx <- which(is.element(potential_headers, colnames(s)))
+
+if(length(header_idx)>0){
+  color_by <- potential_headers[header_idx[1]]
+}
+if(length(header_idx)>1){
+  shape_by <- potential_headers[header_idx[2]]
+}
+
+show.text <- nrow(s) > 40
+```
+
+```{r for basic report}
+
+has_CT <- any(grepl("^CT$", colnames(s)))
+
+has_RLU <- any(grepl("^RLU$", colnames(s)))
+
+### ====================================
+### Select specific groups to plot for QC
+### ====================================
+s_toPlot <- s %>%
+  filter(!grepl("None|Undetermined", sample_id)) %>%
+  filter(!grepl(" - No Variant Calls$", sample_type)) %>%
+  #filter out samples without any results
+  filter(pango_qc_status != "fail") %>%
+  mutate(sample_id = as.character(sample_id)) %>%
+  droplevels()
+
+```
+
+```{r sample type attributes}
+
+lvls <- c(levels(s$sample_type), NA)
+
+ann_geom_values <- list()
+
+#leave Unassigned reads as purple
+ann_geom_values[["sample_type_colors"]] <- setNames(pal_d3("category20")(20)[c(5, (1:length(lvls))[-5])], lvls)
+
+#make the controls and unassigned reads into triangle and diamond shapes
+ann_geom_values[["sample_type_shapes"]] <- setNames(c(23:25,
+                                                      21:22,
+                                                      c(26:30)[1:(length(lvls)-5)]), lvls)
+
+#make the controls and unassigned reads samples bigger in size
+ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 4, 4, rep(1, length(lvls)-3)), lvls)
+
+#scales::show_col(ann_geom_values[["sample_type_colors"]])
+
+```
+
+```{r variant colors}
+
+i <- 1
+ann_geom_values[["variants"]] <- c()
+ann_geom_values[["who_label"]] <- c()
+
+for(variant in sort(unique(s$scorpio_call)[!is.na(unique(s$scorpio_call))])) {
+  
+  #only coloring first two variants
+  variant_list <- s %>%
+    filter(scorpio_call == variant) %>%
+    #is_designated means that the sample was assigned to a reference strain exactly using PANGO algorithm (decision tree) rather than PUSHER
+    #the note section here for PUSHER will be 'Assigned from designation hash.' so its useless
+    #nextclade VOC shouldn't be too different from scorpio VOC
+    select(note, Nextclade_pango) %>%
+    mutate(note = gsub("^.*: |; scorpio.*", "", note)) %>%
+    separate(note, into = c("pusher_variant1", "pusher_variant2"), sep = " ", extra = "merge") %>%
+    pivot_longer(cols = c("pusher_variant1", "pusher_variant2", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
+    mutate(variants = gsub("\\(.*", "", variants)) %>%
+    select(variants) %>%
+    filter(!is.na(variants)) %>%
+    unique() %>%
+    pull() %>%
+    str_sort(numeric = TRUE, decreasing = TRUE)
+  
+  variant_color <- brewer.pal(8, "Dark2")[i]
+  
+  variant_gradient <- colorRampPalette(c(variant_color, adjustcolor(variant_color, alpha.f = 0.1)), alpha = TRUE)(length(variant_list))
+  names(variant_gradient) <- variant_list
+  
+  who_color <- variant_color
+  names(who_color) <- variant
+  
+  ann_geom_values[["variants"]] <- c(ann_geom_values[["variants"]], variant_gradient)
+  ann_geom_values[["who_label"]] <- c(ann_geom_values[["who_label"]], who_color)
+  
+  i <- i + 1
+  
+}
+
+ann_geom_values[["variants"]] <- c("#80808080", ann_geom_values[["variants"]])
+names(ann_geom_values[["variants"]]) <- c(NA, names(ann_geom_values[["variants"]])[-1])
+
+#scales::show_col(ann_geom_values[["variants"]])
+
+who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_geom_values[["who_label"]])) %>%
+  ggplot(aes(x = x, y = y, fill = fill_col)) +
+    geom_bar(stat="identity", position = position_fill(reverse = TRUE), alpha = 0) +
+    scale_fill_manual(values = ann_geom_values$who_label) +
+    guides(fill = guide_legend(override.aes = list(alpha=1), reverse=T, order = 1)) + 
+    theme_bw() +
+    theme(
+      strip.text = element_text(size = 12),
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      legend.position = c(0.5, 0.5), # move the legend to the center
+      plot.margin=unit(c(0, 0, 0, 0), "cm")
+    ) +
+    labs(fill = "WHO label", y = "", x = "")
+
+```
+
+```{r empty plate to plot}
+empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_col = rep(1:12, 8), plate = 1) %>%
+  mutate(plate_coord = paste0(plate, "_", plate_row, plate_col))
+
+```
+
+```{r}
+```

@@ -1,6 +1,6 @@
-## ===========================================
+## ======================================================================
 ##   Order the factors of one column based on the other of another column
-## ===========================================
+## ======================================================================
 
 ##this function is the same as:
 ##mutate(col2order = factor(col2order, levels = unique(col2order[order(sortingcol, decreasing = TRUE)])))
@@ -17,9 +17,9 @@ order_on_other_col <- function(df, col2order, sortingcol, decreasing = TRUE) {
 
 }
 
-## ===========================================
+## ========================================================
 ##   Read in SampleSheet.csv file with loop. Returns a list
-## ===========================================
+## ========================================================
 
 load_sample_sheet <- function(fp) {
 
@@ -45,20 +45,24 @@ start_w_newline <- function(string) {
 ##   Function for turning tables into kables
 ## =========================================
 
-kable_style <- function(data) {
+kable_style <- function(data, font_sizing = 10) {
 
   row_num <- nrow(data)
 
   ##substitute underscore with escaped underscores and remove na in p.value columns
   data_return <- data %>%
+    #replace underscores with escaped underscores in column names
     select_all(~gsub("_", "\\\\_", .)) %>% ##need to escape the escape
-    mutate_if(function(x) is.character(x) | is.factor(x), ~gsub("_", " ", .))
+    #change underscores to escaped underscores
+    mutate_if(function(x) is.character(x) | is.factor(x), ~gsub("_", "\\\\_", .)) %>%
+    #escape percent signs
+    mutate_if(function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .))
 
   # ... should be column number
   if (row_num > 40) {
     data_return <- data_return %>%
       kable("latex", longtable = T, digits=2, booktabs=T, escape=F) %>%
-      kable_styling(latex_options = c("repeat_header", "HOLD_position"), font_size = 7) %>%
+      kable_styling(latex_options = c("repeat_header", "HOLD_position"), font_size = font_sizing) %>%
       row_spec(0, bold = T, color="#7C0A02")
 
   }
@@ -75,5 +79,33 @@ kable_style <- function(data) {
   }
 
   return(data_return)
+
+}
+
+## ==============================
+##   Filter samples for reporting
+## ==============================
+
+filter4report <- function(data) {
+
+  data %>%
+
+    #filter out unassigned reads sample
+    filter(!grepl("None|Undetermined", sample_id)) %>%
+
+    #filter out samples with any pangolin data; this should be the same as filtering out is.na(lineage)
+    filter(!grepl(" - No Variant Calls$", sample_type)) %>%
+
+    #filter out controls
+    filter(!isControl) %>%
+
+    #filter out bad results
+    filter(nc_qc_status != "bad") %>%
+
+    #filter out mediocre results with lower coverages
+    filter(!(nc_qc_status == "mediocre" & pct_genome_coverage_over_30x < .8)) %>%
+
+    #filter out samples that didn't have a pangolin report
+    filter(pango_qc_status != "fail")
 
 }
