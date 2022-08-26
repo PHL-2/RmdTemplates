@@ -222,13 +222,6 @@ if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
   stop(simpleError("There are spaces, underscores, or periods in the Sample IDs! Please fix"))
 }
 
-##########################
-# Generate project folders
-##########################
-
-dir.create(here("data", "demux_reads"), recursive = TRUE)
-dir.create(here("data", "processed_bs"), recursive = TRUE)
-
 ####################
 # Write sample sheet
 ####################

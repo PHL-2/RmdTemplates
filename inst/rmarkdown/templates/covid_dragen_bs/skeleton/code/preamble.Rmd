@@ -83,6 +83,11 @@ project_name <- basename(here())
 
 ```{r upload data to basespace and run the app, eval = dl_n_import_data}
 
+# Generate the data folders
+
+dir.create(here("data", "demux_reads"), recursive = TRUE)
+dir.create(here("data", "processed_bs"), recursive = TRUE)
+
 list_of_indexes <- list.files(run_folder, pattern = "*I[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)
 
 #if there are index files in the run folder, move them somewhere else
@@ -100,8 +105,6 @@ if(length(list_of_indexes) > 0) {
 bs_upload_shell_fp <- file.path(dirname(here()), "aux_files", "shell_scripts", "bs_cli_commands.sh")
 
 fastq_folder <- dirname(list.files(run_folder, pattern = "R[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)[1])
-
-
 
 tryCatch(
   {
