@@ -63,11 +63,14 @@ tryCatch(
 
 ```{r find newest run folder}
 
+project_name <- basename(here())
+sequencing_date <- as.Date(gsub("_.*", "", project_name))
+
 #get the newly added run folder
 run_folder <- sequencing_folder_fp %>%
   list.files(full.names = T) %>%
   file.info() %>%
-  filter(mtime == max(mtime)) %>%
+  filter(grepl(format(sequencing_date, "%y%m%d"), rownames(.))) %>%
   rownames()
 
 folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
@@ -77,12 +80,9 @@ if(folder_date != gsub("_.*", "", basename(here()))) {
  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
 }
 
-project_name <- basename(here())
-
 ```
 
 ```{r upload data to basespace and run the app, eval = dl_n_import_data}
-
 # Generate the data folders
 
 dir.create(here("data", "demux_reads"), recursive = TRUE)
@@ -106,23 +106,20 @@ bs_upload_shell_fp <- file.path(dirname(here()), "aux_files", "shell_scripts", "
 
 fastq_folder <- dirname(list.files(run_folder, pattern = "R[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)[1])
 
-tryCatch(
-  {
-    #have to put the character vectors in quotes for them to run on shell
-    (shell_std_out <- system2(sh_exe_fp,                                             #the git shell executable on windows
-                              args = c(                                              #some arguments need to be in quotes to be passed to shell
-                                shQuote(bs_upload_shell_fp, type = "cmd"),           #the shell script to run
-                                project_name,                                        #argument $1
-                                fastq_folder,                                        #argument $2
-                                shQuote(app2run, type = "sh"),                       #argument $3
-                                artic_primer_scheme,                                 #argument $4
-                                shQuote(here("data", "processed_bs"), type = "cmd")  #argument $5
-                             ), stdout = TRUE))
-  },
-  error = function(e) {
-    print("If there's an error that pops up saying you need to accept the license, actually run the newest version of the DRAGEN COVID Lineage App once to accept license (you can abort it and return to using the shell script)")
-  }
-)
+#have to put the character vectors in quotes for them to run on shell
+shell_std_out <- system2(sh_exe_fp,                                             #the git shell executable on windows
+                          args = c(                                              #some arguments need to be in quotes to be passed to shell
+                            shQuote(bs_upload_shell_fp, type = "cmd"),           #the shell script to run
+                            project_name,                                        #argument $1
+                            fastq_folder,                                        #argument $2
+                            shQuote(app2run, type = "sh"),                       #argument $3
+                            artic_primer_scheme,                                 #argument $4
+                            shQuote(here("data", "processed_bs"), type = "cmd")  #argument $5
+                         ), stdout = TRUE)
+
+shell_std_out
+#If there's an error that pops up saying you need to accept the license, actually run the newest version of the DRAGEN COVID Lineage App once to accept license (you can abort it and return to using the shell script)
+
 
 # YYYY-MM-DD
 app_run_date <- as.character(as.Date(shell_std_out[length(shell_std_out)]))
@@ -130,12 +127,14 @@ app_run_date <- as.character(as.Date(shell_std_out[length(shell_std_out)]))
 # N.N.N
 dragen_app_version <- shell_std_out[length(shell_std_out)-1]
 
+#copy from
 cp_list <- c(list.files(here(run_folder, "Alignment_1"), pattern = "CompletedJobInfo.xml", recursive = TRUE, full.names = TRUE),
              list.files(here(run_folder, "Alignment_1"), pattern = "AdapterTrimming.txt", recursive = TRUE, full.names = TRUE),
              list.files(here(run_folder, "Alignment_1"), pattern = "DemultiplexSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
              list.files(here(run_folder, "Alignment_1"), pattern = "FastqSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
              list.files(here(run_folder, "Alignment_1"), pattern = "SampleSheetUsed.csv", recursive = TRUE, full.names = TRUE))
 
+#copy to
 sapply(cp_list, file.copy, here("data", "demux_reads"))
 
 ```
@@ -269,30 +268,53 @@ top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
 
 ```
 
-```{r load coverage and program versions, eval = dl_n_import_data}
+```{r get nextclade version by downloading Undetermined file, eval = dl_n_import_data}
 
-cov_files_fps <- list.files(here("data", "processed_bs"), pattern = "_report_metrics.json", recursive = TRUE, full.names = TRUE)
+nextclade_version_fp <- list.files(here("data", "processed_bs"), pattern = "Undetermined_report_metrics.json", recursive = TRUE, full.names = TRUE)
 
 #reading in json like a csv and then handling it in a hacky way
+nc_v <- nextclade_version_fp %>%
+  read_csv(col_names = FALSE) %>%
+  select_if(~ any(grepl("nextclade_version", .))) %>%
+  mutate_all(~gsub(".*nextclade ", "", .)) %>%
+  pull()
+
+```
+
+```{r unzip fastq files and bed files, eval = dl_n_import_data}
+
+#find all zipped files
+zip_fps <- list.files(here("data", "processed_bs"), pattern = ".zip", recursive = TRUE, full.names = TRUE)
+
+#extract scrubbed fastq files
+scrubbed_zip_files <- zip_fps[grepl("ScrubbedFASTQsNode", zip_fps)]
+sapply(scrubbed_zip_files, function(x) unzip(x, exdir = dirname(x)))
+
+#extract just the bed files
+bed_zip_files <- zip_fps[grepl("_all_output_files", zip_fps)]
+sapply(bed_zip_files, function(x) unzip(x, exdir = dirname(x), files = paste0("consensus/", gsub(".*/|_.*", "", x), ".consensus_coverage_from_filtered_bam.bed")))
+
+
+```
+
+```{r load coverage results, eval = dl_n_import_data}
+
+#this bed file can only be found in the zipped output files
+cov_files_fps <- list.files(here("data", "processed_bs"), pattern = "consensus_coverage_from_filtered_bam.bed", recursive = TRUE, full.names = TRUE)
+
 coverage <- cov_files_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
-  do(read_csv(.$FileName, col_names = FALSE)) %>%
+  do(read_delim(.$FileName, col_names = FALSE)) %>%
   ungroup() %>%
-  select(-c(FileName)) %>%
-  mutate(X5 = ifelse(is.na(X5), X4, X5)) %>%
-  mutate(X4 = ifelse(grepl("^callability_threshold: ", X4), X3, X4)) %>%
-  mutate(X3 = ifelse(grepl("^result: ", X3), NA, X3)) %>%
-  mutate(X9 = gsub("NC_045512.2: ", "", X9)) %>%
-  mutate_all(~gsub('\\{|\\}|\\"', '', .)) %>%
-  #rename columns with text by picking a row without any NA's and gsubbing the colon and everything after
-  `names<-`(replace(names(.),
-                    1:ncol(.),
-                    (filter(., if_all(everything(), ~ !is.na(.x))) %>% slice(1) %>% gsub(":.*", "", .)))) %>%
-  mutate_all(~gsub('.*: ', '', .)) %>%
-  rename(pct_genome_coverage_over_30x = "pct_of_genome_with_coverage_30x_inf", sample_id = "sample", pango_pusher_data_version = "pangolin_version") %>%
-  mutate(pct_genome_coverage_over_30x = as.numeric(pct_genome_coverage_over_30x)/100) %>%
-  mutate(median_coverage = gsub(".0$", "X", median_coverage))
+  mutate(sample_id = gsub(".*/", "", FileName)) %>%
+  mutate(sample_id = gsub("\\.consensus.*", "", sample_id)) %>%
+  select(sample_id, X1, X4) %>%
+  filter(X1 == "NC_045512.2") %>%
+  group_by(sample_id) %>%
+  summarise(pct_genome_coverage_over_30x = sum(X4 >= 30)/n(),
+            median_coverage = median(X4)) %>%
+  ungroup()
 
 ```
 
@@ -340,7 +362,7 @@ nc_files_fps <- list.files(here("data", "processed_bs"), pattern = ".nextclade.t
 next_clade <- nc_files_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
-  do(read_delim(.$FileName, col_names = TRUE)) %>%
+  do(read_delim(.$FileName, col_names = TRUE, col_types = cols(missing = col_character()))) %>%
   ungroup() %>%
   select(-c(FileName)) %>%
   rename(nc_qc_status = "qc.overallStatus", sample_id = "seqName") %>%
@@ -373,7 +395,7 @@ scorpio_software_version <- paste0(unique(bs_results$scorpio_version)[!is.na(uni
 
 constellation_version <- gsub("^v", "", paste0(unique(bs_results$constellation_version)[!is.na(unique(bs_results$constellation_version))], collapse = "/"))
 
-nextclade_version <- as.character(gsub(".* ", "", unique(bs_results[!is.na(bs_results$nextclade_version), "nextclade_version"])))
+nextclade_version <- nc_v
 
 date_pipeline_was_run <- unique(bs_results$date_pipeline_was_run)
 
@@ -530,6 +552,25 @@ who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_geom_values[["who_la
 ```{r empty plate to plot}
 empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_col = rep(1:12, 8), plate = 1) %>%
   mutate(plate_coord = paste0(plate, "_", plate_row, plate_col))
+
+```
+
+```{r save fastq for upload, eval = dl_n_import_data}
+
+#get only the good quality samples to upload
+s_upload <- s_toPlot %>%
+  filter4report() %>%
+  select(sample_id) %>%
+  pull()
+
+#find all scrubbed fastq files
+dir.create(here("upload", "fastq"), recursive = TRUE)
+
+fastq_fps <- list.files(here("data", "processed_bs"), pattern = "scrubbed.*_001.fastq.gz", recursive = TRUE, full.names = TRUE)
+
+fastq2upload <- fastq_fps[grepl(paste0(s_upload, collapse = "|"), fastq_fps)]
+sapply(fastq2upload, function(x) file.rename(x, to = paste0(here("upload", "fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", x))))
+
 
 ```
 
