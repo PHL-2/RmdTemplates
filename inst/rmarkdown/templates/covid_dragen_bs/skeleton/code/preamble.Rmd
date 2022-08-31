@@ -14,7 +14,7 @@ library(patchwork)
 ```{r versions and dates manual inputs}
 
 #file path of the parent directory holding the sequencing run folders
-sequencing_folder_fp <- "Z:/MiSeq_runs/COVIDSeq"
+sequencing_folder_fp <- "C:/Users/vincent.tu/OneDrive - City of Philadelphia/RmdTemplates/test"
 
 #full file path of the git shell executable
 sh_exe_fp <- "C:/Users/vincent.tu/AppData/Local/Programs/Git/bin/sh.exe"
@@ -82,7 +82,7 @@ if(folder_date != gsub("_.*", "", basename(here()))) {
 
 ```
 
-```{r upload data to basespace and run the app, eval = dl_n_import_data}
+```{r upload data to basespace and run the app, message=TRUE, eval = dl_n_import_data}
 # Generate the data folders
 
 dir.create(here("data", "demux_reads"), recursive = TRUE)
@@ -109,15 +109,15 @@ fastq_folder <- dirname(list.files(run_folder, pattern = "R[12]_001.fastq.gz", r
 #have to put the character vectors in quotes for them to run on shell
 shell_std_out <- system2(sh_exe_fp,                                             #the git shell executable on windows
                           args = c(                                              #some arguments need to be in quotes to be passed to shell
-                            shQuote(bs_upload_shell_fp, type = "cmd"),           #the shell script to run
+                            shQuote(bs_upload_shell_fp, type = "sh"),           #the shell script to run
                             project_name,                                        #argument $1
-                            fastq_folder,                                        #argument $2
+                            shQuote(fastq_folder, type = "sh"),                  #argument $2
                             shQuote(app2run, type = "sh"),                       #argument $3
                             artic_primer_scheme,                                 #argument $4
                             shQuote(here("data", "processed_bs"), type = "cmd")  #argument $5
                          ), stdout = TRUE)
 
-shell_std_out
+message(shell_std_out)
 #If there's an error that pops up saying you need to accept the license, actually run the newest version of the DRAGEN COVID Lineage App once to accept license (you can abort it and return to using the shell script)
 
 
@@ -129,13 +129,12 @@ dragen_app_version <- shell_std_out[length(shell_std_out)-1]
 
 #copy from
 cp_list <- c(list.files(here(run_folder, "Alignment_1"), pattern = "CompletedJobInfo.xml", recursive = TRUE, full.names = TRUE),
-             list.files(here(run_folder, "Alignment_1"), pattern = "AdapterTrimming.txt", recursive = TRUE, full.names = TRUE),
              list.files(here(run_folder, "Alignment_1"), pattern = "DemultiplexSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
              list.files(here(run_folder, "Alignment_1"), pattern = "FastqSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
              list.files(here(run_folder, "Alignment_1"), pattern = "SampleSheetUsed.csv", recursive = TRUE, full.names = TRUE))
 
 #copy to
-sapply(cp_list, file.copy, here("data", "demux_reads"))
+sapply(cp_list, file.copy, here("data", "demux_reads"), TRUE)
 
 ```
 
@@ -147,7 +146,6 @@ mapping_file_fp <- list.files(here("metadata"), pattern = ".tsv|.csv", full.name
 
 ### demultiplexing results from BaseSpace
 gen_fq_fp <- here("data", "demux_reads", "CompletedJobInfo.xml")
-adaptertrimming_fp <- here("data", "demux_reads", "AdapterTrimming.txt")
 demuxsum_fp <- here("data", "demux_reads", "DemultiplexSummaryF1L1.txt")
 fastqsum_fp <- here("data", "demux_reads", "FastqSummaryF1L1.txt")
 SampleSheet_fp <- here("data", "demux_reads", "SampleSheetUsed.csv")
@@ -186,9 +184,6 @@ gen_fq_version <- JobCompletedInfo %>%
 ```
 
 ```{r load read numbers}
-
-trimmin <- read_delim(adaptertrimming_fp) %>%
-  filter(!is.na(TrimmedBases))
 
 # read counts by sample number
 fastq_sum <- read_delim(fastqsum_fp) %>%
@@ -292,7 +287,9 @@ sapply(scrubbed_zip_files, function(x) unzip(x, exdir = dirname(x)))
 
 #extract just the bed files
 bed_zip_files <- zip_fps[grepl("_all_output_files", zip_fps)]
-sapply(bed_zip_files, function(x) unzip(x, exdir = dirname(x), files = paste0("consensus/", gsub(".*/|_.*", "", x), ".consensus_coverage_from_filtered_bam.bed")))
+sapply(bed_zip_files, function(x) unzip(x, exdir = dirname(x), files = paste0("consensus/", gsub(".*/|_all_output_files.zip$", "", x), ".consensus_coverage_from_filtered_bam.tsv")))
+#sometimes these files are bed and other times they are tsv files...
+sapply(bed_zip_files, function(x) unzip(x, exdir = dirname(x), files = paste0("consensus/", gsub(".*/|_all_output_files.zip$", "", x), ".consensus_coverage_from_filtered_bam.bed")))
 
 
 ```
@@ -300,20 +297,23 @@ sapply(bed_zip_files, function(x) unzip(x, exdir = dirname(x), files = paste0("c
 ```{r load coverage results, eval = dl_n_import_data}
 
 #this bed file can only be found in the zipped output files
-cov_files_fps <- list.files(here("data", "processed_bs"), pattern = "consensus_coverage_from_filtered_bam.bed", recursive = TRUE, full.names = TRUE)
+cov_files_fps <- list.files(here("data", "processed_bs"), pattern = "consensus_coverage_from_filtered_bam", recursive = TRUE, full.names = TRUE)
 
 coverage <- cov_files_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
   do(read_delim(.$FileName, col_names = FALSE)) %>%
   ungroup() %>%
+  filter(X1 == "NC_045512.2") %>%
+  #get column 3 if its a tsv, otherwise get column 4
+  mutate(map_per_position = ifelse(grepl("tsv$", FileName), X3, X4)) %>%
+  select(FileName, map_per_position) %>%
   mutate(sample_id = gsub(".*/", "", FileName)) %>%
   mutate(sample_id = gsub("\\.consensus.*", "", sample_id)) %>%
-  select(sample_id, X1, X4) %>%
-  filter(X1 == "NC_045512.2") %>%
+  select(-c(FileName)) %>%
   group_by(sample_id) %>%
-  summarise(pct_genome_coverage_over_30x = sum(X4 >= 30)/n(),
-            median_coverage = median(X4)) %>%
+  summarise(pct_genome_coverage_over_30x = sum(map_per_position >= 30)/n(),
+            median_coverage = median(map_per_position)) %>%
   ungroup()
 
 ```

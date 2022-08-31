@@ -14,7 +14,7 @@ munging_fp <- here("metadata", "munge")
 # Manual input
 ##############
 
-prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
+prj_description <- "test" #no spaces, should be the same as the R project
 
 instrument_select <- 1 #select 1 for MiSeq or 2 for NextSeq
 instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
