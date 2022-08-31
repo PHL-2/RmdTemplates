@@ -14,7 +14,7 @@ library(patchwork)
 ```{r versions and dates manual inputs}
 
 #file path of the parent directory holding the sequencing run folders
-sequencing_folder_fp <- "C:/Users/vincent.tu/OneDrive - City of Philadelphia/RmdTemplates/test"
+sequencing_folder_fp <- "Z:/MiSeq_runs/COVIDSeq"
 
 #full file path of the git shell executable
 sh_exe_fp <- "C:/Users/vincent.tu/AppData/Local/Programs/Git/bin/sh.exe"
