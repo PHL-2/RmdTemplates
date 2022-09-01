@@ -117,7 +117,7 @@ shell_std_out <- system2(sh_exe_fp,                                             
                             shQuote(here("data", "processed_bs"), type = "cmd")  #argument $5
                          ), stdout = TRUE)
 
-message(shell_std_out)
+print(shell_std_out)
 #If there's an error that pops up saying you need to accept the license, actually run the newest version of the DRAGEN COVID Lineage App once to accept license (you can abort it and return to using the shell script)
 
 
@@ -563,13 +563,17 @@ s_upload <- s_toPlot %>%
   select(sample_id) %>%
   pull()
 
-#find all scrubbed fastq files
-dir.create(here("upload", "fastq"), recursive = TRUE)
+if(length(s_upload) > 0) {
 
-fastq_fps <- list.files(here("data", "processed_bs"), pattern = "scrubbed.*_001.fastq.gz", recursive = TRUE, full.names = TRUE)
+  #find all scrubbed fastq files
+  dir.create(here("upload", "fastq"), recursive = TRUE)
+  
+  fastq_fps <- list.files(here("data", "processed_bs"), pattern = "scrubbed.*_001.fastq.gz", recursive = TRUE, full.names = TRUE)
+  
+  fastq2upload <- fastq_fps[grepl(paste0(s_upload, collapse = "|"), fastq_fps)]
+  sapply(fastq2upload, function(x) file.rename(x, to = paste0(here("upload", "fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", x))))
 
-fastq2upload <- fastq_fps[grepl(paste0(s_upload, collapse = "|"), fastq_fps)]
-sapply(fastq2upload, function(x) file.rename(x, to = paste0(here("upload", "fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", x))))
+}
 
 
 ```

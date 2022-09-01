@@ -54,8 +54,6 @@ do
    sleep 15
 done
 
-sleep 5
-
 #wait until the app finishes running
 n=0
 until [ "$n" -ge 5 ]

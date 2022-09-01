@@ -2,6 +2,7 @@ library(here)
 library(dplyr)
 library(readxl)
 library(readr)
+library(stringr)
 
 #This Rscript is currently written to generating the SampleSheet for the Local Run Manager Module on the MiSeq
 #https://support.illumina.com/downloads/local-run-manager-generate-fastq-module-v3.html
@@ -14,7 +15,7 @@ munging_fp <- here("metadata", "munge")
 # Manual input
 ##############
 
-prj_description <- "test" #no spaces, should be the same as the R project
+prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
 instrument_select <- 1 #select 1 for MiSeq or 2 for NextSeq
 instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
@@ -48,14 +49,9 @@ if(sequencing_date == "" | prj_description == "" | any(is.na(instrument_type))) 
 barcodes <- tryCatch(
   {
     read.csv(barcode_fp, stringsAsFactors = FALSE) %>%
-      #change all ending 0 to another character
-      mutate(Index_Plate_Well = gsub("0$", "zzz", Index_Plate_Well)) %>%
-      #remove the middle 0 in the plate positions
-      mutate(Index_Plate_Well = gsub("0", "", Index_Plate_Well)) %>%
-      mutate(Index_Plate_Well = gsub("zzz", "0", Index_Plate_Well)) %>%
       mutate(idt_plate_coord = paste0(Index_Plate, "_", Index_Plate_Well)) %>%
-      rename(UDI_Index_ID = "I7_Index_ID") %>%
-      select(idt_plate_coord, UDI_Index_ID, index, index2)
+      mutate(UDI_Index_ID = I7_Index_ID) %>%
+      select(idt_plate_coord, I7_Index_ID, I5_Index_ID, UDI_Index_ID, index, index2)
   },
   error = function(e) {
     stop (simpleError("The nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv file needs to sit in an [aux_files/metadata_references] directory path above this project directory"))
@@ -74,7 +70,9 @@ read_sheet <- function(fp, sheet_name) {
     filter(!is.na(sample_name)) %>%
     #filter empty columns
     select(where(function(x) any(!is.na(x)))) %>%
-    select(!matches("^\\.\\.\\."))
+    select(!matches("^\\.\\.\\.")) %>%
+    mutate(across(matches("_col$|coord$"), ~ str_replace_all(., "\\d+", function(m) sprintf("%02d", as.numeric(m))))) %>%
+    mutate(plate_coord = gsub("^0", "", plate_coord))
 }
 
 qubit_sheet <- read_sheet(metadata_input_fp, "Qubit") %>%
@@ -158,7 +156,7 @@ for(x in c(cols2merge, "sample_id",
            "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
            "sample_type", "sample_collected_by", "PHL_sample_received_date",
            "organism", "host_scientific_name", "host_disease", "isolation_source",
-           "index", "index2", "UDI_Index_ID",
+           "index", "index2", "UDI_Index_ID", "I7_Index_ID", "I5_Index_ID",
            "sequencing_date", "prj_descrip", "instrument_type", "read_length",
            "sample_collection_date", "host_age_bin", "gender", "zip_char", "priority")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
@@ -228,7 +226,10 @@ if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
 
 samp_sheet_2_write <- metadata_sheet %>%
   # do not include lane in the sample sheet otherwise it will only demultiplex that sample in that specified lane, not in all lanes
-  select(sample_id, index, index2, UDI_Index_ID) %>%
+  rowwise() %>%
+  mutate(Index_Plate = which(LETTERS == idt_set)) %>%
+  mutate(Index_Plate_Well = paste0(idt_plate_row, idt_plate_col)) %>%
+  select(sample_id, Index_Plate, Index_Plate_Well, I7_Index_ID, index, I5_Index_ID, index2) %>%
   rename(Sample_ID = "sample_id")
 
 sample_sheet_fp <- here("metadata", "munge", "SampleSheet.csv")
@@ -264,4 +265,6 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 # Write sheet to metadata folder
 ################################
 
-write.csv(metadata_sheet, file = here("metadata", paste0(sequencing_date, "_", prj_description, ".csv")), row.names = FALSE)
+metadata_sheet %>%
+  select(-c(I7_Index_ID, I5_Index_ID)) %>%
+  write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, ".csv")), row.names = FALSE)
