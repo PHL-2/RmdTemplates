@@ -102,7 +102,7 @@ if(length(list_of_indexes) > 0) {
 
 }
 
-bs_upload_shell_fp <- file.path(dirname(here()), "aux_files", "shell_scripts", "bs_cli_commands.sh")
+bs_upload_shell_fp <- here("code", "bs_cli_commands.sh")
 
 fastq_folder <- dirname(list.files(run_folder, pattern = "R[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)[1])
 
