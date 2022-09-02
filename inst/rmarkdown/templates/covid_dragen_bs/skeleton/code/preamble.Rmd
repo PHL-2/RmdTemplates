@@ -82,13 +82,15 @@ if(folder_date != gsub("_.*", "", basename(here()))) {
 
 ```
 
-```{r upload data to basespace and run the app, message=TRUE, eval = dl_n_import_data}
+```{r upload data to basespace and run the app, eval = dl_n_import_data}
 # Generate the data folders
 
 dir.create(here("data", "demux_reads"), recursive = TRUE)
 dir.create(here("data", "processed_bs"), recursive = TRUE)
 
-list_of_indexes <- list.files(run_folder, pattern = "*I[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)
+latest_demux <- max(list.files(run_folder, pattern = "Alignment_"))
+
+list_of_indexes <- list.files(here(run_folder, latest_demux), pattern = "*I[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)
 
 #if there are index files in the run folder, move them somewhere else
 if(length(list_of_indexes) > 0) {
@@ -104,7 +106,7 @@ if(length(list_of_indexes) > 0) {
 
 bs_upload_shell_fp <- here("code", "bs_cli_commands.sh")
 
-fastq_folder <- dirname(list.files(run_folder, pattern = "R[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)[1])
+fastq_folder <- dirname(list.files(here(run_folder, latest_demux), pattern = "R[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)[1])
 
 #have to put the character vectors in quotes for them to run on shell
 shell_std_out <- system2(sh_exe_fp,                                             #the git shell executable on windows
@@ -117,7 +119,7 @@ shell_std_out <- system2(sh_exe_fp,                                             
                             shQuote(here("data", "processed_bs"), type = "cmd")  #argument $5
                          ), stdout = TRUE)
 
-print(shell_std_out)
+#print(shell_std_out)
 #If there's an error that pops up saying you need to accept the license, actually run the newest version of the DRAGEN COVID Lineage App once to accept license (you can abort it and return to using the shell script)
 
 
@@ -128,13 +130,13 @@ app_run_date <- as.character(as.Date(shell_std_out[length(shell_std_out)]))
 dragen_app_version <- shell_std_out[length(shell_std_out)-1]
 
 #copy from
-cp_list <- c(list.files(here(run_folder, "Alignment_1"), pattern = "CompletedJobInfo.xml", recursive = TRUE, full.names = TRUE),
-             list.files(here(run_folder, "Alignment_1"), pattern = "DemultiplexSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
-             list.files(here(run_folder, "Alignment_1"), pattern = "FastqSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
-             list.files(here(run_folder, "Alignment_1"), pattern = "SampleSheetUsed.csv", recursive = TRUE, full.names = TRUE))
+cp_list <- c(list.files(here(run_folder, latest_demux), pattern = "CompletedJobInfo.xml", recursive = TRUE, full.names = TRUE),
+             list.files(here(run_folder, latest_demux), pattern = "DemultiplexSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
+             list.files(here(run_folder, latest_demux), pattern = "FastqSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
+             list.files(here(run_folder, latest_demux), pattern = "SampleSheetUsed.csv", recursive = TRUE, full.names = TRUE))
 
 #copy to
-sapply(cp_list, file.copy, here("data", "demux_reads"), TRUE)
+invisible(sapply(cp_list, file.copy, here("data", "demux_reads"), TRUE))
 
 ```
 
@@ -283,13 +285,15 @@ zip_fps <- list.files(here("data", "processed_bs"), pattern = ".zip", recursive 
 
 #extract scrubbed fastq files
 scrubbed_zip_files <- zip_fps[grepl("ScrubbedFASTQsNode", zip_fps)]
-sapply(scrubbed_zip_files, function(x) unzip(x, exdir = dirname(x)))
+invisible(sapply(scrubbed_zip_files, function(x) unzip(x, exdir = dirname(x))))
 
 #extract just the bed files
 bed_zip_files <- zip_fps[grepl("_all_output_files", zip_fps)]
-sapply(bed_zip_files, function(x) unzip(x, exdir = dirname(x), files = paste0("consensus/", gsub(".*/|_all_output_files.zip$", "", x), ".consensus_coverage_from_filtered_bam.tsv")))
 #sometimes these files are bed and other times they are tsv files...
-sapply(bed_zip_files, function(x) unzip(x, exdir = dirname(x), files = paste0("consensus/", gsub(".*/|_all_output_files.zip$", "", x), ".consensus_coverage_from_filtered_bam.bed")))
+#be wary of the extract to file path. if the length of the path exceeds 256 characters, it may throw an error
+invisible(sapply(bed_zip_files, function(x) unzip(x, exdir = here("data", "processed_bs"), files = as.character(paste0("consensus/", gsub(".*/|_all_output_files.zip$", "", x), ".consensus_coverage_from_filtered_bam.tsv")))))
+
+invisible(sapply(bed_zip_files, function(x) unzip(x, exdir = here("data", "processed_bs"), files = paste0("consensus/", gsub(".*/|_all_output_files.zip$", "", x), ".consensus_coverage_from_filtered_bam.bed"))))
 
 
 ```
@@ -297,7 +301,7 @@ sapply(bed_zip_files, function(x) unzip(x, exdir = dirname(x), files = paste0("c
 ```{r load coverage results, eval = dl_n_import_data}
 
 #this bed file can only be found in the zipped output files
-cov_files_fps <- list.files(here("data", "processed_bs"), pattern = "consensus_coverage_from_filtered_bam", recursive = TRUE, full.names = TRUE)
+cov_files_fps <- list.files(here("data", "processed_bs", "consensus"), pattern = "consensus_coverage_from_filtered_bam", recursive = TRUE, full.names = TRUE)
 
 coverage <- cov_files_fps %>%
   data_frame(FileName = .) %>%
@@ -379,6 +383,7 @@ merge(coverage, kmer, by = "sample_id", all = TRUE) %>%
   merge(next_clade, by = "sample_id", all = TRUE) %>%
   mutate(date_pipeline_was_run = app_run_date) %>%
   mutate(dragen_covid_lineage_version = dragen_app_version) %>%
+  mutate(nextclade_version = nc_v) %>%
   write_delim(here("data", "bs_results.tsv"), delim = "\t")
 
 ```
@@ -395,7 +400,7 @@ scorpio_software_version <- paste0(unique(bs_results$scorpio_version)[!is.na(uni
 
 constellation_version <- gsub("^v", "", paste0(unique(bs_results$constellation_version)[!is.na(unique(bs_results$constellation_version))], collapse = "/"))
 
-nextclade_version <- nc_v
+nextclade_version <- unique(bs_results$nextclade_version)
 
 date_pipeline_was_run <- unique(bs_results$date_pipeline_was_run)
 
@@ -497,10 +502,10 @@ for(variant in sort(unique(s$scorpio_call)[!is.na(unique(s$scorpio_call))])) {
     #is_designated means that the sample was assigned to a reference strain exactly using PANGO algorithm (decision tree) rather than PUSHER
     #the note section here for PUSHER will be 'Assigned from designation hash.' so its useless
     #nextclade VOC shouldn't be too different from scorpio VOC
-    select(note, Nextclade_pango) %>%
+    select(note, Nextclade_pango, scorpio_lineage) %>%
     mutate(note = gsub("^.*: |; scorpio.*", "", note)) %>%
     separate(note, into = c("pusher_variant1", "pusher_variant2"), sep = " ", extra = "merge") %>%
-    pivot_longer(cols = c("pusher_variant1", "pusher_variant2", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
+    pivot_longer(cols = c("pusher_variant1", "pusher_variant2", "Nextclade_pango", "scorpio_lineage"), names_to = "variant_num", values_to = "variants") %>%
     mutate(variants = gsub("\\(.*", "", variants)) %>%
     select(variants) %>%
     filter(!is.na(variants)) %>%
@@ -550,7 +555,7 @@ who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_geom_values[["who_la
 ```
 
 ```{r empty plate to plot}
-empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_col = rep(1:12, 8), plate = 1) %>%
+empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_col = sprintf("%02d", rep(1:12, 8)), plate = 1) %>%
   mutate(plate_coord = paste0(plate, "_", plate_row, plate_col))
 
 ```
@@ -571,10 +576,9 @@ if(length(s_upload) > 0) {
   fastq_fps <- list.files(here("data", "processed_bs"), pattern = "scrubbed.*_001.fastq.gz", recursive = TRUE, full.names = TRUE)
   
   fastq2upload <- fastq_fps[grepl(paste0(s_upload, collapse = "|"), fastq_fps)]
-  sapply(fastq2upload, function(x) file.rename(x, to = paste0(here("upload", "fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", x))))
+  invisible(sapply(fastq2upload, function(x) file.rename(x, to = paste0(here("upload", "fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", x)))))
 
 }
-
 
 ```
 

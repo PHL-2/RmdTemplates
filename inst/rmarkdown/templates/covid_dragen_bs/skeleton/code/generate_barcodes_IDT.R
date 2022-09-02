@@ -75,9 +75,6 @@ read_sheet <- function(fp, sheet_name) {
     mutate(plate_coord = gsub("^0", "", plate_coord))
 }
 
-qubit_sheet <- read_sheet(metadata_input_fp, "Qubit") %>%
-  #mutate this column as character if exists
-  mutate_at(vars(one_of('qubit_date')), as.character)
 index_sheet <- read_sheet(metadata_input_fp, "Index")
 sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
 
@@ -127,8 +124,7 @@ RLU_data <- read_csv(RLU_fp) %>%
 cols2merge <- c("sample_name", "plate", "plate_row", "plate_col", "plate_coord")
 
 #merge all the individual sheets
-metadata_sheet <- merge(qubit_sheet, index_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
-  merge(sample_info_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
+metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   #add in barcodes
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
   #merge the metadata from epi's
@@ -229,7 +225,7 @@ samp_sheet_2_write <- metadata_sheet %>%
   rowwise() %>%
   mutate(Index_Plate = which(LETTERS == idt_set)) %>%
   mutate(Index_Plate_Well = paste0(idt_plate_row, idt_plate_col)) %>%
-  select(sample_id, Index_Plate, Index_Plate_Well, I7_Index_ID, index, I5_Index_ID, index2) %>%
+  select(sample_id, Index_Plate, Index_Plate_Well, I7_Index_ID, index, I5_Index_ID, index2, UDI_Index_ID) %>%
   rename(Sample_ID = "sample_id")
 
 sample_sheet_fp <- here("metadata", "munge", "SampleSheet.csv")

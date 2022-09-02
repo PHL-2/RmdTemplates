@@ -163,7 +163,8 @@ s %>%
     labs(
       x="Number of read pairs in sample (millions, M)",
       y="Number of samples",
-      fill = "Sample Type"
+      fill = "Sample Type",
+      title = paste0("Total number of reads from run: ", round(sum(s$read_counts)/1000000, digits = 2), "M")
     )
 ```
 
@@ -338,6 +339,7 @@ empty_plate %>%
   filter(!is.na(plate_coord)) %>%
   droplevels() %>%
   mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
   ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = CT)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 10) +
@@ -370,6 +372,7 @@ empty_plate %>%
   filter(!is.na(plate_coord)) %>%
   droplevels() %>%
   mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
   ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = RLU)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 10) +
@@ -402,6 +405,7 @@ empty_plate %>%
   filter(!is.na(plate_coord)) %>%
   droplevels() %>%
   mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
   ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = qubit_conc_ng_ul)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 10) +
@@ -433,6 +437,7 @@ empty_plate %>%
   filter(!is.na(plate_coord)) %>%
   droplevels() %>%
   mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
   ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = read_counts)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 10) +
@@ -752,8 +757,8 @@ gisaid <- s_toPlot %>%
          `Submitting lab` = "Philadelphia Department of Public Health",
          Address = "500 S. Broad Street, Philadelphia, PA 19146 USA") %>%
   mutate(Host = ifelse(host_scientific_name == "Homo sapiens", "Human", NA)) %>%
-  mutate(`Collection date` = case_when((!is.na(sample_collection_date) & sample_collection_date != "NA") ~ sample_collection_date,
-                                       (!is.na(PHL_sample_received_date) & PHL_sample_received_date != "NA") ~ PHL_sample_received_date,
+  mutate(`Collection date` = case_when(!is.na(sample_collection_date) ~ sample_collection_date,
+                                       !is.na(PHL_sample_received_date) ~ PHL_sample_received_date,
                                        TRUE ~ sequencing_date)) %>%
   rename(Gender = "gender", Coverage = "median_coverage", `Originating lab` = "sample_collected_by", `Specimen source` = "sample_type") %>%
   select(`Virus name`, Type, `Passage details/history`, `Collection date`, Location, Host, Gender, `Patient age`, `Patient status`,
@@ -770,8 +775,8 @@ bio_sample <- s_toPlot %>%
   mutate(GISAID_virus_name = paste0("hCoV-2/USA/", sample_id, "/", str_sub(project_name, 1, 4))) %>%
   mutate(geo_loc_name = "USA: PA", sequenced_by = "phl.sequencing@phila.gov", purpose_of_sampling = "Surveillance [GENEPIO:0100004]",
          isolation_source = paste0(isolation_source, "; See additional sample source fields for further information")) %>%
-  mutate(collection_date = case_when((!is.na(sample_collection_date) & sample_collection_date != "NA") ~ sample_collection_date,
-                                       (!is.na(PHL_sample_received_date) & PHL_sample_received_date != "NA") ~ PHL_sample_received_date,
+  mutate(collection_date = case_when(!is.na(sample_collection_date) ~ sample_collection_date,
+                                     !is.na(PHL_sample_received_date) ~ PHL_sample_received_date,
                                        TRUE ~ sequencing_date)) %>%
   rename(sample_name = "sample_id", collected_by = "sample_collected_by",
          host_age = "host_age_bin", host = "host_scientific_name", host_sex = "gender") %>%
@@ -879,11 +884,10 @@ rmarkdown::render(qc_report_fp, output_file = "README.md",
 tryCatch(
   {
     source(file.path(dirname(here()), "cp2admin.R"))
-  }, error = function(e) 
+  }, error = function(e)
   {
-    
+
   }
 )
 
 ```
-

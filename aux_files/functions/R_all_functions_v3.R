@@ -102,6 +102,9 @@ filter4report <- function(data) {
     #filter out bad results
     filter(nc_qc_status != "bad") %>%
 
+    #filter if no coverage
+    filter(!is.na(median_coverage)) %>%
+
     #filter out mediocre results with lower coverages
     filter(!(nc_qc_status == "mediocre" & pct_genome_coverage_over_30x < .8)) %>%
 
