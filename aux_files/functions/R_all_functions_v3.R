@@ -112,3 +112,27 @@ filter4report <- function(data) {
     filter(pango_qc_status != "fail")
 
 }
+
+## ============================================================
+##   Resubmit the shell script if proxy authentication required
+## ============================================================
+
+bs_cli_submit <- function(exe_path, bs_cli_command, sh_arguments) {
+
+  for(i in 1:5) {
+    Sys.sleep(5)
+    shell_return <- system2(exe_path,                               #the git shell executable on windows
+                            args = c(                               #some arguments need to be in quotes to be passed to shell
+                              shQuote(bs_cli_command, type = "sh"), #the shell script to run
+                              sh_arguments                          #arguments
+                            ), stdout = TRUE)
+    message(paste0("Trying ", basename(bs_cli_command), " ", i, " time"))
+
+    if(!any(grepl("Proxy Authentication Required", shell_return))) {
+      break
+    }
+  }
+
+  return(shell_return)
+
+}

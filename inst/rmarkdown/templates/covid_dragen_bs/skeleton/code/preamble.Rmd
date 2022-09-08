@@ -82,7 +82,7 @@ if(folder_date != gsub("_.*", "", basename(here()))) {
 
 ```
 
-```{r upload data to basespace and run the app, eval = dl_n_import_data}
+```{r upload data to basespace and run the app, message=FALSE, eval = dl_n_import_data}
 # Generate the data folders
 
 dir.create(here("data", "demux_reads"), recursive = TRUE)
@@ -104,30 +104,48 @@ if(length(list_of_indexes) > 0) {
 
 }
 
-bs_upload_shell_fp <- here("code", "bs_cli_commands.sh")
-
 fastq_folder <- dirname(list.files(here(run_folder, latest_demux), pattern = "R[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)[1])
 
-#have to put the character vectors in quotes for them to run on shell
-shell_std_out <- system2(sh_exe_fp,                                             #the git shell executable on windows
-                          args = c(                                              #some arguments need to be in quotes to be passed to shell
-                            shQuote(bs_upload_shell_fp, type = "sh"),           #the shell script to run
-                            project_name,                                        #argument $1
-                            shQuote(fastq_folder, type = "sh"),                  #argument $2
-                            shQuote(app2run, type = "sh"),                       #argument $3
-                            artic_primer_scheme,                                 #argument $4
-                            shQuote(here("data", "processed_bs"), type = "cmd")  #argument $5
-                         ), stdout = TRUE)
+#have to break the shell script into parts because of proxy authentication issue which can be solved by initializing a new shell script each time
 
-#print(shell_std_out)
-#If there's an error that pops up saying you need to accept the license, actually run the newest version of the DRAGEN COVID Lineage App once to accept license (you can abort it and return to using the shell script)
+### 1 - create the basespace project
+bs_cli_create_fp <- here("code", "bs_cli_commands", "bs_cli_1_create_project.sh")
+project_id <- bs_cli_submit(sh_exe_fp, bs_cli_create_fp, project_name)
 
+### 2 - upload the fastq files
+bs_cli_upload_fp <- here("code", "bs_cli_commands", "bs_cli_2_upload_fastq.sh")
+files_upload <- bs_cli_submit(sh_exe_fp, bs_cli_upload_fp, c(project_id,
+                                             shQuote(fastq_folder, type = "sh")))
 
-# YYYY-MM-DD
-app_run_date <- as.character(as.Date(shell_std_out[length(shell_std_out)]))
+### 3 - get the latest app version
+bs_cli_app_ver_fp <- here("code", "bs_cli_commands", "bs_cli_3_get_app_version.sh")
+dragen_app_version <- bs_cli_submit(sh_exe_fp, bs_cli_app_ver_fp, shQuote(app2run, type = "sh"))
 
-# N.N.N
-dragen_app_version <- shell_std_out[length(shell_std_out)-1]
+### 4 - launch the app
+bs_cli_launch_fp <- here("code", "bs_cli_commands", "bs_cli_4_launch_app.sh")
+app_session_id <- bs_cli_submit(sh_exe_fp, bs_cli_launch_fp, c(shQuote(app2run, type = "sh"),
+                                                               dragen_app_version,
+                                                               project_id,
+                                                               artic_primer_scheme))
+
+### 5 - wait until the app finished running
+bs_cli_await_fp <- here("code", "bs_cli_commands", "bs_cli_5_await.sh")
+awaiting <- bs_cli_submit(sh_exe_fp, bs_cli_await_fp, app_session_id)
+
+### 6 - download data
+bs_cli_download_fp <- here("code", "bs_cli_commands", "bs_cli_6_download.sh")
+downloading <- bs_cli_submit(sh_exe_fp, bs_cli_download_fp, c(project_id,
+                                               shQuote(here("data", "processed_bs"), type = "sh")))
+
+### 7 - get app date
+bs_cli_get_date_fp <- here("code", "bs_cli_commands", "bs_cli_7_get_date.sh")
+app_run_date <- bs_cli_submit(sh_exe_fp, bs_cli_get_date_fp, app_session_id) %>%
+  as.Date() %>%
+  as.character()
+
+```
+
+```{r copy run folder files, eval = dl_n_import_data}
 
 #copy from
 cp_list <- c(list.files(here(run_folder, latest_demux), pattern = "CompletedJobInfo.xml", recursive = TRUE, full.names = TRUE),
@@ -555,12 +573,13 @@ who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_geom_values[["who_la
 ```
 
 ```{r empty plate to plot}
+
 empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_col = sprintf("%02d", rep(1:12, 8)), plate = 1) %>%
   mutate(plate_coord = paste0(plate, "_", plate_row, plate_col))
 
 ```
 
-```{r save fastq for upload, eval = dl_n_import_data}
+```{r save fastq and fasta for upload, eval = dl_n_import_data}
 
 #get only the good quality samples to upload
 s_upload <- s_toPlot %>%
@@ -577,7 +596,23 @@ if(length(s_upload) > 0) {
   
   fastq2upload <- fastq_fps[grepl(paste0(s_upload, collapse = "|"), fastq_fps)]
   invisible(sapply(fastq2upload, function(x) file.rename(x, to = paste0(here("upload", "fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", x)))))
+  
+  
+  #find all fasta files
+  dir.create(here("upload", "fasta"), recursive = TRUE)
+  
+  fasta_fps <- list.files(here("data", "processed_bs"), pattern = ".consensus_hard_masked_sequence.fa", recursive = TRUE, full.names = TRUE)
+  
+  fasta2upload <- fasta_fps[grepl(paste0(s_upload, collapse = "|"), fasta_fps)]
 
+  fasta2upload %>%
+    data_frame(FileName = .) %>%
+    group_by(FileName) %>%
+    do(read_delim(.$FileName, col_names = FALSE, delim = "fake_delim")) %>%
+    ungroup() %>%
+    select(-c(FileName)) %>%
+    write_delim(file = here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), delim = "", col_names = FALSE)
+  
 }
 
 ```
