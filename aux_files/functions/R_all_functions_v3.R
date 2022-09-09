@@ -120,23 +120,24 @@ filter4report <- function(data) {
 bs_cli_submit <- function(exe_path, bs_cli_command, sh_arguments) {
 
   for(i in 1:5) {
-    Sys.sleep(5)
+    Sys.sleep(30)
     message(paste0("Trying ", basename(bs_cli_command), " ", i, " time"))
     shell_return <- system2(exe_path,                               #the git shell executable on windows
                             args = c(                               #some arguments need to be in quotes to be passed to shell
                               shQuote(bs_cli_command, type = "sh"), #the shell script to run
                               sh_arguments                          #arguments
                             ), stdout = TRUE)
+    message(shell_return)
 
-
-    if(!any(grepl("Proxy Authentication Required", shell_return))) {
+    if(!any(grepl("Proxy Authentication Required|502 Bad Gateway: Reason unknown", shell_return))) {
       break
     }
+
   }
 
 
   if(i == 5) {
-    knitr::knit_exit()
+    stop(simpleError("Retried 5 times"))
   } else{
     return(shell_return)
   }
