@@ -834,7 +834,7 @@ all_sample_ids_from_csv <- csvs_2_upload %>%
   mutate(X1 = gsub(".*/USA/|/.*", "", X1)) %>%
   merge(select(s, sample_id, sample_name), by.x = "X1", by.y = "sample_name", all.x = TRUE) %>%
   mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
-  select(-FileName)
+  select(-c(FileName, X1))
 
 fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
   data.frame(FileName = .) %>%
@@ -862,7 +862,7 @@ check_all <- all_sample_ids_from_csv %>%
   mutate(count_all_samples = n()) %>%
   ungroup()
 
-if (!all(check_all$count_all_samples == 5)) {
+if (!all(check_all$count_all_samples == 6)) {
   stop (simpleError("Some files are missing samples to upload!"))
 }
 
