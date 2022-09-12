@@ -5,7 +5,7 @@ title: |
 author: "Philadelphia Public Health Labs"
 date: \today
 geometry: margin=3cm
-output: 
+output:
     pdf_document:
         template: ../aux_files/forKnitting/toc_after.tex
         keep_tex: false
@@ -819,6 +819,55 @@ n_samples_report <- s %>%
 
 ```
 
+```{r final check}
+
+csvs_2_upload <- list.files(here("upload"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
+
+all_sample_ids_from_csv <- csvs_2_upload %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_csv(.$FileName, col_names = FALSE)) %>%
+  ungroup() %>%
+  select(FileName, X1) %>%
+  mutate(file = gsub(".*/", "", FileName)) %>%
+  filter(!grepl("accession_number|Virus name|sample_name|Library_ID", X1)) %>%
+  mutate(X1 = gsub(".*/USA/|/.*", "", X1)) %>%
+  merge(select(s, sample_id, sample_name), by.x = "X1", by.y = "sample_name", all.x = TRUE) %>%
+  mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
+  select(-FileName)
+
+fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
+  data.frame(FileName = .) %>%
+  mutate(sample_id = gsub(".*upload/fastq/|_S[0-9].*._L001_R[12]_001.fastq.gz$", "", FileName)) %>%
+  mutate(file = gsub(".*/", "", FileName)) %>%
+  select(-FileName)
+
+fastq2_compare <- fastq_2_upload %>%
+  filter(grepl("_L001_R1_001.fastq.gz", file))
+
+if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
+  stop (simpleError("Missing some fastq files!"))
+}
+
+fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
+  filter(grepl("^>", X1)) %>%
+  mutate(sample_id = gsub("^>", "", X1)) %>%
+  mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
+  select(-X1)
+
+check_all <- all_sample_ids_from_csv %>%
+  rbind(fastq2_compare) %>%
+  rbind(fasta_samples) %>%
+  group_by(sample_id) %>%
+  mutate(count_all_samples = n()) %>%
+  ungroup()
+
+if (!all(check_all$count_all_samples == 5)) {
+  stop (simpleError("Some files are missing samples to upload!"))
+}
+
+```
+
 \newpage
 
 # Appendix
@@ -876,9 +925,18 @@ project_name <- basename(here())
 qc_report_fp <- paste0(project_name, "_QC_Report.Rmd")
 qc_output_fp <- here("output", paste0(project_name, '.QC.report_gen.on.', Sys.Date(), '.pdf'))
 
+# need to download and import basespace data for each sample?
+dl_bs_data <- TRUE
+
+# need to import the data into a single tsv?
+import_data <- TRUE
+
 rmarkdown::render(qc_report_fp, output_file = qc_output_fp)
+
+dl_bs_data <- FALSE
+import_data <- FALSE
 rmarkdown::render(qc_report_fp, output_file = "README.md",
-                  output_format = rmarkdown::md_document(variant = "markdown_github", toc = TRUE))
+                 output_format = rmarkdown::md_document(variant = "markdown_github", toc = TRUE))
 
 #save some files if this script exists
 tryCatch(
@@ -891,4 +949,3 @@ tryCatch(
 )
 
 ```
-
