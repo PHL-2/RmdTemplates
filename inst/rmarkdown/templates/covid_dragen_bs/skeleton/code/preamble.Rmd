@@ -147,8 +147,8 @@ gen_fq_version <- JobCompletedInfo %>%
 fastq_sum <- read_delim(fastqsum_fp) %>%
   group_by(SampleNumber) %>%
   #PF means reads that have passed filter
-  summarise(total_raw_reads = sum(NumberOfReadsRaw),
-            read_counts = sum(NumberOfReadsPF)) %>%
+  summarise(total_raw_reads = sum(NumberOfReadsRaw)*2,
+            read_counts = sum(NumberOfReadsPF)*2) %>%
   ungroup()
 
 # SampleSheet.csv loading
@@ -438,7 +438,7 @@ dragen_covid_lineage_version <- unique(bs_results$dragen_covid_lineage_version)
 
 ctrl_regex <- "EBneg|Extract|Vibriolambda|Blank|MockDNA|DNAfreewater|Geneblock|Emptywell|Control|POS|NEG|PC|NC"
 
-sample_type_fct <- c("Unassigned reads", "Empty well control", "Mock DNA positive control")
+sample_type_fct <- c("Unassigned reads", "Empty well control", "Buffer control", "Mock DNA positive control")
 
 s_meta <- read_delim(mapping_file_fp, delim = ",")
 
@@ -500,15 +500,15 @@ lvls <- c(levels(s$sample_type), NA)
 ann_geom_values <- list()
 
 #leave Unassigned reads as purple
-ann_geom_values[["sample_type_colors"]] <- setNames(pal_d3("category20")(20)[c(5, (1:length(lvls))[-5])], lvls)
+ann_geom_values[["sample_type_colors"]] <- setNames(pal_d3("category20")(20)[c(5, 6, (1:length(lvls))[-c(5, 6)])], lvls)
 
 #make the controls and unassigned reads into triangle and diamond shapes
-ann_geom_values[["sample_type_shapes"]] <- setNames(c(23:25,
+ann_geom_values[["sample_type_shapes"]] <- setNames(c(24:25, 8, 23,
                                                       21:22,
-                                                      c(26:30)[1:(length(lvls)-5)]), lvls)
+                                                    c(9:14)[1:(length(lvls)-6)]), lvls)
 
 #make the controls and unassigned reads samples bigger in size
-ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 4, 4, rep(1, length(lvls)-3)), lvls)
+ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 4, 4, 4, rep(1, length(lvls)-3)), lvls)
 
 #scales::show_col(ann_geom_values[["sample_type_colors"]])
 
@@ -530,6 +530,7 @@ for(variant in sort(unique(s$scorpio_call)[!is.na(unique(s$scorpio_call))])) {
     #nextclade VOC shouldn't be too different from scorpio VOC
     select(note, Nextclade_pango, scorpio_lineage) %>%
     mutate(note = gsub("^.*: |; scorpio.*", "", note)) %>%
+    mutate(note = ifelse(note == "Assigned from designation hash.", NA, note)) %>%
     separate(note, into = c("pusher_variant1", "pusher_variant2"), sep = " ", extra = "merge") %>%
     pivot_longer(cols = c("pusher_variant1", "pusher_variant2", "Nextclade_pango", "scorpio_lineage"), names_to = "variant_num", values_to = "variants") %>%
     mutate(variants = gsub("\\(.*", "", variants)) %>%

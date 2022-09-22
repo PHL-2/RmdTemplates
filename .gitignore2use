@@ -2,10 +2,9 @@
 .Rhistory
 .RData
 .Ruserdata
+processed_bs/
 metadata/
 epi/
-extra_metadata/*
-data/*
-!data/bs_results.tsv
+fastq/
 *.pdf
 cp2admin.R

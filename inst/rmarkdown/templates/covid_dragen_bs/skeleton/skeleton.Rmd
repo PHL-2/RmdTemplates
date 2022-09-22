@@ -578,6 +578,7 @@ s_toPlot %>%
   select(sample_id, note, sample_type, nc_qc_status) %>%
   #remove "Usher placements" text in the front of note and scorpio notes
   mutate(note = gsub("^.*: |; scorpio.*", "", note)) %>%
+  filter(note != "Assigned from designation hash.") %>%
   #split note into two variant columns by the space
   separate(note, into = c("variant1", "variant2"), sep = " ", extra = "merge") %>%
   mutate(variant1_prop = gsub(".*\\(|\\)", "", variant1)) %>%
@@ -838,7 +839,7 @@ all_sample_ids_from_csv <- csvs_2_upload %>%
 
 fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
   data.frame(FileName = .) %>%
-  mutate(sample_id = gsub(".*upload/fastq/|_S[0-9].*._L001_R[12]_001.fastq.gz$", "", FileName)) %>%
+  mutate(sample_id = gsub(".*upload/fastq/|_S[0-9].*_L001_R[12]_001.fastq.gz$", "", FileName)) %>%
   mutate(file = gsub(".*/", "", FileName)) %>%
   select(-FileName)
 
@@ -862,6 +863,7 @@ check_all <- all_sample_ids_from_csv %>%
   mutate(count_all_samples = n()) %>%
   ungroup()
 
+#can change this to 5 if you don't want the fastq files
 if (!all(check_all$count_all_samples == 6)) {
   stop (simpleError("Some files are missing samples to upload!"))
 }

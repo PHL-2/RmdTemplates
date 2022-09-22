@@ -78,6 +78,28 @@ read_sheet <- function(fp, sheet_name) {
 index_sheet <- read_sheet(metadata_input_fp, "Index")
 sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
 
+
+###################################################
+# Load the RLU report
+# Make sure these sheets are not uploaded to GitHub
+###################################################
+
+RLU_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".csv", full.names = TRUE)
+
+RLU_data <- read_csv(RLU_fp) %>%
+  filter(`SARS-CoV2 Result` == "POSITIVE") %>%
+  rename(sample_name = "Sample ID", sample_collection_date = "Draw Date", RLU = "SARSCoV2-1", gender = "Sex", age = "Age") %>%
+  select(sample_name, sample_collection_date, DOB, age, gender, RLU) %>%
+  mutate(gender = case_when(gender == "M" ~ "Male",
+                            gender == "F" ~ "Female",
+                            TRUE ~ "Other")) %>%
+  mutate(DOB = as.Date(DOB, format = "%m/%d/%Y"), sample_collection_date = as.Date(sample_collection_date, format = "%m/%d/%Y")) %>%
+  #filter rows where sample_id is NA
+  filter(!is.na(sample_name)) %>%
+  #filter empty columns
+  select(where(function(x) any(!is.na(x)))) %>%
+  select(!matches("^\\.\\.\\."))
+
 ###################################################################################
 # Load the metadata sheet from epidemiologists and merge with sample metadata sheet
 # Make sure these sheets are not uploaded to GitHub
@@ -85,37 +107,44 @@ sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
 
 PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".xlsx", full.names = TRUE)
 
-PHL_data <- read_excel(PHL_fp, skip = 1) %>%
-  rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER") %>%
-  select(sample_name, sample_collection_date, age, gender, zip_char, priority) %>%
+PHL_data <- read_excel(PHL_fp, skip = 1, sheet = "PHL") %>%
+  rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
+  select(sample_name, sample_collection_date, DOB, age, gender, zip_char, priority) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x)))) %>%
   select(!matches("^\\.\\.\\.")) %>%
+  merge(RLU_data, by = c("sample_name", "DOB", "age", "gender", "sample_collection_date"), all.x = TRUE) %>%
   #use the first day of the week (starting on Monday) as the sample_collection_date
   mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week"))) %>%
   mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:6, 9)), Inf),
                             labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
                             include.lowest = TRUE)) %>%
   #don't include age because it may be PHI if included with zipcode and gender
-  select(-age)
+  select(-c(age, DOB))
 
-###################################################
-# Load the monthly RLU report
+if(any(is.na(PHL_data$RLU))) {
+  stop(simpleError("Some PHL samples have missing RLU values. Please fix"))
+}
+
+###################################################################################
+# Load the metadata sheet from epidemiologists and merge with sample metadata sheet
 # Make sure these sheets are not uploaded to GitHub
-###################################################
+###################################################################################
 
-RLU_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".csv", full.names = TRUE)
+TU_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".xlsx", full.names = TRUE)
 
-RLU_data <- read_csv(RLU_fp) %>%
-  rename(sample_name = "Sample ID") %>%
-  select(sample_name, RLU) %>%
+TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
+  rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value") %>%
+  select(sample_name, sample_collection_date, CT, priority) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x)))) %>%
-  select(!matches("^\\.\\.\\."))
+  select(!matches("^\\.\\.\\.")) %>%
+  #use the first day of the week (starting on Monday) as the sample_collection_date
+  mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week")))
 
 ###########################
 # Merge all metadata sheets
@@ -130,9 +159,11 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   #merge the metadata from epi's
   merge(PHL_data, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
   #merge the RLU data
-  merge(RLU_data, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
+  merge(TU_data, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
+  mutate(priority = ifelse(is.na(priority.x), priority.y, priority.x)) %>%
+  mutate(sample_collection_date = ifelse(is.na(sample_collection_date.x), as.character(sample_collection_date.y), as.character(sample_collection_date.x))) %>%
   mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", idt_plate_coord, "-", gsub("-", "", sequencing_date)))) %>%
-  select(sample_id, everything()) %>%
+  select(sample_id, everything(), -c(priority.x, priority.y, sample_collection_date.x, sample_collection_date.y)) %>%
   arrange(plate, plate_col, plate_row) %>%
   mutate(sequencing_date = sequencing_date) %>%
   mutate(prj_descrip = prj_description) %>%
