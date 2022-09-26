@@ -500,7 +500,7 @@ lvls <- c(levels(s$sample_type), NA)
 ann_geom_values <- list()
 
 #leave Unassigned reads as purple
-ann_geom_values[["sample_type_colors"]] <- setNames(pal_d3("category20")(20)[c(5, 6, (1:length(lvls))[-c(5, 6)])], lvls)
+ann_geom_values[["sample_type_colors"]] <- setNames(pal_d3("category20")(20)[c(15, 19, 16, 2, 1, 4, 8)], lvls)
 
 #make the controls and unassigned reads into triangle and diamond shapes
 ann_geom_values[["sample_type_shapes"]] <- setNames(c(24:25, 8, 23,

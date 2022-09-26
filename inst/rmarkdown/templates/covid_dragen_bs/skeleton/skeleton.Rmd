@@ -940,7 +940,11 @@ import_data <- FALSE
 rmarkdown::render(qc_report_fp, output_file = "README.md",
                  output_format = rmarkdown::md_document(variant = "markdown_github", toc = TRUE))
 
-#save some files if this script exists
+```
+
+```{r run R script, eval=FALSE, include=FALSE}
+
+#copy files if this script exists
 tryCatch(
   {
     source(file.path(dirname(here()), "cp2admin.R"))
