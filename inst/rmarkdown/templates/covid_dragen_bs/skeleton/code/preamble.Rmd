@@ -8,6 +8,7 @@ library(kableExtra)
 library(ggsci)
 library(RColorBrewer)
 library(patchwork)
+library(reticulate)
 
 ```
 
@@ -28,7 +29,10 @@ artic_primer_scheme <- c("ncov2019", "articv4", "articv4.1")[primer_select]
 bs_bed_file_used <- c("nCov-2019.bed", "artic_V4_primer_scheme_NC_045512.2.bed", "artic_v4.1_primers_nc045512.2.bed")[primer_select]
 
 # minimum acceptable number of reads
-min_reads <- 500000
+min_reads <- 1000000
+
+auth_token <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "gisaid_uploader.authtoken", full.names = TRUE)
+seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "yaml", full.names = TRUE)
 
 ```
 
@@ -588,6 +592,14 @@ empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) re
 
 ```
 
+```{r upload filepaths}
+
+epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
+seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"))
+fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
+
+```
+
 ```{r save fastq and fasta for upload, eval = import_data}
 
 #get only the good quality samples to upload
@@ -620,7 +632,7 @@ if(length(s_upload) > 0) {
     do(read_delim(.$FileName, col_names = FALSE, delim = "fake_delim")) %>%
     ungroup() %>%
     select(-c(FileName)) %>%
-    write_delim(file = here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), delim = "", col_names = FALSE)
+    write_delim(file = fasta_fp, delim = "", col_names = FALSE)
   
 }
 
