@@ -116,7 +116,7 @@ s %>%
   summarize(num = n()) %>%
   ungroup() %>%
   rename(`Sample Type` = "sample_type", n = "num") %>%
-  kable_style()
+  {if(use_kable) kable_style(.) else pander(.)}
 
 ```
 
@@ -723,11 +723,15 @@ s_toPlot %>%
   arrange(-variant_percentages) %>%
   select(-variant_percentages) %>%
   unique() %>%
-  kable("latex", longtable = F, digits=2, booktabs=T, escape=F,
-        col.names = linebreak(c("Sample Type", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
-  kable_styling(latex_options = c("scale_down", "repeat_header", "HOLD_position")) %>%
-  row_spec(0, bold = T, color="#7C0A02") %>%
-  collapse_rows(columns = 1:2, valign = "top")
+  { if(use_kable)
+      kable(., "latex", longtable = F, digits=2, booktabs=T, escape=F,
+            col.names = linebreak(c("Sample Type", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
+      kable_styling(latex_options = c("scale_down", "repeat_header", "HOLD_position")) %>%
+      row_spec(0, bold = T, color="#7C0A02") %>%
+      collapse_rows(columns = 1:2, valign = "top")
+    else
+      pander(.)
+  }
 
 ```
 
@@ -900,16 +904,23 @@ Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_seqsender[al
 
 s %>%
   arrange(-read_counts) %>%
-  mutate(sample_id = cell_spec(sample_id, "latex",
+  { if(use_kable) 
+    mutate(., sample_id = cell_spec(sample_id, "latex",
                                color = case_when((grepl(paste0(rerun_samples, collapse = "|"), sample_id) & length(rerun_samples) > 0) ~ "yellow",
                                                  ((grepl("control|Unassigned reads", sample_type)) | (!(sample_id %in% s_toPlot$sample_id))) ~ "red",
                                                  ((grepl("bad", nc_qc_status)) | (grepl("mediocre", nc_qc_status) & pct_genome_coverage_over_30x < .8) | (grepl("fail", pango_qc_status))) ~ "orange",
                                                  TRUE ~ "black"))) %>%
-  select(sample_id,
-         sample_type,
-         total_raw_reads,
-         read_counts) %>%
-  kable_style()
+      select(sample_id,
+             sample_type,
+             total_raw_reads,
+             read_counts) %>%
+      kable_style()
+    else
+      select(., sample_id,
+             sample_type,
+             read_counts) %>%
+      pander()
+  }
 
 ```
 
@@ -948,10 +959,14 @@ dl_bs_data <- TRUE
 # need to import the data into a single tsv?
 import_data <- TRUE
 
+# print table as kable for pdf?
+use_kable <- TRUE
+
 rmarkdown::render(qc_report_fp, output_file = qc_output_fp)
 
 dl_bs_data <- FALSE
 import_data <- FALSE
+use_kable <- FALSE
 rmarkdown::render(qc_report_fp, output_file = "README.md",
                  output_format = rmarkdown::md_document(variant = "markdown_github", toc = TRUE))
 

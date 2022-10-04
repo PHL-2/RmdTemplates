@@ -9,3 +9,4 @@ fastq/
 aux_files/seqsender/
 *.pdf
 cp2admin.R
+.placeholder
