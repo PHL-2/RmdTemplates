@@ -6,5 +6,6 @@ processed_bs/
 metadata/
 epi/
 fastq/
+aux_files/seqsender/
 *.pdf
 cp2admin.R

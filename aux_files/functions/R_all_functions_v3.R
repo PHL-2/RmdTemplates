@@ -117,14 +117,14 @@ filter4report <- function(data) {
 ##   Resubmit the shell script if proxy authentication required
 ## ============================================================
 
-bs_cli_submit <- function(exe_path, bs_cli_command, sh_arguments) {
+cli_submit <- function(exe_path, cli_command, sh_arguments, shQuote_type = "sh") {
 
   for(i in 1:5) {
     Sys.sleep(30)
-    message(paste0("Trying ", basename(bs_cli_command), " ", i, " time"))
+    message(paste0("Trying ", basename(cli_command), " ", i, " time"))
     shell_return <- system2(exe_path,                               #the git shell executable on windows
                             args = c(                               #some arguments need to be in quotes to be passed to shell
-                              shQuote(bs_cli_command, type = "sh"), #the shell script to run
+                              shQuote(cli_command, type = shQuote_type), #the shell script to run
                               sh_arguments                          #arguments
                             ), stdout = TRUE)
     message(shell_return)
@@ -143,3 +143,4 @@ bs_cli_submit <- function(exe_path, bs_cli_command, sh_arguments) {
   }
 
 }
+

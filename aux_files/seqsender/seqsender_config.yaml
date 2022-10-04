@@ -1,25 +1,25 @@
 ---
 general:
-  submission_directory: ''
+  submission_directory: '/parent/directory/of/Rprojects/here'
   submit_Genbank: True
   submit_GISAID: True
   submit_SRA: True
   submit_BioSample: True
   joint_SRA_BioSample_submission: True
   contact_email1: 'phl.sequencing@phila.gov'
-  contact_email2: ''
+  contact_email2: 'your.email@phila.gov'
   organization_name: Philadelphia Department of Public Health
-  authorset:
-  - first: ''
-    last: ''
+  authorset: #this field can be expanded multiple times depending on the number of authors
+  - first: 'Your'
+    last: 'Name'
     middle: ''
     initials: ''
     suffix: ''
     title: ''
   ncbi_org_id: ''
   submitter_info:
-    first: ''
-    last: ''
+    first: 'Your'
+    last: 'Name'
     middle: ''
     initials: ''
     suffix: ''
@@ -32,11 +32,11 @@ general:
 ncbi:
   hostname: ftp-private.ncbi.nlm.nih.gov
   api_url: https://submit.ncbi.nlm.nih.gov/api/2.0/files/FILE_ID/?format=attachment
-  username: ''
-  password: ''
+  username: 'Check' #use the FTP username and password granted to PHL2; see archived phl.sequencing@phila.gov email for details
+  password: 'Email'
   publication_title: SARS-CoV-2 sequencing for surveillance in Philadelphia
   ncbi_ftp_path_to_submission_folders: 'submit' #the submit folder is the one watched by ncbi for submit.ready file
-  BioProject: 'PRJNA884724'
+  BioProject: 'PRJNA884724' #this is the BioProject for COVIDSeq sequences
   BioSample_sample_name_col: genbank_name
   SRA_sample_name_col: sra_name
   Genbank_sample_name_col: genbank_name
@@ -109,8 +109,9 @@ gisaid:
     covv_orig_lab: orig_lab
     covv_orig_lab_addr: orig_lab_address
   gisaid_sample_name_col: gisaid_name
-  cid:
-  username: ''
+  cid: ''
+  username: 'gisaid.username'
   password: ''
+  authfile_fp: '/path/to/auth/token/file'
   type: betacoronavirus
   Update_sequences_on_Genbank_auto_removal: False

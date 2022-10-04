@@ -750,9 +750,10 @@ epi_report %>%
 # Export the data for seqsender upload to sra, genbank, and gisaid
 seqsender <- s_toPlot %>%
   filter4report() %>%
-  mutate(genbank_name = paste0("SARS-CoV-2/USA/", sample_id, "/", str_sub(project_name, 1, 4))) %>%
-  mutate(sra_name = paste0("SARS-CoV-2/USA/", sample_id)) %>%
-  mutate(gisaid_name = paste0("hCoV-19/USA/", sample_id, "/", str_sub(project_name, 1, 4))) %>%
+  mutate(genbank_name = paste0("SARS-CoV-2/Human/USA/", sample_id, "/", str_sub(project_name, 1, 4))) %>%
+  mutate(sra_name = paste0("SARS-CoV-2/Human/USA/", sample_id)) %>%
+  #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/year
+  mutate(gisaid_name = paste0("hCoV-19/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sample_id), "/", str_sub(project_name, 1, 4))) %>%
   mutate(collection_date = case_when(!is.na(sample_collection_date) ~ sample_collection_date,
                                      !is.na(PHL_sample_received_date) ~ PHL_sample_received_date,
                                        TRUE ~ sequencing_date)) %>%
@@ -761,14 +762,16 @@ seqsender <- s_toPlot %>%
          zip = "19146",
          type = "betacoronavirus",
          passage = "Original") %>%
-  mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
+  mutate(host_age_bin = ifelse(is.na(host_age_bin), "Unknown", host_age_bin),
+         gisaid_age_range = ifelse(host_age_bin == "Unknown", host_age_bin, paste0("Age: ", host_age_bin)),
+         gender = ifelse(is.na(gender), "Unknown", gender),
+         collected_by = sample_collected_by) %>%
+  select(-c(isolation_source)) %>%
   rename(isolation_source = "sample_type",
          host = "host_scientific_name",
          sex = "gender",
-         collected_by = "sample_collected_by",
          orig_lab = "sample_collected_by") %>%
   mutate(gisaid_age = "Unknown",
-         gisaid_age_range = paste0("Age: ", host_age_bin),
          patient_status = "Unknown",
          instrument = paste0("Illumina ", instrument_type),
          library = "ARTIC Network Protocol V4",
@@ -778,8 +781,8 @@ seqsender <- s_toPlot %>%
          library_selection = "RT-PCR",
          library_layout = "PAIRED",
          structured_comment = "Assembly-Data") %>%
-  mutate(orig_lab_address = casewhen(sample_collected_by == "Philadelphia Department of Public Health" ~ "500 South Broad Street, Philadelphia, PA 19146 USA",
-                                     sample_collected_by == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122 USA",
+  mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "500 South Broad Street, Philadelphia, PA 19146 USA",
+                                      orig_lab == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122 USA",
                                       TRUE ~ "Unknown")) %>%
   mutate(sra_file_path_1 = here("upload", "fastq", paste0(sample_id, "_S", SampleNumber, "_L00", lane, "_R1_001.fastq.gz"))) %>%
   mutate(sra_file_path_2 = here("upload", "fastq", paste0(sample_id, "_S", SampleNumber, "_L00", lane, "_R2_001.fastq.gz"))) %>%
@@ -790,7 +793,7 @@ seqsender <- s_toPlot %>%
          collected_by, orig_lab, orig_lab_address, sra_file_path_1, sra_file_path_2)
 
 seqsender %>%
-  write_csv(seqsender_meta_fp)
+  write_tsv(seqsender_meta_fp)
 
 #double checking to see if number of samples match
 n_samples_report <- s %>%
@@ -807,21 +810,34 @@ n_samples_report <- s %>%
 
 ```{r final check}
 
-csvs_2_upload <- list.files(here("upload"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
+epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
 
-#should be 2 sets of sample_ids here (from epi report and seqsender csv)
-all_sample_ids_from_csv <- csvs_2_upload %>%
-  data_frame(FileName = .) %>%
-  group_by(FileName) %>%
-  do(read_csv(.$FileName, col_names = FALSE)) %>%
-  ungroup() %>%
-  select(FileName, X1) %>%
-  mutate(file = gsub(".*/", "", FileName)) %>%
-  filter(!grepl("sample_id|sample_name", X1)) %>%
-  mutate(X1 = gsub(".*/USA/|/.*", "", X1)) %>%
-  merge(select(s, sample_id, sample_name), by.x = "X1", by.y = "sample_name", all.x = TRUE) %>%
+epi_report <- epi_2_upload_fp %>%
+  read_csv()%>%
+  select(accession_number) %>%
+  merge(select(s, sample_id, sample_name), by.x = "accession_number", by.y = "sample_name", all.x = TRUE) %>%
   mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
-  select(-c(FileName, X1))
+  mutate(file = "epi") %>%
+  select(file, sample_id)
+
+seqsender_2_upload_fp <- list.files(here("upload", "seqsender"), pattern = ".tsv", recursive = TRUE, full.names = TRUE)
+
+
+all_sample_ids_from_seqsender <- seqsender_2_upload_fp %>%
+  read_tsv()%>%
+  select(sample_id, genbank_name, sra_name, gisaid_name) %>%
+  mutate(gisaid_name = gsub(".*PA-", "", gisaid_name)) %>%
+  mutate(gisaid_name = gsub(format(sequencing_date, "%m%d/%Y"), format(sequencing_date, "%Y%m%d"), gisaid_name)) %>%
+  pivot_longer(cols = c("genbank_name", "sra_name", "gisaid_name"), names_to = "file", values_to = "upload_id") %>%
+  mutate(upload_id = gsub(".*/USA/|/.*", "", upload_id)) %>%
+  mutate(all_sample_same = upload_id == sample_id)
+
+if (!all(all_sample_ids_from_seqsender$all_sample_same)) {
+  stop (simpleError("Some of the database names don't match the sample_id names!!"))
+}
+
+all_sample_ids_from_seqsender %<>% select(file, upload_id) %>%
+  rename(sample_id = "upload_id")
 
 #should be 1 set here
 fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
@@ -844,15 +860,16 @@ fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_co
   mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
   select(-X1)
 
-check_all <- all_sample_ids_from_csv %>%
+check_all <- epi_report %>%
+  rbind(all_sample_ids_from_seqsender) %>%
   rbind(fastq2_compare) %>%
   rbind(fasta_samples) %>%
   group_by(sample_id) %>%
   mutate(count_all_samples = n()) %>%
   ungroup()
 
-#can change this to 3 if you don't want to check the fastq files
-if (!all(check_all$count_all_samples == 4)) {
+#can change this to 5 if you don't want to check the fastq files
+if (!all(check_all$count_all_samples == 6)) {
   stop (simpleError("Some files are missing samples to upload!"))
 }
 
@@ -873,8 +890,9 @@ Red samples refer to results that will not be reported (controls or no lineage r
 Orange samples also refer to results that will not be reported (bad or mediocre NextClade QC with <80% 30X coverage) \newline
 The total number of samples with acceptable results for reporting is `r n_samples_report` out of `r nrow(s[grepl("Nasal swab", s$sample_type), ])` nasal samples sequenced. \newline
 Number of samples to send to epidemiologists: `r nrow(epi_report)` \newline
-Number of samples to upload to GISAID database: `r nrow(gisaid)` \newline
-Number of samples to upload to SRA and number of BioSamples to create: `r nrow(bio_sample)` and `r nrow(sra)`\newline
+Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "gisaid_name", "sample_id"])` \newline
+Number of samples to upload to SRA: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])` \newline
+Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])`\newline
 
 `r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge There are samples that didn't go through the pipeline correctly!}")}`
 
@@ -959,7 +977,7 @@ tryCatch(
 use_condaenv("seqsender", required = TRUE)
 import("os")
 
-test_upload <- TRUE #change this to FALSE when SRA upload and gisaid upload tests are successful
+test_upload <- TRUE #change this to FALSE when SRA upload and gisaid upload testing is successful and you want to submit the files for real
 
 if(test_upload) {
   upload_test_flag <- "--test"
@@ -975,35 +993,55 @@ if(use_proxy) {
   proxy_setting <- ""
 }
 
-### prepare files to upload
-system2("python", args = c("seqsender.py", proxy_setting, "prep",
-                           "--unique_name", project_name,
-                           "--config", seqsender_config_fp,
-                           "--metadata", seqsender_meta_fp,
-                           "--fasta", fasta_fp,
-                           upload_test_flag)
+report_or_overwrite <- TRUE #change this to FALSE to overwrite the submitted files and to resubmit
 
-### submit files to biosample and sra
-system2("python", args = c("seqsender.py", proxy_setting, "submit",
-                           "--unique_name", project_name,
-                           "--config", seqsender_config_fp,
-                           "--metadata", seqsender_meta_fp,
-                           "--fasta", fasta_fp,
-                           upload_test_flag)
-        
-### submit files to genbank
-system2("python", args = c("seqsender.py", proxy_setting, "submit",
-                           "--unique_name", project_name,
-                           "--config", seqsender_config_fp,
-                           "--metadata", seqsender_meta_fp,
-                           "--fasta", fasta_fp,
-                           upload_test_flag)
-        
-### submit files to gisaid
-system2("python", args = c("seqsender.py", proxy_setting, "gisaid",
-                           "--unique_name", project_name,
-                           "--config", seqsender_config_fp,
-                           upload_test_flag)
+if(report_or_overwrite) {
+  overwrite_setting <- ""
+} else{
+  overwrite_setting <- "--overwrite"
+}
+
+seqsender_py <- file.path(seqsender_fp, "seqsender.py")
+
+### generate files to upload; this block doesn't need to be run if you are going to submit because the next code block will also prepare the files for submission
+# cli_submit("python",
+#            seqsender_py,
+#            c(proxy_setting, "prep",
+#              "--unique_name", project_name,
+#              "--config", shQuote(seqsender_config_fp, type = "cmd"),
+#              "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
+#              "--fasta", shQuote(fasta_fp, type = "cmd"),
+#              upload_test_flag),
+#            shQuote_type = "cmd")
+
+# ### submit files to biosample and sra
+cli_submit("python",
+           seqsender_py,
+           c(proxy_setting, "submit",
+             "--unique_name", project_name,
+             "--config", shQuote(seqsender_config_fp, type = "cmd"),
+             "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
+             "--fasta", shQuote(fasta_fp, type = "cmd"),
+             upload_test_flag, overwrite_setting),
+           shQuote_type = "cmd")
+
+# ### submit files to genbank
+cli_submit("python",
+           seqsender_py,
+           c(proxy_setting, "genbank",
+             "--unique_name", project_name,
+             "--config", shQuote(seqsender_config_fp, type = "cmd"),
+             upload_test_flag, overwrite_setting),
+           shQuote_type = "cmd")
+
+# ### submit files to gisaid
+cli_submit("python",
+           seqsender_py,
+           c(proxy_setting, "gisaid",
+             "--unique_name", project_name,
+             "--config", shQuote(seqsender_config_fp, type = "cmd"),
+             upload_test_flag, overwrite_setting),
+           shQuote_type = "cmd")
 
 
 ```

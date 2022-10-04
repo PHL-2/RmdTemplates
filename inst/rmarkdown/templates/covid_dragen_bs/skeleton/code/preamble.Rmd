@@ -20,6 +20,9 @@ sequencing_folder_fp <- "Z:/MiSeq_runs/COVIDSeq"
 #full file path of the git shell executable
 sh_exe_fp <- "C:/Users/vincent.tu/AppData/Local/Programs/Git/bin/sh.exe"
 
+#full file path of where the seqsender repo was cloned
+seqsender_fp <- "C:/Users/vincent.tu/OneDrive - City of Philadelphia/git_clones/seqsender"
+
 #application to run on basespace
 app2run <- "DRAGEN COVID Lineage"
 
@@ -30,9 +33,6 @@ bs_bed_file_used <- c("nCov-2019.bed", "artic_V4_primer_scheme_NC_045512.2.bed",
 
 # minimum acceptable number of reads
 min_reads <- 1000000
-
-auth_token <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "gisaid_uploader.authtoken", full.names = TRUE)
-seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "yaml", full.names = TRUE)
 
 ```
 
@@ -249,23 +249,23 @@ fastq_folder <- dirname(list.files(here(run_folder, latest_demux), pattern = "R[
 
 ### 1 - create the basespace project
 bs_cli_create_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_1_create_project.sh")
-project_id <- bs_cli_submit(sh_exe_fp, bs_cli_create_fp, project_name)
+project_id <- cli_submit(sh_exe_fp, bs_cli_create_fp, project_name)
 write(paste0(c("project_id", project_id), collapse = ","), here("data", "bs_metadata.csv"))
 
 ### 2 - upload the fastq files
 bs_cli_upload_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_2_upload_fastq.sh")
-files_upload <- bs_cli_submit(sh_exe_fp, bs_cli_upload_fp, c(project_id,
+files_upload <- cli_submit(sh_exe_fp, bs_cli_upload_fp, c(project_id,
                                              shQuote(fastq_folder, type = "sh")))
 
 ### 3 - get the latest app version
 bs_cli_app_ver_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_3_get_app_version.sh")
-dragen_app_version <- bs_cli_submit(sh_exe_fp, bs_cli_app_ver_fp, shQuote(app2run, type = "sh"))
+dragen_app_version <- cli_submit(sh_exe_fp, bs_cli_app_ver_fp, shQuote(app2run, type = "sh"))
 write(paste0(c("dragen_app_version", dragen_app_version), collapse = ","), here("data", "bs_metadata.csv"), append = TRUE)
 
 
 ### 4 - launch the app
 bs_cli_launch_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_4_launch_app.sh")
-app_session_id <- bs_cli_submit(sh_exe_fp, bs_cli_launch_fp, c(shQuote(app2run, type = "sh"),
+app_session_id <- cli_submit(sh_exe_fp, bs_cli_launch_fp, c(shQuote(app2run, type = "sh"),
                                                               dragen_app_version,
                                                               project_id,
                                                               artic_primer_scheme))
@@ -273,16 +273,16 @@ write(paste0(c("app_session_id", app_session_id), collapse = ","), here("data", 
 
 ### 5 - wait until the app finished running
 bs_cli_await_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_5_await.sh")
-awaiting <- bs_cli_submit(sh_exe_fp, bs_cli_await_fp, app_session_id)
+awaiting <- cli_submit(sh_exe_fp, bs_cli_await_fp, app_session_id)
 
 ### 6 - download data
 bs_cli_download_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_6_download.sh")
-downloading <- bs_cli_submit(sh_exe_fp, bs_cli_download_fp, c(project_id,
+downloading <- cli_submit(sh_exe_fp, bs_cli_download_fp, c(project_id,
                                               shQuote(here("data", "processed_bs"), type = "sh")))
 
 ### 7 - get app date
 bs_cli_get_date_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_7_get_date.sh")
-app_run_date <- bs_cli_submit(sh_exe_fp, bs_cli_get_date_fp, app_session_id) %>%
+app_run_date <- cli_submit(sh_exe_fp, bs_cli_get_date_fp, app_session_id) %>%
   as.Date() %>%
   as.character()
 write(paste0(c("app_run_date", app_run_date), collapse = ","), here("data", "bs_metadata.csv"), append = TRUE)
@@ -594,8 +594,11 @@ empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) re
 
 ```{r upload filepaths}
 
+#path of seqsender config file
+seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "yaml", full.names = TRUE)
+
 epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
-seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"))
+seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.tsv", sep = "_"))
 fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
 
 ```
@@ -632,7 +635,8 @@ if(length(s_upload) > 0) {
     do(read_delim(.$FileName, col_names = FALSE, delim = "fake_delim")) %>%
     ungroup() %>%
     select(-c(FileName)) %>%
-    write_delim(file = fasta_fp, delim = "", col_names = FALSE)
+    #this na argument needs to be blank, otherwise it will put strings beginning with the first two letters in quotes
+    write_delim(file = fasta_fp, delim = "", col_names = FALSE, na = "")
   
 }
 
