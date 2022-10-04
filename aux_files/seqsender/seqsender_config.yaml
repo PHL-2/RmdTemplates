@@ -108,6 +108,7 @@ gisaid:
     covv_coverage: median_coverage
     covv_orig_lab: orig_lab
     covv_orig_lab_addr: orig_lab_address
+    covv_subm_sample_id: sample_id
   gisaid_sample_name_col: gisaid_name
   cid: ''
   username: 'gisaid.username'
