@@ -761,7 +761,7 @@ seqsender <- s_toPlot %>%
   mutate(collection_date = case_when(!is.na(sample_collection_date) ~ sample_collection_date,
                                      !is.na(PHL_sample_received_date) ~ PHL_sample_received_date,
                                        TRUE ~ sequencing_date)) %>%
-  mutate(location = "USA: PA",
+  mutate(location = "USA: Pennsylvania",
          gisaid_location = "North America/USA/Pennsylvania",
          zip = "19146",
          type = "betacoronavirus",
