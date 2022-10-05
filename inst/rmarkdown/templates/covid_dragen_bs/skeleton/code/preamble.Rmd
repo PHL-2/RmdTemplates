@@ -497,9 +497,67 @@ s_toPlot <- s %>%
 
 ```
 
+```{r upload filepaths}
+
+#path of seqsender config file
+seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "seqsender_config.yaml", full.names = TRUE)
+seqsender_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "seqsender_config_test.yaml", full.names = TRUE)
+
+epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
+seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.tsv", sep = "_"))
+fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
+
+```
+
+```{r save fastq and fasta for upload, eval = import_data}
+
+#get only the good quality samples to upload
+s_upload <- s_toPlot %>%
+  filter4report() %>%
+  select(sample_id) %>%
+  pull()
+
+if(length(s_upload) > 0) {
+
+  #find all scrubbed fastq files
+  dir.create(here("upload", "fastq"), recursive = TRUE)
+  
+  fastq_fps <- list.files(here("data", "processed_bs"), pattern = "scrubbed.*_001.fastq.gz", recursive = TRUE, full.names = TRUE)
+  
+  fastq2upload <- fastq_fps[grepl(paste0(s_upload, collapse = "|"), fastq_fps)]
+  invisible(sapply(fastq2upload, function(x) file.rename(x, to = paste0(here("upload", "fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", x)))))
+  
+  
+  #find all fasta files
+  dir.create(here("upload", "fasta"), recursive = TRUE)
+  
+  fasta_fps <- list.files(here("data", "processed_bs"), pattern = ".consensus_hard_masked_sequence.fa", recursive = TRUE, full.names = TRUE)
+  
+  fasta2upload <- fasta_fps[grepl(paste0(s_upload, collapse = "|"), fasta_fps)]
+
+  fasta2upload %>%
+    data_frame(FileName = .) %>%
+    group_by(FileName) %>%
+    do(read_delim(.$FileName, col_names = FALSE, delim = "fake_delim")) %>%
+    ungroup() %>%
+    select(-c(FileName)) %>%
+    #this na argument needs to be blank, otherwise it will put strings beginning with the first two letters in quotes
+    write_delim(file = fasta_fp, delim = "", col_names = FALSE, na = "")
+  
+}
+
+```
+
 ```{r sample type attributes}
 
-lvls <- c(levels(s$sample_type), NA)
+actual_sample_type <- c(levels(s$sample_type), NA)
+
+lvls <- c("Unassigned reads", "Empty well control", "Buffer control", "Mock DNA positive control",
+          "Nasal swab", "Nasal swab - No Variant Calls", NA)
+
+if(!all(actual_sample_type %in% lvls)) {
+  stop(simpleError(paste0("These sample types were found in the metadata sheet but not accounted for in the code: ", actual_sample_type[!actual_sample_type %in% lvls])))
+}
 
 ann_geom_values <- list()
 
@@ -589,56 +647,6 @@ who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_geom_values[["who_la
 
 empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_col = sprintf("%02d", rep(1:12, 8)), plate = 1) %>%
   mutate(plate_coord = paste0(plate, "_", plate_row, plate_col))
-
-```
-
-```{r upload filepaths}
-
-#path of seqsender config file
-seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "yaml", full.names = TRUE)
-
-epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
-seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.tsv", sep = "_"))
-fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
-
-```
-
-```{r save fastq and fasta for upload, eval = import_data}
-
-#get only the good quality samples to upload
-s_upload <- s_toPlot %>%
-  filter4report() %>%
-  select(sample_id) %>%
-  pull()
-
-if(length(s_upload) > 0) {
-
-  #find all scrubbed fastq files
-  dir.create(here("upload", "fastq"), recursive = TRUE)
-  
-  fastq_fps <- list.files(here("data", "processed_bs"), pattern = "scrubbed.*_001.fastq.gz", recursive = TRUE, full.names = TRUE)
-  
-  fastq2upload <- fastq_fps[grepl(paste0(s_upload, collapse = "|"), fastq_fps)]
-  invisible(sapply(fastq2upload, function(x) file.rename(x, to = paste0(here("upload", "fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", x)))))
-  
-  
-  #find all fasta files
-  dir.create(here("upload", "fasta"), recursive = TRUE)
-  
-  fasta_fps <- list.files(here("data", "processed_bs"), pattern = ".consensus_hard_masked_sequence.fa", recursive = TRUE, full.names = TRUE)
-  
-  fasta2upload <- fasta_fps[grepl(paste0(s_upload, collapse = "|"), fasta_fps)]
-
-  fasta2upload %>%
-    data_frame(FileName = .) %>%
-    group_by(FileName) %>%
-    do(read_delim(.$FileName, col_names = FALSE, delim = "fake_delim")) %>%
-    ungroup() %>%
-    select(-c(FileName)) %>%
-    #this na argument needs to be blank, otherwise it will put strings beginning with the first two letters in quotes
-    write_delim(file = fasta_fp, delim = "", col_names = FALSE, na = "")
-  
-}
 
 ```
 

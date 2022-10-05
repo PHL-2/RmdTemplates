@@ -992,13 +992,8 @@ tryCatch(
 use_condaenv("seqsender", required = TRUE)
 import("os")
 
-test_upload <- TRUE #change this to FALSE when SRA upload and gisaid upload testing is successful and you want to submit the files for real
-
-if(test_upload) {
-  upload_test_flag <- "--test"
-} else{
-  upload_test_flag <- ""
-}
+#do a test upload first. change this to FALSE when SRA upload and gisaid upload testing is successful and you want to submit the files for real
+test_upload <- TRUE 
 
 use_proxy <- TRUE #change this to FALSE to not use proxy
 
@@ -1026,37 +1021,67 @@ seqsender_py <- file.path(seqsender_fp, "seqsender.py")
 #              "--config", shQuote(seqsender_config_fp, type = "cmd"),
 #              "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
 #              "--fasta", shQuote(fasta_fp, type = "cmd"),
-#              upload_test_flag),
+#              "--test"),
 #            shQuote_type = "cmd")
 
-# ### submit files to biosample and sra
-cli_submit("python",
-           seqsender_py,
-           c(proxy_setting, "submit",
-             "--unique_name", project_name,
-             "--config", shQuote(seqsender_config_fp, type = "cmd"),
-             "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
-             "--fasta", shQuote(fasta_fp, type = "cmd"),
-             upload_test_flag, overwrite_setting),
-           shQuote_type = "cmd")
-
-# ### submit files to genbank
-cli_submit("python",
-           seqsender_py,
-           c(proxy_setting, "genbank",
-             "--unique_name", project_name,
-             "--config", shQuote(seqsender_config_fp, type = "cmd"),
-             upload_test_flag, overwrite_setting),
-           shQuote_type = "cmd")
-
-# ### submit files to gisaid
-cli_submit("python",
-           seqsender_py,
-           c(proxy_setting, "gisaid",
-             "--unique_name", project_name,
-             "--config", shQuote(seqsender_config_fp, type = "cmd"),
-             upload_test_flag, overwrite_setting),
-           shQuote_type = "cmd")
-
+if(test_upload) {
+    ### submit files to biosample and sra
+    cli_submit("python",
+               seqsender_py,
+               c(proxy_setting, "submit",
+                 "--unique_name", project_name,
+                 "--config", shQuote(seqsender_config_test_fp, type = "cmd"),
+                 "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
+                 "--fasta", shQuote(fasta_fp, type = "cmd"),
+                 "--test", overwrite_setting),
+               shQuote_type = "cmd")
+    
+    ### submit files to genbank
+    cli_submit("python",
+               seqsender_py,
+               c(proxy_setting, "genbank",
+                 "--unique_name", project_name,
+                 "--config", shQuote(seqsender_config_test_fp, type = "cmd"),
+                 "--test", overwrite_setting),
+               shQuote_type = "cmd")
+    
+    ### submit files to gisaid
+    cli_submit("python",
+               seqsender_py,
+               c(proxy_setting, "gisaid",
+                 "--unique_name", project_name,
+                 "--config", shQuote(seqsender_config_test_fp, type = "cmd"),
+                 "--test", overwrite_setting),
+               shQuote_type = "cmd")
+} else {
+    ### submit files to biosample and sra for real
+    cli_submit("python",
+               seqsender_py,
+               c(proxy_setting, "submit",
+                 "--unique_name", project_name,
+                 "--config", shQuote(seqsender_config_fp, type = "cmd"),
+                 "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
+                 "--fasta", shQuote(fasta_fp, type = "cmd"),
+                 overwrite_setting),
+               shQuote_type = "cmd")
+    
+    ### submit files to genbank for real
+    cli_submit("python",
+               seqsender_py,
+               c(proxy_setting, "genbank",
+                 "--unique_name", project_name,
+                 "--config", shQuote(seqsender_config_fp, type = "cmd"),
+                 overwrite_setting),
+               shQuote_type = "cmd")
+    
+    ### submit files to gisaid for real
+    cli_submit("python",
+               seqsender_py,
+               c(proxy_setting, "gisaid",
+                 "--unique_name", project_name,
+                 "--config", shQuote(seqsender_config_fp, type = "cmd"),
+                 overwrite_setting),
+               shQuote_type = "cmd")
+}
 
 ```

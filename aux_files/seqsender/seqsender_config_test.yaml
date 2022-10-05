@@ -36,7 +36,7 @@ ncbi:
   password: 'Email'
   publication_title: SARS-CoV-2 sequencing for surveillance in Philadelphia
   ncbi_ftp_path_to_submission_folders: 'submit' #the submit folder is the one watched by ncbi for submit.ready file
-  BioProject: 'PRJNA884724' #this is the BioProject accession number for real submissions
+  BioProject: 'PRJNA554557' #this is a test BioProject accession number
   BioSample_sample_name_col: genbank_name
   SRA_sample_name_col: sra_name
   Genbank_sample_name_col: genbank_name
@@ -113,6 +113,6 @@ gisaid:
   cid: ''
   username: 'gisaid.username'
   password: ''
-  authfile_fp: '/path/to/auth/token/file/gisaid_uploader.authtoken'
+  authfile_fp: '/path/to/auth/token/file/gisaid_uploader_test.authtoken' #this should be the test authtoken
   type: betacoronavirus
   Update_sequences_on_Genbank_auto_removal: False

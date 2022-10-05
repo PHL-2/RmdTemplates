@@ -174,6 +174,10 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   #remove empty columns again
   select(where(function(x) any(!is.na(x))))
 
+if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
+  stop(simpleError(paste0("Some samples have collection dates more than 2 months ago. Investigate!!")))
+}
+
 #############
 # Check sheet
 #############
@@ -198,6 +202,11 @@ for(x in c("qubit_conc_ng_ul",
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     metadata_sheet[[x]] <- NA
   }
+}
+
+#check lowest date of sample collection
+if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
+  stop(simpleError(paste0("Some samples have collection dates more than 2 months ago. Investigate!!")))
 }
 
 print('What do the sample_id look like?')
