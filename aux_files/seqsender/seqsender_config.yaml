@@ -1,29 +1,29 @@
 ---
 general:
-  submission_directory: '/parent/directory/of/Rprojects/here'
+  submission_directory: '/parent/directory/of/Rprojects' # *
   submit_Genbank: True
   submit_GISAID: True
   submit_SRA: True
   submit_BioSample: True
   joint_SRA_BioSample_submission: True
   contact_email1: 'phl.sequencing@phila.gov'
-  contact_email2: 'your.email@phila.gov'
+  contact_email2: 'your.email@phila.gov' # *
   organization_name: Philadelphia Department of Public Health
-  authorset: #this field can be expanded multiple times depending on the number of authors
-  - first: 'Your'
-    last: 'Name'
-    middle: ''
-    initials: ''
-    suffix: ''
-    title: ''
+  authorset:      # the following authorset fields can be copied and filled out for each corresponding author
+  - first: 'Your' # *
+    last: 'Name'  # *
+    middle: ''    # can leave blank
+    initials: ''  # can leave blank
+    suffix: ''    # can leave blank
+    title: ''     # can leave blank
   ncbi_org_id: ''
-  submitter_info:
-    first: 'Your'
-    last: 'Name'
-    middle: ''
-    initials: ''
-    suffix: ''
-    title: ''
+  submitter_info: # only one submitter
+    first: 'Your' # *
+    last: 'Name'  # *
+    middle: ''    # can leave blank
+    initials: ''  # can leave blank
+    suffix: ''    # can leave blank
+    title: ''     # can leave blank
   organism_name: Severe acute respiratory syndrome coronavirus 2
   metadata_file_sep: \t
   fasta_sample_name_col: sample_id
@@ -32,11 +32,11 @@ general:
 ncbi:
   hostname: ftp-private.ncbi.nlm.nih.gov
   api_url: https://submit.ncbi.nlm.nih.gov/api/2.0/files/FILE_ID/?format=attachment
-  username: 'Check' #use the FTP username and password granted to PHL2; see archived phl.sequencing@phila.gov email for details
-  password: 'Email'
+  username: 'Check' # *
+  password: 'Email' # *
   publication_title: SARS-CoV-2 sequencing for surveillance in Philadelphia
-  ncbi_ftp_path_to_submission_folders: 'submit' #the submit folder is the one watched by ncbi for submit.ready file
-  BioProject: 'PRJNA884724' #this is the BioProject accession number for real submissions
+  ncbi_ftp_path_to_submission_folders: 'submit' # the submit folder is the one watched by ncbi for submit.ready file
+  BioProject: 'PRJNA884724' # this is the BioProject accession number for real submissions
   BioSample_sample_name_col: genbank_name
   SRA_sample_name_col: sra_name
   Genbank_sample_name_col: genbank_name
@@ -111,8 +111,8 @@ gisaid:
     covv_subm_sample_id: sample_id
   gisaid_sample_name_col: gisaid_name
   cid: ''
-  username: 'gisaid.username'
+  username: 'gisaid.username' # *
   password: ''
-  authfile_fp: '/path/to/auth/token/file/gisaid_uploader.authtoken'
+  authfile_fp: '/parent/directory/of/Rprojects/aux_files/seqsender/gisaid_uploader.authtoken' # * path of the REAL auth token
   type: betacoronavirus
   Update_sequences_on_Genbank_auto_removal: False

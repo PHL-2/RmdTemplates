@@ -133,8 +133,6 @@ if(any(is.na(PHL_data$RLU))) {
 # Make sure these sheets are not uploaded to GitHub
 ###################################################################################
 
-TU_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".xlsx", full.names = TRUE)
-
 TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value") %>%
   select(sample_name, sample_collection_date, CT, priority) %>%
@@ -301,6 +299,12 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 # Write sheet to metadata folder
 ################################
 
+#does not contain PHI and accession numbers
 metadata_sheet %>%
-  select(-c(I7_Index_ID, I5_Index_ID)) %>%
-  write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, ".csv")), row.names = FALSE)
+  select(-c(I7_Index_ID, I5_Index_ID, sample_name, zip_char)) %>%
+  write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")), row.names = FALSE)
+
+#contains PHI and accession numbers
+metadata_sheet %>%
+  select(sample_id, sample_name, zip_char) %>%
+  write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")), row.names = FALSE)

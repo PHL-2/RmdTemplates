@@ -14,7 +14,7 @@ library(reticulate)
 
 ```{r versions and dates manual inputs}
 
-#file path of the parent directory holding the sequencing run folders
+#file path of the directory holding the sequencing run folders
 sequencing_folder_fp <- "Z:/MiSeq_runs/COVIDSeq"
 
 #full file path of the git shell executable
@@ -104,7 +104,8 @@ invisible(sapply(cp_list, file.copy, here("data", "demux_reads"), TRUE))
 
 ### mapping file path
 #try to get it automagically
-mapping_file_fp <- list.files(here("metadata"), pattern = ".tsv|.csv", full.names = TRUE)
+mapping_file_fp <- list.files(here("metadata"), pattern = "_metadata.csv", full.names = TRUE)
+PHI_file_fp <- list.files(here("metadata"), pattern = "_PHI.csv", full.names = TRUE)
 
 ### demultiplexing results from BaseSpace
 gen_fq_fp <- here("data", "demux_reads", "CompletedJobInfo.xml")
@@ -250,7 +251,7 @@ fastq_folder <- dirname(list.files(here(run_folder, latest_demux), pattern = "R[
 ### 1 - create the basespace project
 bs_cli_create_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_1_create_project.sh")
 project_id <- cli_submit(sh_exe_fp, bs_cli_create_fp, project_name)
-write(paste0(c("project_id", project_id), collapse = ","), here("data", "bs_metadata.csv"))
+write(paste0(c("project_id", project_id), collapse = ","), here("data", paste0(sequencing_date, "_bs_metadata.csv")))
 
 ### 2 - upload the fastq files
 bs_cli_upload_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_2_upload_fastq.sh")
@@ -260,7 +261,7 @@ files_upload <- cli_submit(sh_exe_fp, bs_cli_upload_fp, c(project_id,
 ### 3 - get the latest app version
 bs_cli_app_ver_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_3_get_app_version.sh")
 dragen_app_version <- cli_submit(sh_exe_fp, bs_cli_app_ver_fp, shQuote(app2run, type = "sh"))
-write(paste0(c("dragen_app_version", dragen_app_version), collapse = ","), here("data", "bs_metadata.csv"), append = TRUE)
+write(paste0(c("dragen_app_version", dragen_app_version), collapse = ","), here("data", paste0(sequencing_date, "_bs_metadata.csv")), append = TRUE)
 
 
 ### 4 - launch the app
@@ -269,7 +270,7 @@ app_session_id <- cli_submit(sh_exe_fp, bs_cli_launch_fp, c(shQuote(app2run, typ
                                                               dragen_app_version,
                                                               project_id,
                                                               artic_primer_scheme))
-write(paste0(c("app_session_id", app_session_id), collapse = ","), here("data", "bs_metadata.csv"), append = TRUE)
+write(paste0(c("app_session_id", app_session_id), collapse = ","), here("data", paste0(sequencing_date, "_bs_metadata.csv")), append = TRUE)
 
 ### 5 - wait until the app finished running
 bs_cli_await_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_5_await.sh")
@@ -285,7 +286,7 @@ bs_cli_get_date_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands",
 app_run_date <- cli_submit(sh_exe_fp, bs_cli_get_date_fp, app_session_id) %>%
   as.Date() %>%
   as.character()
-write(paste0(c("app_run_date", app_run_date), collapse = ","), here("data", "bs_metadata.csv"), append = TRUE)
+write(paste0(c("app_run_date", app_run_date), collapse = ","), here("data", paste0(sequencing_date, "_bs_metadata.csv")), append = TRUE)
 
 ```
 
@@ -402,7 +403,7 @@ next_clade <- nc_files_fps %>%
 
 ```{r write bs_results, eval = import_data}
 
-bs_meta <- read_csv(here("data", "bs_metadata.csv"), col_names = FALSE) %>%
+bs_meta <- read_csv(here("data", paste0(sequencing_date, "_bs_metadata.csv")), col_names = FALSE) %>%
   t() %>%
   `colnames<-`(.[1, ]) %>%
   as.data.frame() %>%
@@ -414,13 +415,13 @@ merge(coverage, kmer, by = "sample_id", all = TRUE) %>%
   mutate(date_pipeline_was_run = as.Date(bs_meta$app_run_date)) %>%
   mutate(dragen_covid_lineage_version = as.character(bs_meta$dragen_app_version)) %>%
   mutate(nextclade_version = nc_v) %>%
-  write_delim(here("data", "bs_results.tsv"), delim = "\t")
+  write_delim(here("data", paste0(sequencing_date, "_bs_results.csv")), delim = "\t")
 
 ```
 
 ```{r load data}
 
-bs_results <- read_tsv(here("data", "bs_results.tsv"))
+bs_results <- read_csv(here("data", paste0(sequencing_date, "_bs_results.csv")))
 
 pangolin_software_version <- as.character(unique(bs_results[!is.na(bs_results$pangolin_version), "pangolin_version"]))
 

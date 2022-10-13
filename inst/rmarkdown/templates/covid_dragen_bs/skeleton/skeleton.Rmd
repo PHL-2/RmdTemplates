@@ -475,7 +475,6 @@ s %>%
   filter(!is.na(median_coverage)) %>%
   droplevels() %>%
   select(sample_type, median_coverage, pct_genome_coverage_over_30x) %>%
-  mutate(median_coverage = as.numeric(gsub(".$", "", median_coverage)))  %>%
   {
   ggplot(., aes(x = median_coverage, y = pct_genome_coverage_over_30x, fill = sample_type)) +
     geom_point(shape = 21, size = 3) +
@@ -688,7 +687,6 @@ not_same_VOCs <- s %>%
 s_toPlot %>%
   select(sample_type, median_coverage, pct_genome_coverage_over_30x, nc_qc_status) %>%
   filter(!is.na(median_coverage)) %>%
-  mutate(median_coverage = as.numeric(gsub(".$", "", median_coverage))) %>%
   mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
   {
   ggplot(., aes(x = nc_qc_status, y = pct_genome_coverage_over_30x)) +
@@ -741,8 +739,15 @@ s_toPlot %>%
 dir.create(here("upload", "epi"), recursive = TRUE)
 dir.create(here("upload", "seqsender"), recursive = TRUE)
 
+if(length(PHI_file_fp) == 0) {
+  stop(simpleError("You are missing the PHI file. Check the Admin fileshare"))
+}
+
+s_phi <- read_delim(PHI_file_fp, delim = ",")
+
 # Export the data for EPI's
 epi_report <- s_toPlot %>%
+  merge(s_phi, by = "sample_id", all.x = TRUE) %>%
   filter4report() %>%
   select(sample_name, sample_collected_by, sequencing_date, lineage, scorpio_call) %>%
   arrange(sample_collected_by, sample_name) %>%
@@ -898,7 +903,7 @@ Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_seqs
 Number of samples to upload to SRA: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])` \newline
 Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])`\newline
 
-`r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge There are samples that didn't go through the pipeline correctly!}")}`
+`r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge There are samples that didn't go through the pipeline correctly!! Just delete the project on BaseSpace and rerun. Or create a new RStudio project with a different name}")}`
 
 ```{r trimmed reads, echo=FALSE}
 
