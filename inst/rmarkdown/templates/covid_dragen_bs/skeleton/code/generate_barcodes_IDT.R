@@ -125,7 +125,7 @@ PHL_data <- read_excel(PHL_fp, skip = 1, sheet = "PHL") %>%
   select(-c(age, DOB))
 
 if(any(is.na(PHL_data$RLU))) {
-  stop(simpleError("Some PHL samples have missing RLU values. Please fix"))
+  stop(simpleError("Some PHL samples have missing RLU values. Double check these samples in Harvest"))
 }
 
 ###################################################################################

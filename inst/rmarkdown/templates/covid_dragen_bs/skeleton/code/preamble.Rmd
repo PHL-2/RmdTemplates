@@ -415,7 +415,7 @@ merge(coverage, kmer, by = "sample_id", all = TRUE) %>%
   mutate(date_pipeline_was_run = as.Date(bs_meta$app_run_date)) %>%
   mutate(dragen_covid_lineage_version = as.character(bs_meta$dragen_app_version)) %>%
   mutate(nextclade_version = nc_v) %>%
-  write_delim(here("data", paste0(sequencing_date, "_bs_results.csv")), delim = "\t")
+  write_delim(here("data", paste0(sequencing_date, "_bs_results.csv")), delim = ",")
 
 ```
 
@@ -591,11 +591,11 @@ for(variant in sort(unique(s$scorpio_call)[!is.na(unique(s$scorpio_call))])) {
     #is_designated means that the sample was assigned to a reference strain exactly using PANGO algorithm (decision tree) rather than PUSHER
     #the note section here for PUSHER will be 'Assigned from designation hash.' so its useless
     #nextclade VOC shouldn't be too different from scorpio VOC
-    select(note, Nextclade_pango, scorpio_lineage) %>%
+    select(lineage, note, Nextclade_pango, scorpio_lineage) %>%
     mutate(note = gsub("^.*: |; scorpio.*", "", note)) %>%
     mutate(note = ifelse(note == "Assigned from designation hash.", NA, note)) %>%
     separate(note, into = c("pusher_variant1", "pusher_variant2"), sep = " ", extra = "merge") %>%
-    pivot_longer(cols = c("pusher_variant1", "pusher_variant2", "Nextclade_pango", "scorpio_lineage"), names_to = "variant_num", values_to = "variants") %>%
+    pivot_longer(cols = c("lineage", "pusher_variant1", "pusher_variant2", "Nextclade_pango", "scorpio_lineage"), names_to = "variant_num", values_to = "variants") %>%
     mutate(variants = gsub("\\(.*", "", variants)) %>%
     select(variants) %>%
     filter(!is.na(variants)) %>%

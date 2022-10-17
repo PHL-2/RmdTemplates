@@ -822,9 +822,9 @@ n_samples_report <- s %>%
 epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
 
 epi_report <- epi_2_upload_fp %>%
-  read_csv()%>%
+  read_csv() %>%
   select(accession_number) %>%
-  merge(select(s, sample_id, sample_name), by.x = "accession_number", by.y = "sample_name", all.x = TRUE) %>%
+  merge(select(s_phi, sample_id, sample_name), by.x = "accession_number", by.y = "sample_name", all.x = TRUE) %>%
   mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
   mutate(file = "epi") %>%
   select(file, sample_id)
