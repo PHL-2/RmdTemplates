@@ -67,6 +67,7 @@ genbank_src_metadata:
     host: host
     country: location
     isolation-source: isolation_source
+    note: genbank_note
 genbank_cmt_metadata:
   create_cmt: True
   column_names:
@@ -85,6 +86,7 @@ BioSample_attributes:
     host_sex: sex
     host_age: host_age_bin
     gisaid_virus_name: gisaid_name
+    gisaid_accession: gisaid_accession
 SRA_attributes:
   column_names:
     library_strategy: library_strategy

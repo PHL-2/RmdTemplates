@@ -759,13 +759,16 @@ epi_report %>%
 # Export the data for seqsender upload to sra, genbank, and gisaid
 seqsender <- s_toPlot %>%
   filter4report() %>%
-  mutate(genbank_name = paste0("SARS-CoV-2/Human/USA/", sample_id, "/", str_sub(project_name, 1, 4))) %>%
-  mutate(sra_name = paste0("SARS-CoV-2/Human/USA/", sample_id)) %>%
-  #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/year
-  mutate(gisaid_name = paste0("hCoV-19/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sample_id), "/", str_sub(project_name, 1, 4))) %>%
   mutate(collection_date = case_when(!is.na(sample_collection_date) ~ sample_collection_date,
                                      !is.na(PHL_sample_received_date) ~ PHL_sample_received_date,
-                                       TRUE ~ sequencing_date)) %>%
+                                     TRUE ~ sequencing_date)) %>%
+  #the number at the end of the name for these samples must be the collection year, or the databases will complain
+  mutate(collection_year = format(collection_date, format = "%Y")) %>%
+  mutate(genbank_name = paste0("SARS-CoV-2/Human/USA/", sample_id, "/", collection_year)) %>%
+  mutate(sra_name = paste0("SARS-CoV-2/Human/USA/", sample_id)) %>%
+  #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/collection year. This name may conflict with samples collected/sequenced in different years
+  mutate(gisaid_name = paste0("hCoV-19/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sample_id), "/", collection_year)) %>%
+
   mutate(location = "USA: Pennsylvania",
          gisaid_location = "North America/USA/Pennsylvania",
          zip = "19146",
@@ -836,6 +839,8 @@ all_sample_ids_from_seqsender <- seqsender_2_upload_fp %>%
   read_tsv()%>%
   select(sample_id, genbank_name, sra_name, gisaid_name) %>%
   mutate(gisaid_name = gsub(".*PA-", "", gisaid_name)) %>%
+  #changing the year at the end of the gisaid name back to the sequencing year
+  mutate(gisaid_name = gsub("/.*$", paste0("/", str_sub(project_name, 1, 4)), gisaid_name)) %>%
   mutate(gisaid_name = gsub(format(sequencing_date, "%m%d/%Y"), format(sequencing_date, "%Y%m%d"), gisaid_name)) %>%
   pivot_longer(cols = c("genbank_name", "sra_name", "gisaid_name"), names_to = "file", values_to = "upload_id") %>%
   mutate(upload_id = gsub(".*/USA/|/.*", "", upload_id)) %>%
@@ -991,7 +996,7 @@ tryCatch(
 
 ```
 
-```{r upload data if results look good, eval=FALSE, include=FALSE}
+```{r upload data if results look good, eval=FALSE, include=FALSE, message=FALSE}
 
 #intialize data_upload conda env
 use_condaenv("seqsender", required = TRUE)
@@ -1018,18 +1023,46 @@ if(report_or_overwrite) {
 
 seqsender_py <- file.path(seqsender_fp, "seqsender.py")
 
-### generate files to upload; this block doesn't need to be run if you are going to submit because the next code block will also prepare the files for submission
-# cli_submit("python",
-#            seqsender_py,
-#            c(proxy_setting, "prep",
-#              "--unique_name", project_name,
-#              "--config", shQuote(seqsender_config_fp, type = "cmd"),
-#              "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
-#              "--fasta", shQuote(fasta_fp, type = "cmd"),
-#              "--test"),
-#            shQuote_type = "cmd")
+### generate files to upload
+upload_files_created <- cli_submit("python",
+                                   seqsender_py,
+                                   c(proxy_setting, "prep",
+                                     "--unique_name", project_name,
+                                     "--config", shQuote(seqsender_config_fp, type = "cmd"),
+                                     "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
+                                     "--fasta", shQuote(fasta_fp, type = "cmd")),
+                                   shQuote_type = "cmd")
+
+file_create_success_msg <- c(paste0("Processing ", project_name, "."),
+                             "Processing Files.", 
+                             "Creating GISAID files.",
+                             "Creating Genbank files.",
+                             "Creating BioSample/SRA files.",
+                             paste0(project_name, " complete."))
+
+if(!all(file_create_success_msg %in% upload_files_created)) {
+  stop(simpleError("Seqsender failed in created some of the upload files!"))
+}
+
+gisaid_upload_success_msg <- c("Submitting now to gisaid.",
+                               "Waiting for file to write.",
+                               "No failed sequences.",
+                               "Cleaning up files.")
 
 if(test_upload) {
+    ### submit files to gisaid
+    gisaid_uploaded <- cli_submit("python",
+                                  seqsender_py,
+                                  c(proxy_setting, "gisaid",
+                                    "--unique_name", project_name,
+                                    "--config", shQuote(seqsender_config_test_fp, type = "cmd"),
+                                    "--test", overwrite_setting),
+                                  shQuote_type = "cmd")
+    
+    if(!all(gisaid_upload_success_msg %in% gisaid_uploaded)) {
+      stop(simpleError("Something went wrong! GISAID upload failed. Maybe there are duplicate entries already? If so, rename the GISAID name and resubmit"))
+    }
+  
     ### submit files to biosample and sra
     cli_submit("python",
                seqsender_py,
@@ -1050,15 +1083,55 @@ if(test_upload) {
                  "--test", overwrite_setting),
                shQuote_type = "cmd")
     
-    ### submit files to gisaid
-    cli_submit("python",
-               seqsender_py,
-               c(proxy_setting, "gisaid",
-                 "--unique_name", project_name,
-                 "--config", shQuote(seqsender_config_test_fp, type = "cmd"),
-                 "--test", overwrite_setting),
-               shQuote_type = "cmd")
 } else {
+  
+    ### submit files to gisaid for real
+    gisaid_uploaded <- cli_submit("python",
+                                  seqsender_py,
+                                  c(proxy_setting, "gisaid",
+                                    "--unique_name", project_name,
+                                    "--config", shQuote(seqsender_config_fp, type = "cmd"),
+                                    overwrite_setting),
+                                  shQuote_type = "cmd")
+    
+    if(!all(gisaid_upload_success_msg %in% gisaid_uploaded)) {
+      stop(simpleError("Something went wrong! GISAID upload failed. Maybe there are duplicate entries already? If so, rename the GISAID name and resubmit"))
+    }
+    
+    #for the real submission, include the GISAID Accession number for the SRA and GenBank submissions
+    read_gisaid_accessions <- read_csv(here("gisaid", paste0(project_name, ".log")), col_names = FALSE) %>%
+      filter(grepl("msg: ", X1)) %>%
+      mutate(X1 = gsub("msg: ", "", X1))
+    
+    gisaid_number_submitted <- read_gisaid_accessions %>%
+      filter(grepl("submissions uploaded: ", X1)) %>%
+      mutate(X1 = gsub("submissions uploaded: ", "", X1)) %>%
+      pull() %>%
+      as.numeric()
+    
+    gisaid_number_failed <- read_gisaid_accessions %>%
+      filter(grepl("submissions failed: ", X1)) %>%
+      mutate(X1 = gsub("submissions failed: ", "", X1)) %>%
+      pull() %>%
+      as.numeric()
+    
+    if(gisaid_number_submitted != nrow(seqsender) & gisaid_number_failed != 0) {
+      stop(simpleError("Number of GISAID samples uploaded do not match seqsender numbers or number of samples failed exceed 0."))
+    }
+    
+    gisaid_accessions <- read_gisaid_accessions %>%
+      filter(!grepl("submissions uploaded: |submissions failed: ", X1)) %>%
+      separate(X1, into = c("gisaid_name", "gisaid_accession"), sep = "; ", extra = "merge") %>%
+      mutate(genbank_note = paste0("GISAID virus name: ", gisaid_name, "; GISAID accession: ", gisaid_accession))
+    
+    #rewrite the seqsender file with the gisaid accession numbers and remove the old prepared files
+    seqsender %>%
+      merge(gisaid_accessions, by = "gisaid_name", all.x = TRUE) %>%
+      write_tsv(seqsender_meta_fp)
+    
+    file.remove(c(list.files(here("biosample_sra"), full.names = TRUE),
+                  list.files(here("genbank"), full.names = TRUE)))
+  
     ### submit files to biosample and sra for real
     cli_submit("python",
                seqsender_py,
@@ -1079,14 +1152,7 @@ if(test_upload) {
                  overwrite_setting),
                shQuote_type = "cmd")
     
-    ### submit files to gisaid for real
-    cli_submit("python",
-               seqsender_py,
-               c(proxy_setting, "gisaid",
-                 "--unique_name", project_name,
-                 "--config", shQuote(seqsender_config_fp, type = "cmd"),
-                 overwrite_setting),
-               shQuote_type = "cmd")
+
 }
 
 ```
