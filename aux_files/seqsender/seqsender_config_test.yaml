@@ -117,4 +117,4 @@ gisaid:
   password: ''
   authfile_fp: '/parent/directory/of/Rprojects/aux_files/seqsender/gisaid_uploader_test.authtoken' # * path of the TEST token
   type: betacoronavirus
-  Update_sequences_on_Genbank_auto_removal: False
+  Update_sequences_on_Genbank_auto_removal: False # updates GISAID submission based on auto removal of GenBank samples. GenBank samples are removed based on these errors: https://www.ncbi.nlm.nih.gov/genbank/sequencecheck/virus/

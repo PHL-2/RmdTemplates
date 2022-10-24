@@ -539,12 +539,13 @@ s_toPlot %>%
   group_by(sample_type) %>%
   mutate(fraction = 1/n()) %>%
   ungroup() %>%
-  mutate(variants = fct_lump(lineage, 10, w = fraction)) %>% 
+  mutate(variants = fct_lump(lineage, 20, w = fraction)) %>% 
   select(-lineage) %>%
   group_by(sample_type, variants) %>%
   summarize(props = sum(fraction)) %>%
   ungroup() %>%
   mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
+  droplevels() %>%
   {
   ggplot(., aes(x=sample_type, y=props, fill=variants)) +
     geom_bar(stat="identity", position = position_fill(reverse = TRUE)) +
@@ -594,6 +595,7 @@ s_toPlot %>%
   mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
   mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
   mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = FALSE)]))) %>%
+  droplevels() %>%
   {
   ggplot(., aes(x=props, y=sample_id, fill=variants)) +
     geom_bar(stat="identity", position = position_fill(reverse = TRUE)) +
@@ -637,6 +639,7 @@ s_toPlot %>%
   mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
   mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
   mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = FALSE)]))) %>%
+  droplevels() %>%
   {
   ggplot(., aes(x=software, y=sample_id, fill=variants, label=uniq)) +
     geom_tile(stat="identity") +

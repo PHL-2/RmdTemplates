@@ -94,6 +94,7 @@ RLU_data <- read_csv(RLU_fp) %>%
                             gender == "F" ~ "Female",
                             TRUE ~ "Other")) %>%
   mutate(DOB = as.Date(DOB, format = "%m/%d/%Y"), sample_collection_date = as.Date(sample_collection_date, format = "%m/%d/%Y")) %>%
+  mutate(age = ifelse(grepl("mo", age), 0, age)) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #filter empty columns
@@ -126,6 +127,10 @@ PHL_data <- read_excel(PHL_fp, skip = 1, sheet = "PHL") %>%
 
 if(any(is.na(PHL_data$RLU))) {
   stop(simpleError("Some PHL samples have missing RLU values. Double check these samples in Harvest"))
+}
+
+if(any(is.na(PHL_data[PHL_data$sample_name %in% RLU_data$sample_name, "RLU"]))) {
+  stop(simpleError("Serious error! Sample name has an RLU value but did not get added to PHL_data"))
 }
 
 ###################################################################################
