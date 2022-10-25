@@ -166,7 +166,7 @@ samp_sh_header <- data.frame(X1 = unlist(sample_sheet$Header)) %>%
   mutate(X1 = gsub(".*,", "", X1)) %>%
   pivot_wider(names_from = "col_names", values_from = "X1")
 
-samp_sh_check <- samp_sh_s <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE) %>%
+samp_sh_check <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE) %>%
   #split each line into columns using row 1 as the column names
   separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
   slice(-1) %>%
@@ -391,7 +391,7 @@ nc_files_fps <- list.files(here("data", "processed_bs"), pattern = ".nextclade.t
 next_clade <- nc_files_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
-  do(read_delim(.$FileName, col_names = TRUE, col_types = cols(missing = col_character()))) %>%
+  do(read_delim(.$FileName, col_names = TRUE, col_types = cols(missing = col_character(), clade_nextstrain = col_character()))) %>%
   ungroup() %>%
   select(-c(FileName)) %>%
   rename(nc_qc_status = "qc.overallStatus", sample_id = "seqName") %>%

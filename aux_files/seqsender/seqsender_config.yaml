@@ -45,7 +45,7 @@ ncbi:
   Genbank_organization_type: center
   Genbank_organization_role: owner
   Genbank_spuid_namespace: ncbi-sarscov2-genbank
-  Genbank_auto_remove_sequences_that_fail_qc: True
+  Genbank_auto_remove_sequences_that_fail_qc: True # keep this as True. GenBank will remove samples based on these errors: https://www.ncbi.nlm.nih.gov/genbank/sequencecheck/virus/. If False, bad samples will cause submission to fail
   Genbank_wizard: BankIt_SARSCoV2_api
   citation_address:
     affil: 'Philadelphia Department of Public Health'
@@ -117,4 +117,4 @@ gisaid:
   password: ''
   authfile_fp: '/parent/directory/of/Rprojects/aux_files/seqsender/gisaid_uploader.authtoken' # * path of the REAL auth token
   type: betacoronavirus
-  Update_sequences_on_Genbank_auto_removal: False # updates GISAID submission based on auto removal of GenBank samples. GenBank samples are removed based on these errors: https://www.ncbi.nlm.nih.gov/genbank/sequencecheck/virus/
+  Update_sequences_on_Genbank_auto_removal: False # update GISAID submission based on auto removal of GenBank samples. Keep this as False since we are uploading to GISAID before GenBank
