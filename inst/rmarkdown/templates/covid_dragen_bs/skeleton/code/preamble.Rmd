@@ -441,9 +441,9 @@ dragen_covid_lineage_version <- unique(bs_results$dragen_covid_lineage_version)
 
 ```{r sample_sheet_import and columns, echo=FALSE}
 
-ctrl_regex <- "EBneg|Extract|Vibriolambda|Blank|MockDNA|DNAfreewater|Geneblock|Emptywell|Control|POS|NEG|PC|NC"
+ctrl_regex <- "EBneg|Extract|Vibriolambda|Blank|MockDNA|DNAfreewater|Geneblock|Emptywell|Reagent|Control|POS|NEG|PC|NC"
 
-sample_type_fct <- c("Unassigned reads", "Empty well control", "Buffer control", "Mock DNA positive control")
+sample_type_fct <- c("Unassigned reads", "Water control", "Reagent control", "Mock DNA positive control")
 
 s_meta <- read_delim(mapping_file_fp, delim = ",")
 
@@ -553,7 +553,7 @@ if(length(s_upload) > 0) {
 
 actual_sample_type <- c(levels(s$sample_type), NA)
 
-lvls <- c("Unassigned reads", "Empty well control", "Buffer control", "Mock DNA positive control",
+lvls <- c("Unassigned reads", "Water control", "Reagent control", "Mock DNA positive control",
           "Nasal swab", "Nasal swab - No Variant Calls", NA)
 
 if(!all(actual_sample_type %in% lvls)) {
