@@ -778,7 +778,6 @@ seqsender <- s_toPlot %>%
          type = "betacoronavirus",
          passage = "Original") %>%
   mutate(host_age_bin = ifelse(is.na(host_age_bin), "Unknown", host_age_bin),
-         gisaid_age_range = ifelse(host_age_bin == "Unknown", host_age_bin, paste0("Age: ", host_age_bin)),
          gender = ifelse(is.na(gender), "Unknown", gender),
          collected_by = sample_collected_by) %>%
   select(-c(isolation_source)) %>%
@@ -786,8 +785,7 @@ seqsender <- s_toPlot %>%
          host = "host_scientific_name",
          sex = "gender",
          orig_lab = "sample_collected_by") %>%
-  mutate(gisaid_age = "Unknown",
-         patient_status = "Unknown",
+  mutate(patient_status = "Unknown",
          instrument = paste0("Illumina ", instrument_type),
          library = "ARTIC Network Protocol V4",
          assembly_method = paste0("DRAGEN COVID Lineage ", dragen_covid_lineage_version),
@@ -804,7 +802,7 @@ seqsender <- s_toPlot %>%
   mutate(sra_file_path_2 = here("upload", "fastq", paste0(sample_id, "_S", SampleNumber, "_L00", lane, "_R2_001.fastq.gz"))) %>%
   mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC V4 primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
   select(sample_id, genbank_name, sra_name, gisaid_name, gisaid_accession, collection_date, location, gisaid_location, zip, type, passage, organism,
-         isolation_source, host, host_disease, host_age_bin, gisaid_age, gisaid_age_range, sex, patient_status, 
+         isolation_source, host, host_disease, host_age_bin, sex, patient_status, 
          instrument, library, assembly_method, library_strategy, library_source, library_selection, library_layout, structured_comment, median_coverage, genbank_note, design_description,
          collected_by, orig_lab, orig_lab_address, sra_file_path_1, sra_file_path_2)
 
@@ -1102,6 +1100,7 @@ gisaid_accessions <- read_gisaid_accessions %>%
 
 #rewrite the seqsender file with the gisaid accession numbers and remove the old prepared files
 seqsender %>%
+  select(-c(gisaid_accession, genbank_note)) %>%
   merge(gisaid_accessions, by = "gisaid_name", all.x = TRUE) %>%
   write_tsv(seqsender_meta_fp)
 

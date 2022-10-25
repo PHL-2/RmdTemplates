@@ -100,9 +100,8 @@ gisaid:
     covv_passage: passage
     covv_location: gisaid_location
     covv_host: host
-    covv_add_host_info: gisaid_age_range
     covv_gender: sex
-    covv_patient_age: gisaid_age
+    covv_patient_age: host_age_bin
     covv_patient_status: patient_status
     covv_specimen: isolation_source
     covv_seq_technology: instrument
