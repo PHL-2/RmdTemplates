@@ -125,12 +125,12 @@ PHL_data <- read_excel(PHL_fp, skip = 1, sheet = "PHL") %>%
   #don't include age because it may be PHI if included with zipcode and gender
   select(-c(age, DOB))
 
-if(any(is.na(PHL_data$RLU))) {
-  stop(simpleError("Some PHL samples have missing RLU values. Double check these samples in Harvest"))
-}
-
 if(any(is.na(PHL_data[PHL_data$sample_name %in% RLU_data$sample_name, "RLU"]))) {
   stop(simpleError("Serious error! Sample name has an RLU value but did not get added to PHL_data"))
+}
+
+if(any(is.na(PHL_data$RLU))) {
+  stop(simpleError("Some PHL samples have missing RLU values. Double check these samples in Harvest"))
 }
 
 ###################################################################################
