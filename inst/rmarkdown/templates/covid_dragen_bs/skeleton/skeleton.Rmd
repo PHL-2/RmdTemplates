@@ -1040,7 +1040,7 @@ file_create_success_msg <- c(paste0("Processing ", project_name, "."),
                              "Creating BioSample/SRA files.",
                              paste0(project_name, " complete."))
 
-### generate files to upload
+### generate GISAID files to upload. This will also generate test submissions for SRA and BioSample but they will be rewritten with the submit command
 upload_files_created <- cli_submit("python",
                                    seqsender_py,
                                    c(proxy_flag, "prep",
@@ -1090,13 +1090,20 @@ gisaid_number_failed <- read_gisaid_accessions %>%
   as.numeric()
 
 if(gisaid_number_submitted != nrow(seqsender) & gisaid_number_failed != 0) {
+  
   stop(simpleError("Some GISAID samples failed to upload."))
+  
+} else {
+  
+  gisaid_accessions <- read_gisaid_accessions %>%
+    filter(!grepl("submissions uploaded: |submissions failed: ", X1)) %>%
+    separate(X1, into = c("gisaid_name", "gisaid_accession"), sep = "; ", extra = "merge") %>%
+    mutate(genbank_note = paste0("GISAID virus name: ", gisaid_name, "; GISAID accession: ", gisaid_accession))
+  
+  gisaid_accessions %>%
+    write_csv(here("gisaid", paste0(project_name, "_gisaid_accessions.csv")))
+  
 }
-
-gisaid_accessions <- read_gisaid_accessions %>%
-  filter(!grepl("submissions uploaded: |submissions failed: ", X1)) %>%
-  separate(X1, into = c("gisaid_name", "gisaid_accession"), sep = "; ", extra = "merge") %>%
-  mutate(genbank_note = paste0("GISAID virus name: ", gisaid_name, "; GISAID accession: ", gisaid_accession))
 
 #rewrite the seqsender file with the gisaid accession numbers and remove the old prepared files
 seqsender %>%
