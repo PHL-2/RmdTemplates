@@ -668,6 +668,10 @@ has_pos_ctrl <- s %>%
   select(is_pos) %>%
   pull()
 
+if(length(has_pos_ctrl) == 0) {
+  has_pos_ctrl <- FALSE
+}
+
 not_same_VOCs <- s %>%
   mutate(compare = nc_VOC != scorpio_call) %>%
   filter(!is.na(compare)) %>%
@@ -1093,12 +1097,14 @@ if(gisaid_number_submitted != nrow(seqsender) & gisaid_number_failed != 0) {
   
   stop(simpleError("Some GISAID samples failed to upload."))
   
-} else {
+}
   
-  gisaid_accessions <- read_gisaid_accessions %>%
-    filter(!grepl("submissions uploaded: |submissions failed: ", X1)) %>%
-    separate(X1, into = c("gisaid_name", "gisaid_accession"), sep = "; ", extra = "merge") %>%
-    mutate(genbank_note = paste0("GISAID virus name: ", gisaid_name, "; GISAID accession: ", gisaid_accession))
+gisaid_accessions <- read_gisaid_accessions %>%
+  filter(!grepl("submissions uploaded: |submissions failed: ", X1)) %>%
+  separate(X1, into = c("gisaid_name", "gisaid_accession"), sep = "; ", extra = "merge") %>%
+  mutate(genbank_note = paste0("GISAID virus name: ", gisaid_name, "; GISAID accession: ", gisaid_accession))
+  
+if(!test_upload) {
   
   gisaid_accessions %>%
     write_csv(here("gisaid", paste0(project_name, "_gisaid_accessions.csv")))
