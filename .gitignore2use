@@ -3,8 +3,8 @@
 .RData
 .Ruserdata
 processed_bs/
-metadata/*
-!metadata/*_COVIDSeq_metadata.csv
+*/metadata/*
+!*/metadata/*_COVIDSeq_metadata.csv
 epi/
 fastq/
 aux_files/seqsender/
