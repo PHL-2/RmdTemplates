@@ -181,6 +181,15 @@ if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sampl
   stop(simpleError(paste0("Some samples have collection dates more than 2 months ago. Investigate!!")))
 }
 
+missing_metadata_samples <- metadata_sheet %>%
+  filter(is.na(sample_collection_date)) %>%
+  filter(!grepl("control", sample_type)) %>%
+  select(sample_name)
+
+if(nrow(missing_metadata_samples) > 0){
+  stop(simpleError(paste0("These non-control samples are in the sample sheet but are missing metadata from the epidemiologists!! ", paste0(pull(missing_metadata_samples), collapse = ", "))))
+}
+
 #############
 # Check sheet
 #############
@@ -258,6 +267,30 @@ print(any(grepl(" |_|\\.", metadata_sheet$sample_id)))
 if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
   stop(simpleError("There are spaces, underscores, or periods in the Sample IDs! Please fix"))
 }
+
+######################################################################################
+# Samples in epi metadata but we don't have the samples or they could not be extracted
+######################################################################################
+
+print('')
+print('These samples were found in the epidemiologists metadata sheet but not in our sample sheet. Check the email to see if these samples could not be located by the receiving department')
+print('Enter these samples on line 281 in the generate_barcodes_IDT.R to remove them from this warning')
+print('Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check')
+
+# add the sample names that could not be retrieved from our receiving department as a string
+receiving_samples_not_found <- '' %>%
+  str_split(pattern = ", ") %>%
+  unlist()
+
+epi_sample_not_found <- PHL_data %>%
+  select(sample_name) %>%
+  rbind(select(TU_data, sample_name)) %>%
+  filter(!sample_name %in% metadata_sheet$sample_name) %>%
+  filter(!sample_name %in% receiving_samples_not_found) %>%
+  pull() %>%
+  str_sort()
+
+print(paste0(epi_sample_not_found, collapse = ", "))
 
 ####################
 # Write sample sheet
