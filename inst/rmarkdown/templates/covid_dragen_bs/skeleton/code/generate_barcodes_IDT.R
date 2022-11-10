@@ -136,18 +136,27 @@ if(any(is.na(PHL_data[PHL_data$sample_name %in% RLU_data$sample_name, "RLU"]))) 
 
 TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value") %>%
-  select(sample_name, sample_collection_date, CT, priority) %>%
+  select(sample_name, sample_collection_date, CT, age, gender, zip_char, priority) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x)))) %>%
   select(!matches("^\\.\\.\\.")) %>%
   #use the first day of the week (starting on Monday) as the sample_collection_date
-  mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week")))
+  mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week"))) %>%
+  mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:6, 9)), Inf),
+                            labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
+                            include.lowest = TRUE)) %>%
+  #don't include age because it may be PHI if included with zipcode and gender
+  select(-age)
 
 ###########################
 # Merge all metadata sheets
 ###########################
+
+PHL_TU_merge <- PHL_data %>%
+  bind_rows(TU_data) %>%
+  mutate(sample_collection_date = as.character(sample_collection_date))
 
 cols2merge <- c("sample_name", "plate", "plate_row", "plate_col", "plate_coord")
 
@@ -155,14 +164,10 @@ cols2merge <- c("sample_name", "plate", "plate_row", "plate_col", "plate_coord")
 metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   #add in barcodes
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
-  #merge the metadata from epi's
-  merge(PHL_data, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
-  #merge the RLU data
-  merge(TU_data, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
-  mutate(priority = ifelse(is.na(priority.x), priority.y, priority.x)) %>%
-  mutate(sample_collection_date = ifelse(is.na(sample_collection_date.x), as.character(sample_collection_date.y), as.character(sample_collection_date.x))) %>%
+  #merge the metadata
+  merge(PHL_TU_merge, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
   mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", idt_plate_coord, "-", gsub("-", "", sequencing_date)))) %>%
-  select(sample_id, everything(), -c(priority.x, priority.y, sample_collection_date.x, sample_collection_date.y)) %>%
+  select(sample_id, everything()) %>%
   arrange(plate, plate_col, plate_row) %>%
   mutate(sequencing_date = sequencing_date) %>%
   mutate(prj_descrip = prj_description) %>%
