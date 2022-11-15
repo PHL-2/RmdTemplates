@@ -719,18 +719,20 @@ Percentages of variants only in samples that meet criteria (Pangolin results)
 
 s_toPlot %>%
   filter4report() %>%
+  group_by(PHL_sample_received_date) %>%
   mutate(all_samples_n = n()) %>%
-  select(lineage, scorpio_call, sample_type, all_samples_n) %>%
-  group_by(sample_type, scorpio_call, lineage) %>%
+  ungroup() %>%
+  select(PHL_sample_received_date, lineage, scorpio_call, sample_type, all_samples_n) %>%
+  group_by(PHL_sample_received_date, sample_type, scorpio_call, lineage) %>%
   summarise(variant_percentages = n()/all_samples_n*100) %>%
   mutate(variant_percentages_text = paste0(round(variant_percentages, digits = 2), "\\%")) %>%
   ungroup() %>%
-  arrange(-variant_percentages) %>%
+  arrange(PHL_sample_received_date, -variant_percentages) %>%
   select(-variant_percentages) %>%
   unique() %>%
   { if(use_kable)
       kable(., "latex", longtable = F, digits=2, booktabs=T, escape=F,
-            col.names = linebreak(c("Sample Type", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
+            col.names = linebreak(c("Received\ndate", "Sample Type", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
       kable_styling(latex_options = c("scale_down", "repeat_header", "HOLD_position")) %>%
       row_spec(0, bold = T, color="#7C0A02") %>%
       collapse_rows(columns = 1:2, valign = "top")

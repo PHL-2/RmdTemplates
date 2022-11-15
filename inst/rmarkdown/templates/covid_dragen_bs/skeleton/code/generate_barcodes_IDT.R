@@ -135,7 +135,7 @@ if(any(is.na(PHL_data[PHL_data$sample_name %in% RLU_data$sample_name, "RLU"]))) 
 ###################################################################################
 
 TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
-  rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value") %>%
+  rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value", gender = "GENDER") %>%
   select(sample_name, sample_collection_date, CT, age, gender, zip_char, priority) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
@@ -186,9 +186,9 @@ if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sampl
 # Samples in epi metadata but we don't have the samples or they could not be extracted
 ######################################################################################
 
-warning('These samples were found in the epidemiologists metadata sheet but not in our sample sheet. Check the email to see if these samples could not be located by the receiving department')
-warning('Enter these samples on line 189 in the generate_barcodes_IDT.R to remove them from this warning')
-warning('Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check')
+message("These samples were found in the epidemiologists metadata sheet but not in our sample sheet. Check the email to see if these samples could not be located by the receiving department")
+message("Enter these samples on line 194 in the generate_barcodes_IDT.R to remove them from this message")
+message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check")
 
 # add the sample names that could not be retrieved from our receiving department as a string
 receiving_samples_not_found <- '' %>%
@@ -203,7 +203,7 @@ epi_sample_not_found <- PHL_data %>%
   pull() %>%
   str_sort()
 
-warning(paste0(epi_sample_not_found, collapse = ", "))
+message(paste0(epi_sample_not_found, collapse = ", "))
 
 missing_metadata_samples <- metadata_sheet %>%
   filter(!grepl("control", sample_type)) %>%
