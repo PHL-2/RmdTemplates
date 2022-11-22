@@ -732,7 +732,7 @@ s_toPlot %>%
   unique() %>%
   { if(use_kable)
       kable(., "latex", longtable = F, digits=2, booktabs=T, escape=F,
-            col.names = linebreak(c("Received\ndate", "Sample Type", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
+            col.names = linebreak(c("Sample\nreceived", "Sample Type", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
       kable_styling(latex_options = c("scale_down", "repeat_header", "HOLD_position")) %>%
       row_spec(0, bold = T, color="#7C0A02") %>%
       collapse_rows(columns = 1:2, valign = "top")

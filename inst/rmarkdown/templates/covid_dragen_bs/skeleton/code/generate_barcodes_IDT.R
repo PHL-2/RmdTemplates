@@ -136,19 +136,20 @@ if(any(is.na(PHL_data[PHL_data$sample_name %in% RLU_data$sample_name, "RLU"]))) 
 
 TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value", gender = "GENDER") %>%
-  select(sample_name, sample_collection_date, CT, age, gender, zip_char, priority) %>%
+  #select(sample_name, sample_collection_date, CT, age, gender, zip_char, priority) %>%
+  select(sample_name, sample_collection_date, CT) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x)))) %>%
   select(!matches("^\\.\\.\\.")) %>%
   #use the first day of the week (starting on Monday) as the sample_collection_date
-  mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week"))) %>%
-  mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:6, 9)), Inf),
-                            labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
-                            include.lowest = TRUE)) %>%
+  mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week")))# %>%
+  #mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:6, 9)), Inf),
+  #                          labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
+  #                          include.lowest = TRUE)) %>%
   #don't include age because it may be PHI if included with zipcode and gender
-  select(-age)
+  #select(-age)
 
 ###########################
 # Merge all metadata sheets
