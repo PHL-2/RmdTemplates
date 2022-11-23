@@ -187,7 +187,7 @@ if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sampl
 # Samples in epi metadata but we don't have the samples or they could not be extracted
 ######################################################################################
 
-message("These samples were found in the epidemiologists metadata sheet but not in our sample sheet. Check the email to see if these samples could not be located by the receiving department")
+message("\nThese samples were found in the epidemiologists metadata sheet but not in our sample sheet. Check the email to see if these samples could not be located by the receiving department")
 message("Enter these samples on line 194 in the generate_barcodes_IDT.R to remove them from this message")
 message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check")
 

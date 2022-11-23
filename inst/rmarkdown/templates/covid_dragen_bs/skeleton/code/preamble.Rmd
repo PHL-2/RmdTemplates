@@ -226,7 +226,7 @@ top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
 
 ```
 
-```{r upload data to basespace and run the app, message=FALSE, eval = dl_bs_data}
+```{r upload data to basespace and run the app, message=TRUE, eval = dl_bs_data}
 
 dir.create(here("data", "processed_bs"), recursive = TRUE)
 

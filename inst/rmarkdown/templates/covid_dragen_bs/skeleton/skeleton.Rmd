@@ -55,7 +55,7 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 
 ```
 
-```{r generate SampleSheet and metadata, eval = FALSE}
+```{r generate SampleSheet and metadata, eval = FALSE, message = TRUE}
 
 source("code/generate_barcodes_IDT.R")
 
@@ -730,6 +730,7 @@ s_toPlot %>%
   arrange(PHL_sample_received_date, -variant_percentages) %>%
   select(-variant_percentages) %>%
   unique() %>%
+  rename(`Received date` = "PHL_sample_received_date", `Sample Type` = "sample_type", `WHO` = "scorpio_call", `Variant` = "lineage", `Variant percentage` = "variant_percentages_text") %>%
   { if(use_kable)
       kable(., "latex", longtable = F, digits=2, booktabs=T, escape=F,
             col.names = linebreak(c("Sample\nreceived", "Sample Type", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
@@ -986,7 +987,7 @@ dl_bs_data <- FALSE
 import_data <- FALSE
 use_kable <- FALSE
 rmarkdown::render(qc_report_fp, output_file = "README.md",
-                 output_format = rmarkdown::md_document(variant = "markdown_github", toc = TRUE))
+                 output_format = rmarkdown::md_document(variant = "gfm", toc = TRUE))
 
 ```
 
@@ -1004,7 +1005,7 @@ tryCatch(
 
 ```
 
-```{r upload data if results look good, eval=FALSE, include=FALSE, message=FALSE}
+```{r upload data if results look good, eval=FALSE, include=FALSE, message=TRUE}
 
 #intialize data_upload conda env
 use_condaenv("seqsender", required = TRUE)
