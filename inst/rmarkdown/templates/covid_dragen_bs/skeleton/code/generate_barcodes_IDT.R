@@ -143,7 +143,7 @@ TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
   select(where(function(x) any(!is.na(x)))) %>%
   select(!matches("^\\.\\.\\.")) %>%
   #use the first day of the week (starting on Monday) as the sample_collection_date
-  mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week")))# %>%
+  mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week"))) %>%
   mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:6, 9)), Inf),
                             labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
                             include.lowest = TRUE)) %>%
