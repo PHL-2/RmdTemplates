@@ -22,6 +22,8 @@ instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
 
 read_length <- "76"
 
+phi_info <- c("sample_name", "zip_char", "case_id")
+
 #file location of the nextera udi indices
 #don't have to change this if the file sits in a the metadata_references directory in the parent directory of the project
 barcode_fp <- file.path(dirname(here()), "aux_files", "metadata_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
@@ -110,7 +112,7 @@ PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".xlsx", full
 
 PHL_data <- read_excel(PHL_fp, skip = 1, sheet = "PHL") %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
-  select(sample_name, sample_collection_date, DOB, age, gender, zip_char, priority) %>%
+  select(sample_name, sample_collection_date, DOB, age, gender, zip_char, priority, case_id) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #filter empty columns
@@ -342,10 +344,10 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 
 #does not contain PHI and accession numbers
 metadata_sheet %>%
-  select(-c(I7_Index_ID, I5_Index_ID, sample_name, zip_char)) %>%
+  select(-c(I7_Index_ID, I5_Index_ID, all_of(phi_info))) %>%
   write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")), row.names = FALSE)
 
 #contains PHI and accession numbers
 metadata_sheet %>%
-  select(sample_id, sample_name, zip_char) %>%
+  select(sample_id, all_of(phi_info)) %>%
   write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")), row.names = FALSE)
