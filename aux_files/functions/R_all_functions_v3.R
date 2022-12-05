@@ -117,29 +117,34 @@ filter4report <- function(data) {
 ##   Resubmit the shell script if proxy authentication required
 ## ============================================================
 
-cli_submit <- function(exe_path, cli_command, sh_arguments, shQuote_type = "sh") {
+cli_submit <- function(exe_path, bs_cli_command, sh_arguments, shQuote_type = "sh") {
 
-  for(i in 1:5) {
-    Sys.sleep(30)
-    message(paste0("Trying ", basename(cli_command), " ", i, " time"))
+  n_tries <- 5
+  time2sleep <- 10
+  success <- FALSE
+
+  for(i in 1:n_tries) {
+    Sys.sleep(time2sleep)
+    message(paste0("Trying ", basename(bs_cli_command), " ", i, " time"))
     shell_return <- system2(exe_path,                               #the git shell executable on windows
                             args = c(                               #some arguments need to be in quotes to be passed to shell
-                              shQuote(cli_command, type = shQuote_type), #the shell script to run
+                              shQuote(bs_cli_command, type = shQuote_type), #the shell script to run
                               sh_arguments                          #arguments
                             ), stdout = TRUE)
     message(shell_return)
 
     if(!any(grepl("Proxy Authentication Required|502 Bad Gateway: Reason unknown", shell_return))) {
+      success <- TRUE # set i to 0 so it doesn't trigger the error if it retried 5 times and was successful on the 5th time
       break
     }
 
   }
 
 
-  if(i == 5) {
-    stop(simpleError("Retried 5 times"))
-  } else{
+  if(success) {
     return(shell_return)
+  } else{
+    stop(simpleError(paste0("Retried ", n_tries, " time")))
   }
 
 }
