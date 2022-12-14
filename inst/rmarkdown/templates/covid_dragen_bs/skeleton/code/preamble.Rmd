@@ -342,6 +342,12 @@ coverage <- cov_files_fps %>%
   select(-c(FileName)) %>%
   group_by(sample_id) %>%
   summarise(pct_genome_coverage_over_30x = sum(map_per_position >= 30)/n(),
+            pct_genome_coverage_over_25x = sum(map_per_position >= 25)/n(),
+            pct_genome_coverage_over_20x = sum(map_per_position >= 20)/n(),
+            pct_genome_coverage_over_15x = sum(map_per_position >= 15)/n(),
+            pct_genome_coverage_over_10x = sum(map_per_position >= 10)/n(),
+            pct_genome_coverage_over_5x = sum(map_per_position >= 5)/n(),
+            pct_genome_coverage_over_1x = sum(map_per_position >= 1)/n(),
             median_coverage = median(map_per_position)) %>%
   ungroup()
 

@@ -138,7 +138,7 @@ if(any(is.na(PHL_data[PHL_data$sample_name %in% RLU_data$sample_name, "RLU"]))) 
 
 TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value", gender = "GENDER") %>%
-  select(sample_name, sample_collection_date, CT, age, gender, zip_char, priority) %>%
+  select(sample_name, sample_collection_date, CT, age, gender, zip_char, priority, case_id) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #filter empty columns

@@ -489,7 +489,40 @@ s %>%
 
 ```
 
-\newpage
+\blandscape
+
+## SARS-CoV-2 genome coverage
+
+```{r lower coverage results, fig.width=11}
+
+s %>%
+  select(sample_id, sample_type, matches("pct_genome_coverage_over")) %>%
+  pivot_longer(cols = matches("pct_genome_coverage_over"), names_to = "depth", values_to = "pct_coverage") %>%
+  filter(!is.na(pct_coverage)) %>%
+  mutate(depth = as.numeric(gsub(".*_|.$", "", depth))) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = depth, y = pct_coverage, fill = sample_type, group = sample_id)) +
+    geom_line(aes(color = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    scale_y_continuous(labels=scales:::percent) +
+    facet_wrap(~sample_type, nrow = 1) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      legend.position = "none",
+      aspect.ratio = 1
+      ) +
+    labs(x="Coverage depth (X)", y="Percentage genome coverage", fill="Sample Type", color = "Sample Type")
+  }
+
+```
+
+\elandscape
 
 ## Kmer results (number of unique SARS-CoV-2 fragments detected)
 
@@ -784,8 +817,9 @@ seqsender <- s_toPlot %>%
          zip = "19146",
          type = "betacoronavirus",
          passage = "Original") %>%
-  mutate(host_age_bin = ifelse(is.na(host_age_bin), "Unknown", host_age_bin),
-         gender = ifelse(is.na(gender), "Unknown", gender),
+  #make gender and age for Temple samples as Unknown for now until they confirm its okay to submit these fields on their behalf
+  mutate(host_age_bin = ifelse(is.na(host_age_bin)|sample_collected_by == "Temple University", "Unknown", host_age_bin),
+         gender = ifelse(is.na(gender)|sample_collected_by == "Temple University", "Unknown", gender),
          collected_by = sample_collected_by) %>%
   select(-c(isolation_source)) %>%
   rename(isolation_source = "sample_type",
