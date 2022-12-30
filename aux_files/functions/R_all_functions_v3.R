@@ -148,4 +148,3 @@ cli_submit <- function(exe_path, bs_cli_command, sh_arguments, shQuote_type = "s
   }
 
 }
-

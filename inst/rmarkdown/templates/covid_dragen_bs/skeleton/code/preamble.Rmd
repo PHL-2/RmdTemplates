@@ -9,6 +9,7 @@ library(ggsci)
 library(RColorBrewer)
 library(patchwork)
 library(reticulate)
+library(zoo)
 
 ```
 
@@ -339,7 +340,14 @@ coverage <- cov_files_fps %>%
   select(FileName, map_per_position) %>%
   mutate(sample_id = gsub(".*/", "", FileName)) %>%
   mutate(sample_id = gsub("\\.consensus.*", "", sample_id)) %>%
-  select(-c(FileName)) %>%
+  select(-c(FileName))
+
+slide_window_coverage <- coverage
+  group_by(sample_id) %>%
+  mutate(slide_window_100 = rollmean(map_per_position, k=100, fill = NA, align = 'right')) %>%
+  ungroup()
+
+coverage %<>%
   group_by(sample_id) %>%
   summarise(pct_genome_coverage_over_30x = sum(map_per_position >= 30)/n(),
             pct_genome_coverage_over_25x = sum(map_per_position >= 25)/n(),
@@ -423,6 +431,9 @@ merge(coverage, kmer, by = "sample_id", all = TRUE) %>%
   mutate(nextclade_version = nc_v) %>%
   write_delim(here("data", paste0(sequencing_date, "_bs_results.csv")), delim = ",")
 
+slide_window_coverage %>%
+  saveRDS(here("data", paste0(sequencing_date, "_sliding_window.rds")))
+
 ```
 
 ```{r load data}
@@ -442,6 +453,8 @@ nextclade_version <- unique(bs_results$nextclade_version)
 date_pipeline_was_run <- unique(bs_results$date_pipeline_was_run)
 
 dragen_covid_lineage_version <- unique(bs_results$dragen_covid_lineage_version)
+
+slide_window_coverage <- readRDS(here("data", paste0(sequencing_date, "_sliding_window.rds")))
 
 ```
 
@@ -545,12 +558,37 @@ if(length(s_upload) > 0) {
   fasta2upload %>%
     data_frame(FileName = .) %>%
     group_by(FileName) %>%
-    do(read_delim(.$FileName, col_names = FALSE, delim = "fake_delim")) %>%
+    do(read.delim(.$FileName, header = FALSE)) %>%
     ungroup() %>%
     select(-c(FileName)) %>%
     #this na argument needs to be blank, otherwise it will put strings beginning with the first two letters in quotes
     write_delim(file = fasta_fp, delim = "", col_names = FALSE, na = "")
   
+}
+
+```
+
+```{r get top reads in controls, eval = import_data}
+
+#find remaining gzipped files
+gzip_fps <- list.files(here("data", "processed_bs"), pattern = "L001_R1_001.fastq.gz", recursive = TRUE, full.names = TRUE)
+
+#read in gzip files for control samples
+control_gzip_fps <- gzip_fps[grepl(gsub("20221223", "20221222", paste0(s[s$isControl, "sample_id"], collapse = "|")), gzip_fps)]
+
+#create blast directory
+dir.create(here("upload", "blast"), recursive = TRUE)
+
+cli_get_reads_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "cli_get_control_reads.sh")
+
+#create a fasta file for each sample. submitting more than 25 sequences seem to cause the online tools to break
+#submit these sequences to NCBI BLAST and UCSC BLAT https://genome.ucsc.edu/cgi-bin/hgBlat
+for(file in control_gzip_fps) {
+  file_name <- gsub(".*scrubbed\\.[0-9]+\\.|_S.*", "", file)
+  
+  cli_submit(sh_exe_fp, cli_get_reads_fp, #arguments are fastq.gz fp, number of sequences, and output fp
+             c(shQuote(file, type = "sh"), 20,
+               shQuote(here("upload", "blast", paste0(file_name, "_control_reads.fasta")), type = "sh")))
 }
 
 ```
@@ -578,6 +616,9 @@ ann_geom_values[["sample_type_shapes"]] <- setNames(c(24:25, 8, 23,
 
 #make the controls and unassigned reads samples bigger in size
 ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 4, 4, 4, rep(1, length(lvls)-3)), lvls)
+
+#make alpha for nasal swabs to 0.5
+ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, rep(0.2, length(lvls)-4)), lvls)
 
 #scales::show_col(ann_geom_values[["sample_type_colors"]])
 
