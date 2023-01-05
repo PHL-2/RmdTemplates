@@ -22,7 +22,7 @@ output:
 ### ================
 ### packages install
 ### ================
-install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo"))
+install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes"))
 
 ```
 
@@ -61,7 +61,7 @@ source("code/generate_barcodes_IDT.R")
 
 ```
 
-```{r child = 'code/preamble.Rmd'}
+```{r child = 'code/preamble.Rmd', eval = load_preamble}
 ```
 
 
@@ -605,7 +605,7 @@ s_toPlot %>%
   droplevels() %>%
   {
   ggplot(., aes(x=sample_type, y=props, fill=variants)) +
-    geom_bar(stat="identity", position = position_fill(reverse = TRUE)) +
+    geom_bar(stat="identity", position = position_fill(reverse = FALSE)) +
     facet_grid(.~sample_type, space="free", scales="free",
                labeller = labeller(.default = function(x) {gsub(" ", "\n", x)}, .multi_line = FALSE)) +
     scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))]) +
@@ -619,7 +619,6 @@ s_toPlot %>%
       plot.title = element_text(hjust = 0.5)
       ) +
     labs(x="", y="Relative abundance", title = "Sample type", fill="Variants") +
-    guides(fill = guide_legend(reverse=T, order = 1)) +
   who_legend
   }
 
@@ -651,7 +650,7 @@ s_toPlot %>%
   filter(!is.na(props)) %>%
   mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
   mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
-  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = FALSE)]))) %>%
+  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
   droplevels() %>%
   {
   ggplot(., aes(x=props, y=sample_id, fill=variants)) +
@@ -666,7 +665,6 @@ s_toPlot %>%
       strip.text.y = element_text(angle = 0, size = 6)
       ) +
     labs(y="", x="Relative abundance", fill="Variants") +
-    guides(fill = guide_legend(reverse=T, order = 1)) +
   who_legend
   }
 
@@ -695,7 +693,7 @@ s_toPlot %>%
   mutate(software = factor(software, levels = c("Scorpio", "Pangolin", "NextClade"))) %>%
   mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
   mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
-  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = FALSE)]))) %>%
+  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
   droplevels() %>%
   {
   ggplot(., aes(x=software, y=sample_id, fill=variants, label=uniq)) +
@@ -711,11 +709,50 @@ s_toPlot %>%
       axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)
       ) +
     labs(y="", x="Software used to determine variants", fill="Variants") +
-    guides(fill = guide_legend(reverse=T, order = 1)) +
   who_legend
   }
 
 ```
+
+\blandscape
+
+### Plateview of results
+
+```{r pangolin plate, fig.width=11, fig.height=7}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  droplevels() %>%
+  mutate(lineage = factor(lineage, levels = names(ann_geom_values$variants))) %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  {
+  ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = lineage, label = lineage)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 16) +
+    geom_text(check_overlap = TRUE, size = 3, color = "white") +
+    facet_wrap(~plate, ncol = 1) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$lineage), names(ann_geom_values$variants))]) +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill = "Variants"
+    ) +
+    guides(fill = guide_legend(override.aes = list(size = 8)))  
+  }
+
+```
+
+\elandscape
 
 ```{r lineage and VOC checks}
 
@@ -1030,6 +1067,9 @@ project_name <- basename(here())
 qc_report_fp <- paste0(project_name, "_QC_Report.Rmd")
 qc_output_fp <- here("output", paste0(project_name, '.QC.report_gen.on.', Sys.Date(), '.pdf'))
 
+# load preamble the first time?
+load_preamble <- TRUE
+
 # need to download and import basespace data for each sample?
 dl_bs_data <- TRUE
 
@@ -1041,8 +1081,7 @@ use_kable <- TRUE
 
 rmarkdown::render(qc_report_fp, output_file = qc_output_fp)
 
-dl_bs_data <- FALSE
-import_data <- FALSE
+load_preamble <- FALSE
 use_kable <- FALSE
 rmarkdown::render(qc_report_fp, output_file = "README.md",
                  output_format = rmarkdown::md_document(variant = "gfm", toc = TRUE))

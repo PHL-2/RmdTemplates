@@ -5,7 +5,7 @@ library(tidyverse)
 library(rvest)
 library(pander)
 library(kableExtra)
-library(ggsci)
+library(ggthemes)
 library(RColorBrewer)
 library(patchwork)
 library(reticulate)
@@ -337,12 +337,13 @@ coverage <- cov_files_fps %>%
   filter(X1 == "NC_045512.2") %>%
   #get column 3 if its a tsv, otherwise get column 4
   mutate(map_per_position = ifelse(grepl("tsv$", FileName), X3, X4)) %>%
-  select(FileName, map_per_position) %>%
+  rename(position = "X2") %>%
+  select(FileName, map_per_position, position) %>%
   mutate(sample_id = gsub(".*/", "", FileName)) %>%
   mutate(sample_id = gsub("\\.consensus.*", "", sample_id)) %>%
   select(-c(FileName))
 
-slide_window_coverage <- coverage
+slide_window_coverage <- coverage %>%
   group_by(sample_id) %>%
   mutate(slide_window_100 = rollmean(map_per_position, k=100, fill = NA, align = 'right')) %>%
   ungroup()
@@ -630,17 +631,18 @@ i <- 1
 ann_geom_values[["variants"]] <- c()
 ann_geom_values[["who_label"]] <- c()
 
-for(variant in sort(unique(s$scorpio_call)[!is.na(unique(s$scorpio_call))])) {
+#loop over the VOCs
+for(who_label in c("Reference", sort(unique(s$scorpio_call)[unique(s$scorpio_call) != "Reference"]))) {
   
-  #only coloring first two variants
   variant_list <- s %>%
-    filter(scorpio_call == variant) %>%
+    filter(scorpio_call == who_label) %>%
     #is_designated means that the sample was assigned to a reference strain exactly using PANGO algorithm (decision tree) rather than PUSHER
     #the note section here for PUSHER will be 'Assigned from designation hash.' so its useless
     #nextclade VOC shouldn't be too different from scorpio VOC
     select(lineage, note, Nextclade_pango, scorpio_lineage) %>%
     mutate(note = gsub("^.*: |; scorpio.*", "", note)) %>%
     mutate(note = ifelse(note == "Assigned from designation hash.", NA, note)) %>%
+    #only coloring first two variants from pUSHER annotations
     separate(note, into = c("pusher_variant1", "pusher_variant2"), sep = " ", extra = "merge") %>%
     pivot_longer(cols = c("lineage", "pusher_variant1", "pusher_variant2", "Nextclade_pango", "scorpio_lineage"), names_to = "variant_num", values_to = "variants") %>%
     mutate(variants = gsub("\\(.*", "", variants)) %>%
@@ -648,20 +650,28 @@ for(variant in sort(unique(s$scorpio_call)[!is.na(unique(s$scorpio_call))])) {
     filter(!is.na(variants)) %>%
     unique() %>%
     pull() %>%
-    str_sort(numeric = TRUE, decreasing = TRUE)
+    str_sort(numeric = TRUE, decreasing = FALSE)
   
-  variant_color <- brewer.pal(8, "Dark2")[i]
+  #get the letters, period, and first number of each variant
+  combined_list <- unique(gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", variant_list))
   
-  variant_gradient <- colorRampPalette(c(variant_color, adjustcolor(variant_color, alpha.f = 0.1)), alpha = TRUE)(length(variant_list))
-  names(variant_gradient) <- variant_list
+  for(combined_variant in combined_list) {
+    
+    sublineage <- variant_list[grepl(paste0("^", combined_variant), variant_list)]
+    
+    variant_color <- calc_pal()(12)[i]
+    variant_gradient <- colorRampPalette(c(variant_color, adjustcolor(variant_color, alpha.f = 0.1)), alpha = TRUE)(length(sublineage))
+    names(variant_gradient) <- sublineage
+    
+    who_color <- variant_color
+    names(who_color) <- paste0(who_label, " - ", combined_variant)
   
-  who_color <- variant_color
-  names(who_color) <- variant
-  
-  ann_geom_values[["variants"]] <- c(ann_geom_values[["variants"]], variant_gradient)
-  ann_geom_values[["who_label"]] <- c(ann_geom_values[["who_label"]], who_color)
+    ann_geom_values[["variants"]] <- c(ann_geom_values[["variants"]], variant_gradient)
+    ann_geom_values[["who_label"]] <- c(ann_geom_values[["who_label"]], who_color)
   
   i <- i + 1
+    
+  }
   
 }
 
@@ -672,9 +682,9 @@ names(ann_geom_values[["variants"]]) <- c(NA, names(ann_geom_values[["variants"]
 
 who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_geom_values[["who_label"]])) %>%
   ggplot(aes(x = x, y = y, fill = fill_col)) +
-    geom_bar(stat="identity", position = position_fill(reverse = TRUE), alpha = 0) +
+    geom_bar(stat="identity", alpha = 0) +
     scale_fill_manual(values = ann_geom_values$who_label) +
-    guides(fill = guide_legend(override.aes = list(alpha=1), reverse=T, order = 1)) + 
+    guides(fill = guide_legend(override.aes = list(alpha=1), reverse=F, order = 1)) + 
     theme_bw() +
     theme(
       strip.text = element_text(size = 12),
