@@ -11,6 +11,7 @@ library(RColorBrewer)
 library(patchwork)
 library(reticulate)
 library(zoo)
+library(stringdist)
 
 ```
 
@@ -212,7 +213,6 @@ samp_reads <- read_delim(demuxsum_fp, col_names = FALSE) %>%
   mutate(percent_reads_passed_filter = read_counts/total_raw_reads) %>%
   mutate(percent_of_lane = read_counts/sum(read_counts))
 
-
 top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
   filter(is.na(X6)) %>%
   filter(!is.na(X4)) %>%
@@ -220,7 +220,12 @@ top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
   filter(!grepl("###", index_sequence1)) %>%
   select(index_sequence1, index_sequence2, number_of_reads) %>%
   mutate(index_sequence = paste0(index_sequence1, "+", index_sequence2)) %>%
-  select(-c(index_sequence1, index_sequence2)) %>%
+  filter(!index_sequence %in% samp_reads$Barcode_sequence) %>%
+  #get the minimum distance to the barcode sequences used for demultiplexing
+  mutate(min_dist = sapply(index_sequence,
+                           function(x) min(stringdist(x, b = samp_reads$Barcode_sequence[!is.na(samp_reads$Barcode_sequence)], method = "lv")))) %>%
+  filter(min_dist > 1) %>%
+  select(-c(index_sequence1, index_sequence2, min_dist)) %>%
   mutate(number_of_reads = as.numeric(number_of_reads)) %>%
   order_on_other_col(index_sequence, number_of_reads) %>%
   slice(1:10) %>%
