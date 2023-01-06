@@ -469,6 +469,8 @@ Constellation database version `r constellation_version`
 
 ## Coverage
 
+### Median coverage
+
 ```{r coverage results}
 
 s %>%
@@ -491,7 +493,7 @@ s %>%
 
 \blandscape
 
-## SARS-CoV-2 genome coverage
+### SARS-CoV-2 genome coverage
 
 ```{r lower coverage results, fig.width=11}
 
@@ -522,33 +524,17 @@ s %>%
 
 ```
 
-## Sliding window coverage (100 bp)
+### Sliding window coverage (100 bp)
 
 ```{r slide window results, fig.width=11, fig.height=8}
 
-slide_window_coverage %>%
-  merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
-  {
-  ggplot(., aes(x = position, y = slide_window_100, color = sample_type, group = sample_id, alpha = sample_type)) +
-    geom_line() +
-    facet_wrap(~sample_type, ncol = 1, scales = "free_y") +
-    scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
-    scale_alpha_manual(values = ann_geom_values$alpha[match(levels(.$sample_type), names(ann_geom_values$alpha))]) + 
-    theme_bw() +
-    theme(
-      strip.background = element_blank(),
-      panel.grid = element_blank(),
-      panel.border = element_rect(color = "black", fill = NA, size = 1),
-      legend.position = "none"
-      ) +
-    labs(x="Position (bp)", y="Sliding window average (X)")
-  }
+knitr::include_graphics(here("data", paste0(sequencing_date, "_sliding_coverage_100_bp.png")))
 
 ```
 
 \elandscape
 
-## Kmer results (number of unique SARS-CoV-2 fragments detected)
+### Kmer results (number of unique SARS-CoV-2 fragments detected)
 
 ```{r kmer numbers}
 
@@ -567,7 +553,7 @@ s %>%
 
 ```
 
-## Kmer results (percentage of reference SARS-CoV-2 fragments detected)
+### Kmer results (percentage of reference SARS-CoV-2 fragments detected)
 
 ```{r COVID detection}
 

@@ -5,6 +5,7 @@ library(tidyverse)
 library(rvest)
 library(pander)
 library(kableExtra)
+library(ggsci)
 library(ggthemes)
 library(RColorBrewer)
 library(patchwork)
@@ -432,8 +433,6 @@ merge(coverage, kmer, by = "sample_id", all = TRUE) %>%
   mutate(nextclade_version = nc_v) %>%
   write_delim(here("data", paste0(sequencing_date, "_bs_results.csv")), delim = ",")
 
-slide_window_coverage %>%
-  saveRDS(here("data", paste0(sequencing_date, "_sliding_window.rds")))
 
 ```
 
@@ -454,8 +453,6 @@ nextclade_version <- unique(bs_results$nextclade_version)
 date_pipeline_was_run <- unique(bs_results$date_pipeline_was_run)
 
 dragen_covid_lineage_version <- unique(bs_results$dragen_covid_lineage_version)
-
-slide_window_coverage <- readRDS(here("data", paste0(sequencing_date, "_sliding_window.rds")))
 
 ```
 
@@ -698,6 +695,74 @@ who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_geom_values[["who_la
       plot.margin=unit(c(0, 0, 0, 0), "cm")
     ) +
     labs(fill = "WHO label", y = "", x = "")
+
+```
+
+```{r save coverage png, eval=import_data}
+
+SC2_annotation <- data.frame(ORF1a = "266-13468",
+                             ORF1b = "13468-21555",
+                             S = "21563-25384",
+                             ORF3a = "25393-26220",
+                             E = "26245-26472",
+                             M = "26523-27191",
+                             ORF6 = "27202-27387",
+                             ORF7a = "27394-27759",
+                             ORF7b = "27756-27887",
+                             ORF8 = "27894-28259",
+                             N = "28274-29533",
+                             ORF10 = "29558-29674") %>%
+  pivot_longer(cols = everything(), names_to = "gene", values_to = "position") %>%
+  mutate(annotation = "SARS-CoV-2")
+
+ddPCR_annotation <- data.frame(N1 = "28287-28358",
+                               N2 = "29164-29230") %>%
+  pivot_longer(cols = everything(), names_to = "gene", values_to = "position") %>%
+  mutate(annotation = "ddPCR")
+
+annotation_legend <- rbind(SC2_annotation, ddPCR_annotation) %>%
+  mutate(start = as.numeric(gsub("-.*$", "", position)),
+         end = as.numeric(gsub("^.*-", "", position)),
+         gene = factor(gene, levels = unique(gene)[order(start, decreasing = FALSE)])) %>%
+  ggplot() +
+    geom_rect(aes(xmin = start, xmax = end, ymin = 1, ymax = 2, fill = gene), position = position_dodge(width = 0.5)) +
+    scale_fill_manual(values = tableau_color_pal(palette = "Tableau 20")(20)) +
+    scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.text.x = element_text(size = 8),
+      legend.position = "bottom"
+    ) +
+    labs(x="Position (bp)", y="", fill = "") +
+    guides(fill=guide_legend(nrow=1, bycol=TRUE, override.aes = list(size = 0.5)))
+
+slide_window_coverage %>%
+  merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
+  {
+  ggplot(., aes(x = position, y = slide_window_100, color = sample_type, group = sample_id, alpha = sample_type)) +
+    geom_line() +
+    facet_wrap(~sample_type, ncol = 1, scales = "free_y") +
+    scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_alpha_manual(values = ann_geom_values$alpha[match(levels(.$sample_type), names(ann_geom_values$alpha))]) + 
+    scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      legend.position = "none",
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      ) +
+    labs(x="", y="Sliding window average (X)") +
+  annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
+  } %>%
+  ggsave(filename = here("data", paste0(sequencing_date, "_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
 
 ```
 
