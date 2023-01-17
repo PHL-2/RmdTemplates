@@ -174,12 +174,11 @@ samp_sh_check <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = F
   separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
   slice(-1) %>%
   rename(sample_id = "Sample_ID") %>%
-  mutate(I7_ID = I7_Index_ID == UDI_Index_ID) %>%
-  mutate(I5_ID = I5_Index_ID == UDI_Index_ID) %>%
-  select(UDI_Index_ID, I7_ID, I5_ID)
+  mutate(same_UDI = I7_Index_ID == I5_Index_ID) %>%
+  select(same_UDI)
 
 #if any of the barcode ID's dont match, raise an error
-if(!all(c(samp_sh_check$I7_ID, samp_sh_check$I7_ID))) {
+if(!all(samp_sh_check$same_UDI)) {
   stop(simpleError("One of the barcode ID's don't match! Check samp_sh_check dataframe"))
 }
 
@@ -192,6 +191,7 @@ samp_sh_s <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE
   #mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
   #select(SampleName, I7_Index_ID, I5_Index_ID, Barcode_sequence, Sample_Type, UDI_Index_ID)
   rename(sample_id = "Sample_ID") %>%
+  mutate(UDI_Index_ID = I7_Index_ID) %>%
   mutate(I7_Index_ID = index, I5_Index_ID = index2) %>%
   mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
   select(sample_id, I7_Index_ID, I5_Index_ID, Barcode_sequence, UDI_Index_ID) %>%
@@ -222,8 +222,9 @@ top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
   mutate(index_sequence = paste0(index_sequence1, "+", index_sequence2)) %>%
   filter(!index_sequence %in% samp_reads$Barcode_sequence) %>%
   #get the minimum distance to the barcode sequences used for demultiplexing
+  #levenshtein distance is useful for accounting for insertions and deletions between strings, but not needed in this case to determine barcode distances
   mutate(min_dist = sapply(index_sequence,
-                           function(x) min(stringdist(x, b = samp_reads$Barcode_sequence[!is.na(samp_reads$Barcode_sequence)], method = "lv")))) %>%
+                           function(x) min(stringdist(x, b = samp_reads$Barcode_sequence[!is.na(samp_reads$Barcode_sequence)], method = "hamming")))) %>%
   filter(min_dist > 1) %>%
   select(-c(index_sequence1, index_sequence2, min_dist)) %>%
   mutate(number_of_reads = as.numeric(number_of_reads)) %>%
@@ -659,7 +660,13 @@ for(who_label in c("Reference", sort(unique(s$scorpio_call)[unique(s$scorpio_cal
   
   for(combined_variant in combined_list) {
     
-    sublineage <- variant_list[grepl(paste0("^", combined_variant), variant_list)]
+    #if a lineage ends with a number, get the sub-lineages with that number
+    if(grepl("[0-9]$", combined_variant)) {
+      sublineage <- variant_list[grepl(paste0("^", combined_variant), variant_list)]
+    }
+    else{
+      sublineage <- combined_variant
+    }
     
     variant_color <- calc_pal()(12)[i]
     variant_gradient <- colorRampPalette(c(variant_color, adjustcolor(variant_color, alpha.f = 0.1)), alpha = TRUE)(length(sublineage))

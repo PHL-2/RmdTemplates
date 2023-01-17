@@ -23,13 +23,14 @@ order_on_other_col <- function(df, col2order, sortingcol, decreasing = TRUE) {
 
 load_sample_sheet <- function(fp) {
 
-  read_delim(fp, delim = "no_delim", col_names = FALSE) %>%
-    mutate(col_names = case_when(grepl("^\\[", X1) & grepl("\\]$", X1) ~ X1,
+  read.delim(fp, header = FALSE) %>%
+    mutate(V1 = as.character(V1)) %>%
+    mutate(col_names = case_when(grepl("^\\[", V1) & grepl("\\]$", V1) ~ V1,
                                  TRUE ~ NA_character_)) %>%
     fill(col_names, .direction = "down") %>%
-    filter(col_names != X1) %>%
+    filter(col_names != V1) %>%
     mutate(col_names = gsub("\\[|\\]", "", col_names)) %>%
-    pivot_wider(names_from = "col_names", values_from = "X1", values_fn = list)
+    pivot_wider(names_from = "col_names", values_from = "V1", values_fn = list)
 
 }
 

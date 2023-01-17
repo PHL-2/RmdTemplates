@@ -709,10 +709,10 @@ s_toPlot %>%
 empty_plate %>%
   merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
   filter(!is.na(plate_coord)) %>%
-  droplevels() %>%
   mutate(lineage = factor(lineage, levels = names(ann_geom_values$variants))) %>%
   mutate(plate = paste("Plate", plate)) %>%
   mutate(plate_col = as.numeric(plate_col)) %>%
+  droplevels() %>%
   {
   ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = lineage, label = lineage)) +
     geom_tile(fill = "white") +

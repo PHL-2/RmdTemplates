@@ -94,7 +94,7 @@ RLU_data <- read_csv(RLU_fp) %>%
   select(sample_name, sample_collection_date, DOB, age, gender, RLU) %>%
   mutate(gender = case_when(gender == "M" ~ "Male",
                             gender == "F" ~ "Female",
-                            TRUE ~ "Other")) %>%
+                            TRUE ~ "Unknown")) %>%
   mutate(DOB = as.Date(DOB, format = "%m/%d/%Y"), sample_collection_date = as.Date(sample_collection_date, format = "%m/%d/%Y")) %>%
   mutate(age = ifelse(grepl("mo", age), 0, age)) %>%
   #filter rows where sample_id is NA
