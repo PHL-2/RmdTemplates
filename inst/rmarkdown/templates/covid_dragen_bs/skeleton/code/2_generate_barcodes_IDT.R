@@ -81,44 +81,23 @@ index_sheet <- read_sheet(metadata_input_fp, "Index")
 sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
 
 
-###################################################
-# Load the RLU report
-# Make sure these sheets are not uploaded to GitHub
-###################################################
-
-RLU_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".csv", full.names = TRUE)
-
-RLU_data <- read_csv(RLU_fp) %>%
-  filter(`SARS-CoV2 Result` == "POSITIVE") %>%
-  rename(sample_name = "Sample ID", sample_collection_date = "Draw Date", RLU = "SARSCoV2-1", gender = "Sex", age = "Age") %>%
-  select(sample_name, sample_collection_date, DOB, age, gender, RLU) %>%
-  mutate(gender = case_when(gender == "M" ~ "Male",
-                            gender == "F" ~ "Female",
-                            TRUE ~ "Unknown")) %>%
-  mutate(DOB = as.Date(DOB, format = "%m/%d/%Y"), sample_collection_date = as.Date(sample_collection_date, format = "%m/%d/%Y")) %>%
-  mutate(age = ifelse(grepl("mo", age), 0, age)) %>%
-  #filter rows where sample_id is NA
-  filter(!is.na(sample_name)) %>%
-  #filter empty columns
-  select(where(function(x) any(!is.na(x)))) %>%
-  select(!matches("^\\.\\.\\."))
-
 ###################################################################################
 # Load the metadata sheet from epidemiologists and merge with sample metadata sheet
 # Make sure these sheets are not uploaded to GitHub
 ###################################################################################
 
-PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".xlsx", full.names = TRUE)
+PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xlsx", full.names = TRUE)
 
-PHL_data <- read_excel(PHL_fp, skip = 1, sheet = "PHL") %>%
+PHL_data <- read_excel(PHL_fp, sheet = "PHL") %>%
+  mutate(SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y"), BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y")) %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
-  select(sample_name, sample_collection_date, DOB, age, gender, zip_char, priority, case_id) %>%
+  select(sample_name, sample_collection_date, DOB, age, gender, zip_char, priority, case_id, RLU) %>%
+  mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x)))) %>%
   select(!matches("^\\.\\.\\.")) %>%
-  merge(RLU_data, by = c("sample_name", "DOB", "age", "gender", "sample_collection_date"), all.x = TRUE) %>%
   #use the first day of the week (starting on Monday) as the sample_collection_date
   mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week"))) %>%
   mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:6, 9)), Inf),
@@ -127,18 +106,15 @@ PHL_data <- read_excel(PHL_fp, skip = 1, sheet = "PHL") %>%
   #don't include age because it may be PHI if included with zipcode and gender
   select(-c(age, DOB))
 
-if(any(is.na(PHL_data[PHL_data$sample_name %in% RLU_data$sample_name, "RLU"]))) {
-  stop(simpleError("Serious error! Sample name has an RLU value but did not get added to PHL_data"))
-}
-
 ###################################################################################
 # Load the metadata sheet from epidemiologists and merge with sample metadata sheet
 # Make sure these sheets are not uploaded to GitHub
 ###################################################################################
 
 TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
+  mutate(Collection_date = as.Date(Collection_date, format = "%m/%d/%Y")) %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value", gender = "GENDER") %>%
-  select(sample_name, sample_collection_date, CT, age, gender, zip_char, priority, case_id) %>%
+  select(sample_name, sample_collection_date, CT, age, gender, priority, case_id) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #filter empty columns
@@ -189,19 +165,12 @@ if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sampl
 ######################################################################################
 
 message("\nThese samples were found in the epidemiologists metadata sheet but not in our sample sheet. Check the email to see if these samples could not be located by the receiving department")
-message("Enter these samples on line 194 in the generate_barcodes_IDT.R to remove them from this message")
 message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check")
-
-# add the sample names that could not be retrieved from our receiving department as a string
-receiving_samples_not_found <- '' %>%
-  str_split(pattern = ", ") %>%
-  unlist()
 
 epi_sample_not_found <- PHL_data %>%
   select(sample_name) %>%
   rbind(select(TU_data, sample_name)) %>%
   filter(!sample_name %in% metadata_sheet$sample_name) %>%
-  filter(!sample_name %in% receiving_samples_not_found) %>%
   pull() %>%
   str_sort()
 
@@ -209,13 +178,13 @@ message(paste0(epi_sample_not_found, collapse = ", "))
 
 missing_metadata_samples <- metadata_sheet %>%
   filter(!grepl("control", sample_type)) %>%
-  filter(is.na(sample_collection_date) |
+  filter((is.na(sample_collection_date)) |
          (is.na(RLU) & sample_collected_by == "Philadelphia Department of Public Health") |
          (is.na(CT) & sample_collected_by == "Temple University")) %>%
   select(sample_name)
 
 if(nrow(missing_metadata_samples) > 0){
-  stop(simpleError(paste0("These non-control samples are in the sample sheet but are missing collection date or CT from the epidemiologists! RLUs for PHL samples may also be missing: ",
+  stop(simpleError(paste0("These non-control samples are in the sample sheet but are missing collection date or CT from the epidemiologists! They may also be GeneXpert samples\n",
                           paste0(pull(missing_metadata_samples), collapse = ", "))))
 }
 

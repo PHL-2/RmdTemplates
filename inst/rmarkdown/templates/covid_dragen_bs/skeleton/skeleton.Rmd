@@ -22,7 +22,7 @@ output:
 ### ================
 ### packages install
 ### ================
-install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist"))
+install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx"))
 
 ```
 
