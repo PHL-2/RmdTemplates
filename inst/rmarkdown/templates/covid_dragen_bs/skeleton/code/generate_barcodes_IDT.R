@@ -113,6 +113,7 @@ PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".xlsx", full
 PHL_data <- read_excel(PHL_fp, skip = 1, sheet = "PHL") %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
   select(sample_name, sample_collection_date, DOB, age, gender, zip_char, priority, case_id) %>%
+  mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #filter empty columns
@@ -128,7 +129,15 @@ PHL_data <- read_excel(PHL_fp, skip = 1, sheet = "PHL") %>%
   select(-c(age, DOB))
 
 if(any(is.na(PHL_data[PHL_data$sample_name %in% RLU_data$sample_name, "RLU"]))) {
-  stop(simpleError("Serious error! Sample name has an RLU value but did not get added to PHL_data"))
+
+  no_RLU <- PHL_data %>%
+    filter(sample_name %in% RLU_data$sample_name) %>%
+    filter(is.na(RLU)) %>%
+    select(sample_name) %>%
+    pull()
+
+  stop(simpleError(paste("Serious error! Sample name has an RLU value but did not get added to PHL_data", no_RLU, sep = "\n")))
+
 }
 
 ###################################################################################
