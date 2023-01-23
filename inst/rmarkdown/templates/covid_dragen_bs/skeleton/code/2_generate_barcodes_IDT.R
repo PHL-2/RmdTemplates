@@ -91,11 +91,7 @@ PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xl
 PHL_data <- read_excel(PHL_fp, sheet = "PHL") %>%
   mutate(SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y"), BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y")) %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
-<<<<<<< HEAD:inst/rmarkdown/templates/covid_dragen_bs/skeleton/code/2_generate_barcodes_IDT.R
   select(sample_name, sample_collection_date, DOB, age, gender, zip_char, priority, case_id, RLU) %>%
-=======
-  select(sample_name, sample_collection_date, DOB, age, gender, zip_char, priority, case_id) %>%
->>>>>>> f4aee84ddf3eecddad68bbdb238b41b1fd23fc34:inst/rmarkdown/templates/covid_dragen_bs/skeleton/code/generate_barcodes_IDT.R
   mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
@@ -110,21 +106,6 @@ PHL_data <- read_excel(PHL_fp, sheet = "PHL") %>%
   #don't include age because it may be PHI if included with zipcode and gender
   select(-c(age, DOB))
 
-<<<<<<< HEAD:inst/rmarkdown/templates/covid_dragen_bs/skeleton/code/2_generate_barcodes_IDT.R
-=======
-if(any(is.na(PHL_data[PHL_data$sample_name %in% RLU_data$sample_name, "RLU"]))) {
-
-  no_RLU <- PHL_data %>%
-    filter(sample_name %in% RLU_data$sample_name) %>%
-    filter(is.na(RLU)) %>%
-    select(sample_name) %>%
-    pull()
-
-  stop(simpleError(paste("Serious error! Sample name has an RLU value but did not get added to PHL_data", no_RLU, sep = "\n")))
-
-}
-
->>>>>>> f4aee84ddf3eecddad68bbdb238b41b1fd23fc34:inst/rmarkdown/templates/covid_dragen_bs/skeleton/code/generate_barcodes_IDT.R
 ###################################################################################
 # Load the metadata sheet from epidemiologists and merge with sample metadata sheet
 # Make sure these sheets are not uploaded to GitHub
