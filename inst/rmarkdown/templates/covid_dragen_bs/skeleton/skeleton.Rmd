@@ -55,9 +55,15 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 
 ```
 
+```{r filter out samples, eval = FALSE, message = TRUE}
+
+source("code/1_remove_low_RLU.R")
+
+```
+
 ```{r generate SampleSheet and metadata, eval = FALSE, message = TRUE}
 
-source("code/generate_barcodes_IDT.R")
+source("code/2_generate_barcodes_IDT.R")
 
 ```
 
