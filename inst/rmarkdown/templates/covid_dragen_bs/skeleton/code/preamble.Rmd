@@ -266,6 +266,10 @@ bs_cli_upload_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "
 files_upload <- cli_submit(sh_exe_fp, bs_cli_upload_fp, c(project_id,
                                              shQuote(fastq_folder, type = "sh")))
 
+if(any(grepl("Error|Aborted|Failed", files_upload, ignore.case = TRUE))) {
+  stop(simpleError("Sample upload to BaseSpace was aborted"))
+}
+
 ### 3 - get the latest app version
 bs_cli_app_ver_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_3_get_app_version.sh")
 dragen_app_version <- cli_submit(sh_exe_fp, bs_cli_app_ver_fp, shQuote(app2run, type = "sh"))
@@ -334,7 +338,7 @@ invisible(sapply(bed_zip_files, function(x) unzip(x, exdir = here("data", "proce
 ```{r load coverage results, eval = import_data}
 
 #this bed file can only be found in the zipped output files
-cov_files_fps <- list.files(here("data", "processed_bs", "consensus"), pattern = "consensus_coverage_from_filtered_bam", recursive = TRUE, full.names = TRUE)
+cov_files_fps <- list.files(here("data", "processed_bs", "consensus"), pattern = "consensus_coverage_from_", recursive = TRUE, full.names = TRUE)
 
 coverage <- cov_files_fps %>%
   data_frame(FileName = .) %>%
@@ -437,6 +441,7 @@ merge(coverage, kmer, by = "sample_id", all = TRUE) %>%
   mutate(date_pipeline_was_run = as.Date(bs_meta$app_run_date)) %>%
   mutate(dragen_covid_lineage_version = as.character(bs_meta$dragen_app_version)) %>%
   mutate(nextclade_version = nc_v) %>%
+  merge(samp_reads, by = "sample_id", all = TRUE) %>%
   write_delim(here("data", paste0(sequencing_date, "_bs_results.csv")), delim = ",")
 
 
@@ -471,8 +476,7 @@ sample_type_fct <- c("Unassigned reads", "Water control", "Reagent control", "Mo
 s_meta <- read_delim(mapping_file_fp, delim = ",")
 
 s <- s_meta %>%
-  merge(samp_reads, by = c("sample_id", "UDI_Index_ID"), all = TRUE) %>%
-  merge(bs_results, by = "sample_id", all = TRUE) %>%
+  merge(bs_results, by = c("sample_id", "UDI_Index_ID"), all = TRUE) %>%
   mutate(read_counts = ifelse(is.na(read_counts), 0, read_counts), total_raw_reads = ifelse(is.na(total_raw_reads), 0, total_raw_reads)) %>%
   mutate(isControl = grepl(ctrl_regex, sample_id, ignore.case = TRUE)|grepl(ctrl_regex, sample_type, ignore.case = TRUE)) %>%
   #make a new sample type based on if there were pangolin and nextclade results. DRAGEN App uses the <90 on the COVID targets as their threshold
@@ -569,6 +573,17 @@ if(length(s_upload) > 0) {
     write_delim(file = fasta_fp, delim = "", col_names = FALSE, na = "")
   
 }
+
+#move fastq files for control samples
+s_control <- s %>%
+  filter(grepl("Water control|Reagent control|Environmental control", sample_type)) %>%
+  select(sample_id) %>%
+  pull()
+
+dir.create(here("upload", "control_fastq"), recursive = TRUE)
+  
+ctrl_fastq2upload <- fastq_fps[grepl(paste0(s_control, collapse = "|"), fastq_fps)]
+invisible(sapply(ctrl_fastq2upload, function(x) file.rename(x, to = paste0(here("upload", "control_fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", x)))))
 
 ```
 

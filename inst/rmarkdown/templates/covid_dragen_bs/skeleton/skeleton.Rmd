@@ -46,7 +46,7 @@ opts_chunk$set(
   fig.width=6,
   fig.height=6,
   dev.args = list(pdf = list(useDingbats = FALSE))
-  )
+)
 
 pander::panderOptions("knitr.auto.asis", FALSE)
 #this also means that you have to put results='asis' in any block that has pander output
@@ -109,7 +109,7 @@ if (length(in_results_not_in_s) > 0) {
 
 # Introduction
 
-This report summarizes the results of `r nrow(s)-1` COVID samples sequenced on `r samp_sh_header$Date` and analyzed with BaseSpace DRAGEN Lineage App version `r dragen_covid_lineage_version` on `r date_pipeline_was_run`. The results section contains lineage information using the pangolin software version `r pangolin_software_version` (https://cov-lineages.org/resources/pangolin.html) and Nextclade version `r nextclade_version` (https://clades.nextstrain.org/)
+This report summarizes the results of `r nrow(s)-1` COVID samples sequenced on `r samp_sh_header$Date` and analyzed with BaseSpace DRAGEN Lineage App version `r dragen_covid_lineage_version` on `r date_pipeline_was_run`. The results section contains lineage information using the pangolin software version `r pangolin_software_version` (https://cov-lineages.org/resources/pangolin.html) and Nextclade version `r nextclade_version` (https://clades.nextstrain.org/). Samples were amplified with the `r artic_primer_scheme` primer scheme 
 
 # Number of samples sequenced
 

@@ -5,39 +5,38 @@ library(readr)
 library(stringr)
 library(openxlsx)
 
+#TODO: Include GeneXpert report and Repiratory Panel report and provide messages if found
+
 #This Rscript filters out low RLU values from the metadata sheet received from the epidemiologists
 #Send this filtered sheet to the scientists
-
-##############
-# Manual input
-##############
-
-# add the sample names that could not be retrieved from our receiving department as a string; this list from an email by Morris replying to Jasmine
-receiving_samples_not_found <- '' %>%
-  str_split(pattern = ", ") %>%
-  unlist()
 
 ###################################################
 # Load the RLU report
 # Make sure these sheets are not uploaded to GitHub
 ###################################################
 
-RLU_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".csv", full.names = TRUE)
+RLU_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".CSV", full.names = TRUE)
 
 RLU_data <- read_csv(RLU_fp) %>%
-  filter(`SARS-CoV2 Result` == "POSITIVE") %>%
-  rename(SPECIMEN_NUMBER = "Sample ID", SPECIMEN_DATE = "Draw Date", RLU = "SARSCoV2-1", GENDER = "Sex", age = "Age", BIRTH_DATE = "DOB") %>%
-  select(SPECIMEN_NUMBER, SPECIMEN_DATE, BIRTH_DATE, age, GENDER, RLU) %>%
-  mutate(GENDER = case_when(GENDER == "M" ~ "Male",
-                            GENDER == "F" ~ "Female",
-                            TRUE ~ NA_character_)) %>%
+  filter(Test == "SARSCoV2-1") %>%
+  rename(SPECIMEN_NUMBER = "Sample ID", SPECIMEN_DATE = "Draw Date", RLU = "Num Res", BIRTH_DATE = "DOB") %>%
+  #rename(SPECIMEN_NUMBER = "Sample ID", SPECIMEN_DATE = "Draw Date", RLU = "Num Res", GENDER = "Sex", age = "Age", BIRTH_DATE = "DOB") %>%
+  select(SPECIMEN_NUMBER, SPECIMEN_DATE, BIRTH_DATE, RLU) %>%
   mutate(BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y"), SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y")) %>%
-  mutate(age = ifelse(grepl("mo", age), 0, age)) %>%
   #filter rows where sample_id is NA
   filter(!is.na(SPECIMEN_NUMBER)) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x)))) %>%
   select(!matches("^\\.\\.\\."))
+
+###################################################
+# Get HC1 samples
+###################################################
+
+receiving_samples_not_found <- read_csv(RLU_fp) %>%
+  filter(Test == "POCT 4 Plex Sars-CoV-2") %>%
+  select(`Sample ID`) %>%
+  pull()
 
 ########################################################################
 # Load the metadata sheet from epidemiologists and merge with RLU values
@@ -49,7 +48,7 @@ PHL_fp <- PHL_all_fp[!grepl("_filtered.xlsx$", PHL_all_fp)]
 PHL_data <- read_excel(PHL_fp, skip = 1, sheet = "PHL") %>%
   #filter rows where sample id is NA
   filter(!is.na(SPECIMEN_NUMBER)) %>%
-  merge(RLU_data, by = c("SPECIMEN_NUMBER", "BIRTH_DATE", "age", "GENDER", "SPECIMEN_DATE"), all.x = TRUE) %>%
+  merge(RLU_data, by = c("SPECIMEN_NUMBER", "BIRTH_DATE", "SPECIMEN_DATE"), all.x = TRUE) %>%
   select(SPECIMEN_DATE, FacCode, agecoll, case_id, SPECIMEN_NUMBER,
          FIRST_NAME, LAST_NAME, BIRTH_DATE, age, zip_char, GENDER,
          breakthrough_case, death, hospitalized, outbreak, priority, RLU) %>%
@@ -88,7 +87,7 @@ if(length(missing_sample_with_RLU) > 0) {
 }
 
 message("\nThese are HC1 samples with missing RLU values: ")
-message(paste0(receiving_samples_not_found, collapse = ", "))
+message(paste0(receiving_samples_not_found[receiving_samples_not_found %in% PHL_data$SPECIMEN_NUMBER], collapse = ", "))
 
 epi_sample_not_found <- PHL_data %>%
   filter(is.na(RLU)) %>%
