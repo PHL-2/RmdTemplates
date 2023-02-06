@@ -22,7 +22,7 @@ output:
 ### ================
 ### packages install
 ### ================
-install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist"))
+install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx"))
 
 ```
 
@@ -46,7 +46,7 @@ opts_chunk$set(
   fig.width=6,
   fig.height=6,
   dev.args = list(pdf = list(useDingbats = FALSE))
-  )
+)
 
 pander::panderOptions("knitr.auto.asis", FALSE)
 #this also means that you have to put results='asis' in any block that has pander output
@@ -55,9 +55,15 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 
 ```
 
+```{r filter out samples, eval = FALSE, message = TRUE}
+
+source("code/1_remove_low_RLU.R")
+
+```
+
 ```{r generate SampleSheet and metadata, eval = FALSE, message = TRUE}
 
-source("code/generate_barcodes_IDT.R")
+source("code/2_generate_barcodes_IDT.R")
 
 ```
 
@@ -103,7 +109,7 @@ if (length(in_results_not_in_s) > 0) {
 
 # Introduction
 
-This report summarizes the results of `r nrow(s)-1` COVID samples sequenced on `r samp_sh_header$Date` and analyzed with BaseSpace DRAGEN Lineage App version `r dragen_covid_lineage_version` on `r date_pipeline_was_run`. The results section contains lineage information using the pangolin software version `r pangolin_software_version` (https://cov-lineages.org/resources/pangolin.html) and Nextclade version `r nextclade_version` (https://clades.nextstrain.org/)
+This report summarizes the results of `r nrow(s)-1` COVID samples sequenced on `r samp_sh_header$Date` and analyzed with BaseSpace DRAGEN Lineage App version `r dragen_covid_lineage_version` on `r date_pipeline_was_run`. The results section contains lineage information using the pangolin software version `r pangolin_software_version` (https://cov-lineages.org/resources/pangolin.html) and Nextclade version `r nextclade_version` (https://clades.nextstrain.org/). Samples were amplified with the `r artic_primer_scheme` primer scheme 
 
 # Number of samples sequenced
 
