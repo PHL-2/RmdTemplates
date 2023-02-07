@@ -417,7 +417,7 @@ nc_files_fps <- list.files(here("data", "processed_bs"), pattern = ".nextclade.t
 next_clade <- nc_files_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
-  do(read_delim(.$FileName, col_names = TRUE, col_types = cols(missing = col_character(), clade_nextstrain = col_character()))) %>%
+  do(read_delim(.$FileName, col_names = TRUE, col_types = cols(missing = col_character(), clade_nextstrain = col_character(), clade = col_character()))) %>%
   ungroup() %>%
   select(-c(FileName)) %>%
   rename(nc_qc_status = "qc.overallStatus", sample_id = "seqName") %>%
