@@ -15,7 +15,7 @@ library(openxlsx)
 # Make sure these sheets are not uploaded to GitHub
 ###################################################
 
-RLU_fp <- list.files(here("metadata", "extra_metadata"), pattern = ".CSV", full.names = TRUE)
+RLU_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_harvest_report.CSV", full.names = TRUE)
 
 RLU_data <- read_csv(RLU_fp) %>%
   filter(Test == "SARSCoV2-1") %>%

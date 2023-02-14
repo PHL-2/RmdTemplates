@@ -195,6 +195,39 @@ s %>%
 
 ```
 
+\blandscape
+
+### Number of reads per control
+
+```{r reads per control, fig.height=6, fig.width=10}
+
+s %>%
+  filter(isControl) %>%
+  mutate(sample_type_name = paste0(sample_type, ": ", environmental_site)) %>%
+  mutate(sample_type_name = ifelse(is.na(environmental_site), gsub(": NA$", "", sample_type_name), sample_type_name)) %>%
+  order_on_other_col(sample_type_name, read_counts) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=read_counts, y=sample_type_name, fill = sample_type)) +
+    geom_col() +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    facet_grid(sample_type~., scales = "free", space = "free") +
+    scale_x_continuous(labels = scales::label_comma()) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(),
+          axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5),
+          strip.background = element_blank(),
+          strip.text = element_blank()) +
+    labs(
+      x="Read counts",
+      y="", fill = "Sample Type"
+    )
+  }
+
+```
+
+\elandscape
+
 ### Percentage of reads that make up the lane
 
 ```{r percent reads of lane, echo=FALSE}

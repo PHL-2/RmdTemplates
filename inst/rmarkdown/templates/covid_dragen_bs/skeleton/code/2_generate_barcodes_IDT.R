@@ -9,6 +9,10 @@ library(stringr)
 #BCL Convert may require a different SampleSheet format
 #https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/bcl_convert/bcl-convert-v3-7-5-software-guide-1000000163594-00.pdf
 
+#TODO: detect any samples in the previous_run folder and change its run number to 2
+#can also have an option here to add the run number to each sample
+#TODO: try removing manual inputs into the sample metadata sheet
+
 munging_fp <- here("metadata", "munge")
 
 ##############
@@ -86,9 +90,11 @@ sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
 # Make sure these sheets are not uploaded to GitHub
 ###################################################################################
 
-PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xlsx", full.names = TRUE)
+PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xlsx", full.names = TRUE, recursive = TRUE)
 
-PHL_data <- read_excel(PHL_fp, sheet = "PHL") %>%
+PHL_data <- PHL_fp %>%
+  lapply(function(x) read_excel_safely(x, "PHL")) %>%
+  bind_rows() %>%
   mutate(SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y"), BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y")) %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
   select(sample_name, sample_collection_date, DOB, age, gender, zip_char, priority, case_id, RLU) %>%
@@ -104,14 +110,17 @@ PHL_data <- read_excel(PHL_fp, sheet = "PHL") %>%
                             labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
                             include.lowest = TRUE)) %>%
   #don't include age because it may be PHI if included with zipcode and gender
-  select(-c(age, DOB))
+  select(-c(age, DOB)) %>%
+  as.data.frame()
 
 ###################################################################################
 # Load the metadata sheet from epidemiologists and merge with sample metadata sheet
 # Make sure these sheets are not uploaded to GitHub
 ###################################################################################
 
-TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
+TU_data <- PHL_fp %>%
+  lapply(function(x) read_excel_safely(x, "Temple")) %>%
+  bind_rows() %>%
   mutate(Collection_date = as.Date(Collection_date, format = "%m/%d/%Y")) %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value", gender = "GENDER") %>%
   select(sample_name, sample_collection_date, CT, age, gender, priority, case_id) %>%
@@ -126,7 +135,24 @@ TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
                             labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
                             include.lowest = TRUE)) %>%
   #don't include age because it may be PHI if included with zipcode and gender
-  select(-age)
+  select(-age) %>%
+  as.data.frame()
+
+################################
+# Load the environmental samples
+################################
+
+ENV_fp <- list.files(here("metadata", "extra_metadata"), pattern = "environmental_sample.csv", full.names = TRUE)
+
+ENV_data <- read_csv(ENV_fp) %>%
+  mutate(Collection_date = as.Date(`Draw Date`, format = "%m/%d/%Y")) %>%
+  rename(sample_name = "Sample ID", sample_collection_date = "Collection_date", environmental_site = "Last Name") %>%
+  select(sample_name, sample_collection_date, environmental_site) %>%
+  #filter rows where sample_id is NA
+  filter(!is.na(sample_name)) %>%
+  #filter empty columns
+  select(where(function(x) any(!is.na(x)))) %>%
+  select(!matches("^\\.\\.\\."))
 
 ###########################
 # Merge all metadata sheets
@@ -134,6 +160,7 @@ TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
 
 PHL_TU_merge <- PHL_data %>%
   bind_rows(TU_data) %>%
+  bind_rows(ENV_data) %>%
   mutate(sample_collection_date = as.character(sample_collection_date))
 
 cols2merge <- c("sample_name", "plate", "plate_row", "plate_col", "plate_coord")
@@ -154,7 +181,8 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   mutate(environmental_material = ifelse(grepl("swab|control", sample_type), NA, environmental_material)) %>%
   mutate(collection_device = ifelse(grepl("waste water|control", sample_type), NA, collection_device)) %>%
   #remove empty columns again
-  select(where(function(x) any(!is.na(x))))
+  select(where(function(x) any(!is.na(x)))) %>%
+  mutate(environmental_site = ifelse(grepl("Water control|Reagent control", sample_type), paste0(plate_row, plate_col), environmental_site))
 
 if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
   stop(simpleError(paste0("Some samples have collection dates more than 2 months ago. Investigate!!")))
@@ -207,7 +235,6 @@ for(x in c(cols2merge, "sample_id",
 
 #make these columns NA if missing
 for(x in c("qubit_conc_ng_ul",
-           "library_conc_ng_ul",
            "lane", "run_number")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     metadata_sheet[[x]] <- NA
