@@ -142,11 +142,11 @@ TU_data <- PHL_fp %>%
 # Load the environmental samples
 ################################
 
-ENV_fp <- list.files(here("metadata", "extra_metadata"), pattern = "environmental_sample.csv", full.names = TRUE)
+ENV_fp <- list.files(here("metadata", "extra_metadata"), pattern = "environmental_samples.csv", full.names = TRUE)
 
 ENV_data <- read_csv(ENV_fp) %>%
-  mutate(Collection_date = as.Date(`Draw Date`, format = "%m/%d/%Y")) %>%
-  rename(sample_name = "Sample ID", sample_collection_date = "Collection_date", environmental_site = "Last Name") %>%
+  #use the first day of the week (starting on Monday) as the sample_collection_date
+  mutate(sample_collection_date = as.Date(cut(as.POSIXct(Sys.time()), "week"))) %>%
   select(sample_name, sample_collection_date, environmental_site) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
