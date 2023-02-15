@@ -417,10 +417,10 @@ nc_files_fps <- list.files(here("data", "processed_bs"), pattern = ".nextclade.t
 next_clade <- nc_files_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
-  do(read_delim(.$FileName, col_names = TRUE, col_types = cols(missing = col_character(), clade_nextstrain = col_character()))) %>%
+  do(read_delim(.$FileName, col_names = TRUE, col_types = cols(missing = col_character(), clade_nextstrain = col_character(), clade = col_character()))) %>%
   ungroup() %>%
   select(-c(FileName)) %>%
-  rename(nc_qc_status = "qc.overallStatus", sample_id = "seqName") %>%
+  rename(nc_qc_status = "qc.overallStatus", sample_id = "seqName", nc_index = "index") %>%
   mutate(nc_VOC = gsub(".*\\(|\\).*", "", clade)) %>%
   mutate(nc_VOC = gsub("^19A$", "Reference", nc_VOC))
 
@@ -471,7 +471,7 @@ dragen_covid_lineage_version <- unique(bs_results$dragen_covid_lineage_version)
 
 ctrl_regex <- "EBneg|Extract|Vibriolambda|Blank|MockDNA|DNAfreewater|Geneblock|Emptywell|Reagent|Control|POS|NEG|PC|NC"
 
-sample_type_fct <- c("Unassigned reads", "Water control", "Reagent control", "Mock DNA positive control")
+ctrl_fct_lvl <- c("Unassigned reads", "Water control", "Reagent control", "Environmental control", "Mock DNA positive control")
 
 s_meta <- read_delim(mapping_file_fp, delim = ",")
 
@@ -481,12 +481,12 @@ s <- s_meta %>%
   mutate(isControl = grepl(ctrl_regex, sample_id, ignore.case = TRUE)|grepl(ctrl_regex, sample_type, ignore.case = TRUE)) %>%
   #make a new sample type based on if there were pangolin and nextclade results. DRAGEN App uses the <90 on the COVID targets as their threshold
   #Based on their manual, targets seem to be "amplicons" or regions of longer stretches of DNA that are unique to COVID (longer than their 32 k-mers that they use for k-mer detection)
-  mutate(sample_type = case_when(grepl("^Undetermined$", sample_id) ~ sample_type_fct[1],
+  mutate(sample_type = case_when(grepl("^Undetermined$", sample_id) ~ ctrl_fct_lvl[1],
                                  ((`SARS-CoV-2 Targets found` < 90) & !isControl) ~ paste0(sample_type, " - No Variant Calls"),
                                  TRUE ~ sample_type)) %>%
   #rearrange the sampletypes by ctrls first
-  mutate(sample_type = factor(sample_type, levels = c(sample_type_fct,
-                                                      sort(unique(sample_type)[!grepl(paste0(sample_type_fct, collapse = "|"), unique(sample_type))])))) %>%
+  mutate(sample_type = factor(sample_type, levels = c(ctrl_fct_lvl,
+                                                      sort(unique(sample_type)[!grepl(paste0(ctrl_fct_lvl, collapse = "|"), unique(sample_type))])))) %>%
   droplevels()
 
 color_by <- NULL
@@ -616,7 +616,7 @@ for(file in control_gzip_fps) {
 
 actual_sample_type <- c(levels(s$sample_type), NA)
 
-lvls <- c("Unassigned reads", "Water control", "Reagent control", "Mock DNA positive control",
+lvls <- c("Unassigned reads", "Water control", "Reagent control", "Environmental control", "Mock DNA positive control",
           "Nasal swab", "Nasal swab - No Variant Calls", NA)
 
 if(!all(actual_sample_type %in% lvls)) {
@@ -626,7 +626,7 @@ if(!all(actual_sample_type %in% lvls)) {
 ann_geom_values <- list()
 
 #leave Unassigned reads as purple
-ann_geom_values[["sample_type_colors"]] <- setNames(pal_d3("category20")(20)[c(15, 19, 16, 2, 1, 4, 8)], lvls)
+ann_geom_values[["sample_type_colors"]] <- setNames(pal_d3("category20")(20)[c(15, 19, 16, 13, 2, 1, 4, 8)], lvls)
 
 #make the controls and unassigned reads into triangle and diamond shapes
 ann_geom_values[["sample_type_shapes"]] <- setNames(c(24:25, 8, 23,

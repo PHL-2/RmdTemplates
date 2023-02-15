@@ -7,6 +7,7 @@ processed_bs/
 !**/metadata/*_COVIDSeq_metadata.csv
 epi/
 fastq/
+*.fastq.gz
 aux_files/seqsender/
 *.pdf
 cp2admin.R
