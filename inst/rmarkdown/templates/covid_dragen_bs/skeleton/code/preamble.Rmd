@@ -634,10 +634,10 @@ ann_geom_values[["sample_type_shapes"]] <- setNames(c(24:25, 8, 23,
                                                     c(9:14)[1:(length(lvls)-6)]), lvls)
 
 #make the controls and unassigned reads samples bigger in size
-ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 4, 4, 4, rep(1, length(lvls)-3)), lvls)
+ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 2, 4, 2, 4, rep(1, length(lvls)-5)), lvls)
 
 #make alpha for nasal swabs to 0.5
-ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, rep(0.2, length(lvls)-4)), lvls)
+ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, 1, rep(0.2, length(lvls)-5)), lvls)
 
 #scales::show_col(ann_geom_values[["sample_type_colors"]])
 

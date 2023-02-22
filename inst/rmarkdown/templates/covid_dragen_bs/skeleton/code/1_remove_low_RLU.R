@@ -177,6 +177,36 @@ TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
 
 excel_data <- list(PHL = filtered_PHL_data, Temple = TU_data)
 
+other_sheets <- excel_sheets(PHL_fp)[!grepl("PHL|Temple", excel_sheets(PHL_fp))]
+
+other_samples <- data.frame(sample_name = "")
+
+for(sheet_name in other_sheets) {
+
+  possible_sample_names <- "SPECIMEN_NUMBER"
+
+  other_data <- PHL_fp %>%
+    lapply(function(x) read_excel_safely(x, sheet_name)) %>%
+    bind_rows() %>%
+    mutate_at(vars(contains(possible_sample_names)), ~gsub("\\s", "", .)) %>%
+    as.data.frame()
+
+  other_samples <- other_data %>%
+    rename_at(vars(contains(possible_sample_names)),
+              ~gsub(possible_sample_names, "sample_name", ., ignore.case = TRUE)) %>%
+    arrange(across(starts_with("ct value"))) %>%
+    arrange(across(starts_with("RLU"), desc)) %>%
+    select(sample_name) %>%
+    rbind(other_samples)
+
+  other_data <- list(other_data)
+
+  names(other_data) <- sheet_name
+
+  excel_data <- append(excel_data, other_data)
+
+}
+
 write.xlsx(excel_data, file = gsub(".xlsx$", "_filtered.xlsx", PHL_fp))
 
 ################################################################################
@@ -233,17 +263,25 @@ combined_list <- select(PHL_samples, sample_name) %>%
   rbind(select(TU_samples, sample_name)) %>%
   rbind(select(enviro_samples, sample_name)) %>%
   rbind(older_samples) %>%
+  rbind(other_samples) %>%
   filter(sample_name != "") %>%
   mutate(grp = (row_number() - 1) %/% 8)
 
-combined_list_first_half <- combined_list %>%
+combined_list_first_half <- data.frame(sample_name = "NC", grp = 0) %>%
+  rbind(combined_list) %>%
   filter(grp < 7)
 
-combined_list_second_half <- combined_list %>%
+combined_list_second_half <- data.frame(sample_name = "NC", grp = 7) %>%
+  rbind(combined_list) %>%
   filter(grp >= 7)
 
-plate_view <- rbind(data.frame(sample_name = "NC", grp = 0), combined_list_first_half) %>%
-  rbind(rbind(data.frame(sample_name = "NC", grp = 7), combined_list_second_half)) %>%
+if(nrow(combined_list_second_half) == 1) {
+  combined_list_second_half <- data.frame(sample_name = "", grp = "")
+}
+
+plate_view <- combined_list_first_half %>%
+  rbind(combined_list_second_half) %>%
+  filter(sample_name != "") %>%
   group_by(grp) %>%
   group_modify(~ add_row(.x, sample_name = "NC")) %>%
   ungroup() %>%
@@ -263,6 +301,13 @@ real_plate_view <- plate_view %>%
   tidyr::pivot_wider(names_from = "plate_col", values_from = "sample_name")
 
 write_csv(plate_view, file = here("metadata", "for_scientists", paste0(format(Sys.time(), "%Y%m%d"), "_combined_samples_list.csv")))
-write_csv(real_plate_view, file = here("metadata", "for_scientists", paste0(format(Sys.time(), "%Y%m%d"), "_combined_samples_plate_view.csv")))
+
+plate_map_local_fp <- here("metadata", "for_scientists", paste0(format(Sys.time(), "%Y%m%d"), "_combined_samples_plate_map.csv"))
+write_csv(real_plate_view, file = plate_map_local_fp)
+
+plate_map_cp_fp <- file.path("//city.phila.local/shares/Health/PHL/Admin/Sequencing Action plan updated/Plate Maps",
+                             paste0(format(Sys.time(), "%Y-%m-%d"), "_Plate_Map.csv"))
+
+file.copy(plate_map_local_fp, plate_map_cp_fp)
 
 write_csv(enviro_samples, file = here("metadata", "extra_metadata", paste0(format(Sys.time(), "%Y%m%d"), "_environmental_samples.csv")))

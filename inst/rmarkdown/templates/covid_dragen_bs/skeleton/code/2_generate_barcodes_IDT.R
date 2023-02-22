@@ -154,6 +154,53 @@ ENV_data <- read_csv(ENV_fp) %>%
   select(where(function(x) any(!is.na(x)))) %>%
   select(!matches("^\\.\\.\\."))
 
+########################
+# Load all other samples
+########################
+
+other_sheets <- excel_sheets(PHL_fp)[!grepl("PHL|Temple", excel_sheets(PHL_fp))]
+
+other_data <- data.frame(sample_name = "",
+                         case_id = "",
+                         sample_type = "",
+                         sample_collection_date = NA,
+                         CT = NA_real_,
+                         RLU = NA_real_,
+                         gender = "",
+                         age = NA_integer_,
+                         zip_char = NA_character_
+)
+
+for(sheet_name in other_sheets) {
+
+  possible_sample_names <- "SPECIMEN_NUMBER"
+
+  possible_case_id <- "cdms_id"
+
+  possible_zip_char <- "zip_code"
+
+  possible_ct_value <- "ct_value"
+
+  other_sheet <- PHL_fp %>%
+    lapply(function(x) read_excel_safely(x, sheet_name)) %>%
+    bind_rows() %>%
+    rename_at(vars(contains(possible_sample_names)),
+              ~gsub(possible_sample_names, "sample_name", ., ignore.case = TRUE)) %>%
+    mutate(sample_name = gsub("\\s", "", sample_name)) %>%
+    rename_at(vars(contains(possible_case_id)),
+              ~gsub(possible_case_id, "case_id", ., ignore.case = TRUE)) %>%
+    mutate(case_id = gsub("\\s", "", case_id)) %>%
+    rename_at(vars(contains(possible_zip_char)),
+              ~gsub(possible_zip_char, "zip_char", ., ignore.case = TRUE)) %>%
+    mutate(zip_char = as.character(zip_char)) %>%
+    rename_at(vars(contains(possible_ct_value)),
+              ~gsub(possible_ct_value, "CT", ., ignore.case = TRUE)) %>%
+    as.data.frame()
+
+  other_data <- bind_rows(other_data, other_sheet)
+
+}
+
 ###########################
 # Merge all metadata sheets
 ###########################
@@ -161,6 +208,7 @@ ENV_data <- read_csv(ENV_fp) %>%
 PHL_TU_merge <- PHL_data %>%
   bind_rows(TU_data) %>%
   bind_rows(ENV_data) %>%
+  bind_rows(other_data) %>%
   mutate(sample_collection_date = as.character(sample_collection_date))
 
 cols2merge <- c("sample_name", "plate", "plate_row", "plate_col", "plate_coord")
