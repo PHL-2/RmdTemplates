@@ -41,6 +41,19 @@ if(sequencing_date == "" | prj_description == "" | any(is.na(instrument_type))) 
   stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
 }
 
+###################################################
+# Load functions
+###################################################
+
+#this file needs to sit in a [aux_files/functions] directory path above this project directory
+tryCatch(
+  {
+    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+  },
+  error = function(e) {
+    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+  }
+)
 
 ########################
 # Load barcode sequences
@@ -162,13 +175,12 @@ other_sheets <- excel_sheets(PHL_fp)[!grepl("PHL|Temple", excel_sheets(PHL_fp))]
 
 other_data <- data.frame(sample_name = "",
                          case_id = "",
-                         sample_type = "",
                          sample_collection_date = NA,
                          CT = NA_real_,
                          RLU = NA_real_,
                          gender = "",
                          age = NA_integer_,
-                         zip_char = NA_character_
+                         zip_char = NA_integer_
 )
 
 for(sheet_name in other_sheets) {
@@ -192,9 +204,9 @@ for(sheet_name in other_sheets) {
     mutate(case_id = gsub("\\s", "", case_id)) %>%
     rename_at(vars(contains(possible_zip_char)),
               ~gsub(possible_zip_char, "zip_char", ., ignore.case = TRUE)) %>%
-    mutate(zip_char = as.character(zip_char)) %>%
     rename_at(vars(contains(possible_ct_value)),
               ~gsub(possible_ct_value, "CT", ., ignore.case = TRUE)) %>%
+    select(-sample_type) %>%
     as.data.frame()
 
   other_data <- bind_rows(other_data, other_sheet)

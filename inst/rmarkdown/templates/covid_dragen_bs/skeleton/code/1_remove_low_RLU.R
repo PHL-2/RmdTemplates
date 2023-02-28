@@ -251,8 +251,8 @@ if(length(older_samples_fp) > 0) {
 
   older_samples <- bind_rows(older_PHL_samples, older_TU_samples) %>%
     rename(sample_name = "SPECIMEN_NUMBER") %>%
-    arrange(across(starts_with("ct value"))) %>%
-    arrange(across(starts_with("RLU"), desc)) %>%
+    mutate(PHL_sample = grepl("^H", sample_name)) %>%
+    arrange(-PHL_sample, sample_name) %>%
     select(sample_name)
 
 } else {
@@ -261,9 +261,9 @@ if(length(older_samples_fp) > 0) {
 
 combined_list <- select(PHL_samples, sample_name) %>%
   rbind(select(TU_samples, sample_name)) %>%
-  rbind(select(enviro_samples, sample_name)) %>%
   rbind(older_samples) %>%
   rbind(other_samples) %>%
+  rbind(select(enviro_samples, sample_name)) %>%
   filter(sample_name != "") %>%
   mutate(grp = (row_number() - 1) %/% 8)
 
