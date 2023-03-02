@@ -229,7 +229,7 @@ TU_samples <- TU_data %>%
   rename(sample_name = "SPECIMEN_NUMBER") %>%
   arrange(`ct value`)
 
-environmental_samples_fp <- list.files(here("metadata", "extra_metadata"), pattern = "enviro.*.xlsx", full.names = TRUE)
+environmental_samples_fp <- list.files(here("metadata", "extra_metadata"), pattern = "enviro.*.xlsx", full.names = TRUE, ignore.case = TRUE)
 
 if(length(environmental_samples_fp) > 0) {
   enviro_samples <- read_excel(environmental_samples_fp, col_names = TRUE) %>%
@@ -265,6 +265,7 @@ combined_list <- select(PHL_samples, sample_name) %>%
   rbind(other_samples) %>%
   rbind(select(enviro_samples, sample_name)) %>%
   filter(sample_name != "") %>%
+  #put samples in groups of 8
   mutate(grp = (row_number() - 1) %/% 8)
 
 combined_list_first_half <- data.frame(sample_name = "NC", grp = 0) %>%
@@ -308,6 +309,6 @@ write_csv(real_plate_view, file = plate_map_local_fp)
 plate_map_cp_fp <- file.path("//city.phila.local/shares/Health/PHL/Admin/Sequencing Action plan updated/Plate Maps",
                              paste0(format(Sys.time(), "%Y-%m-%d"), "_Plate_Map.csv"))
 
-file.copy(plate_map_local_fp, plate_map_cp_fp)
+file.copy(plate_map_local_fp, plate_map_cp_fp, overwrite = TRUE)
 
 write_csv(enviro_samples, file = here("metadata", "extra_metadata", paste0(format(Sys.time(), "%Y%m%d"), "_environmental_samples.csv")))

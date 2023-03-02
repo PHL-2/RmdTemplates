@@ -777,6 +777,43 @@ empty_plate %>%
 
 ```
 
+```{r nc plate, fig.width=11, fig.height=7}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  mutate(sample_type = gsub(" - No Variant.*|Mock DNA ", "", sample_type)) %>%
+  mutate(sample_type = gsub(" ", "\n", sample_type)) %>%
+  mutate(sample_type = gsub("Environmental", "Environ", sample_type)) %>%
+  filter(!is.na(plate_coord)) %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  droplevels() %>%
+  mutate(nc_qc_status = factor(nc_qc_status, levels = c("bad", "mediocre", "good"))) %>%
+  {
+  ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = nc_qc_status, label = sample_type)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 16) +
+    geom_text(check_overlap = TRUE, size = 3, color = "black") +
+    scale_fill_manual(values = brewer.pal(6, "Set3")[c(4, 6, 1)]) +
+    #facet_wrap(~plate, ncol = 1) + names(ann_geom_values$sample_type_colors))]) +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill = "NextClade status",
+    ) +
+    guides(fill = guide_legend(override.aes = list(size = 8)))  
+  }
+
+```
+
 \elandscape
 
 ```{r lineage and VOC checks}
@@ -1065,6 +1102,16 @@ s %>%
 
 \blandscape
 
+## Individual sample sliding window coverage (100 bp)
+
+```{r slide window results per sample, fig.width=11, fig.height=8, fig.align='center'}
+
+knitr::include_graphics(
+  path = list.files(here("data"), pattern = paste0(sequencing_date, "_sample_sliding_coverage_100_bp_col"), full.names = TRUE)
+)
+
+```
+
 # Review and Approval
 
 ```{r sign off}
@@ -1095,10 +1142,7 @@ qc_output_fp <- here("output", paste0(project_name, '.QC.report_gen.on.', Sys.Da
 # load preamble the first time?
 load_preamble <- TRUE
 
-# need to download and import basespace data for each sample?
-dl_bs_data <- TRUE
-
-# need to import the data into a single tsv?
+# need to import the data into a single tsv for the first time?
 import_data <- TRUE
 
 # print table as kable for pdf?
