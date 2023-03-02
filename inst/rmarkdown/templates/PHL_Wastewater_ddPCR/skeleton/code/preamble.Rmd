@@ -117,17 +117,7 @@ dControls_summarise <- dControls %>%
                                                initial_concentration_vol = (init_concentration_vol_uL)) #multiplied to become uL
     )
 
-datDilution <- d %>% 
-  filter(grepl(pattern = "SouthWest", x = Type),
-         !grepl(pattern = "DilB", x = Sample),
-         #Target == "MHV",
-         Process == "Concentrated" | Process == "Dilution") %>%
-  mutate(Extra = gsub(pattern = "lysed_", replacement = "", x = Extra),) %>%
-  separate(Extra, into = c("name", "dilution_factor", "series_num"), sep = "_") %>%
-  unite(dilution_factor, series_num, col = dilution_series, sep = "_") %>%
-  arrange(Type, Process, Well) %>%
-  mutate(name = ifelse(is.na(name), "stock", name),
-         dilution_series = ifelse(dilution_series == "NA_NA", "stock", dilution_series))
+
 
   
 ```

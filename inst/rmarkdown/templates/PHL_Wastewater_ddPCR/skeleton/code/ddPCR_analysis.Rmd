@@ -16,6 +16,8 @@ output:
 
 ---
 
+
+\newpage
 \tableofcontents
 
 ```{r setup, include=FALSE}
@@ -471,48 +473,7 @@ pander(ww_SC2_conc_result,
 ```
 
 
-## Dilution
-
-```{r dilutions, eval = has_dilutions}
-
-
-
-datDilution %>%
-  ggplot(aes(x=dilution_series, y=`Conc(copies/uL)`, fill = Target)) +
-  geom_boxplot(position = "dodge") +
-  geom_point(
-    aes(fill = Target),
-    shape = 21,
-    size = 1.5,
-    position = position_jitterdodge(jitter.width = 0.2)) +
-  facet_grid(. ~ name, scales = "free_x") +
-  theme_light() +
-  labs(
-    title = "Concentration of virus in Southwest wastewater and diluted wastewater samples",
-    subtitle = "MHV added to Southwest wastewater samples then diluted 1:10 with control",
-    y = "Concentration from ddPCR (GC/uL)",
-    x = "Samples"
-  )
-
-datDilution %>%
-  ggplot(aes(x=dilution_series, y=`Conc(copies/uL)`, fill = Target)) +
-  geom_boxplot(position = "dodge") +
-  geom_point(
-    aes(fill = Target),
-    shape = 21,
-    size = 1.5,
-    position = position_jitterdodge(jitter.width = 0.2)) +
-  scale_y_continuous(trans = "log2") +
-  facet_grid(. ~ name, scales = "free_x") +
-  theme_light() +
-  labs(
-    title = "Concentration of virus in Southwest wastewater and diluted wastewater samples",
-    subtitle = "MHV added to Southwest wastewater samples then diluted 1:10 with control",
-    y = "Concentration from ddPCR (GC/uL)",
-    x = "Samples"
-  )
-
-
-
-
+```{r child = "code/dilutions.Rmd", eval = has_dilutions}
 ```
+
+
