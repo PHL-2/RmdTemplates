@@ -1,0 +1,224 @@
+
+```{r libraries}
+
+library(tidyverse)
+library(pander)
+library(here)
+
+```
+
+```{r functions}
+
+stock_concentration_calc = function(concentration, rxn_vol, input_vol, extraction_vol, elution_vol, end_concentration_vol, initial_concentration_vol, efficiency) {
+  result = (concentration * rxn_vol / input_vol) * (elution_vol / extraction_vol) * (end_concentration_vol / initial_concentration_vol) / efficiency
+  return(result)
+}
+
+```
+
+
+```{r load variables}
+
+source("config.R")
+
+```
+
+```{r finding most recent data}
+
+project_name <- basename(here())
+run_date <- as.Date(gsub("_.*", "", project_name))
+
+#get the newly added run folder
+run_dat_fp <- dat_fp %>%
+  list.files(full.names = T) %>%
+  file.info() %>%
+  filter(grepl(format(run_date, "%Y%m%d"), rownames(.))) %>%
+  rownames()
+
+dat_date <- run_dat_fp %>%
+  str_extract(pattern = "\\d{8}") %>%
+  as.Date(format = "%Y%m%d")
+
+if(run_date != dat_date) {
+ stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+}
+
+```
+
+
+```{r Reading ddPCR file and selecting useful columns}
+
+d <- read_csv(file = run_dat_fp) %>%
+  select(
+    Well, Sample = `Sample description 1`, Spiked = `Sample description 2`, Sample_date = `Sample description 3`, Extra = `Sample description 4`, SampleType, Target, `Conc(copies/uL)` = 7, Droplet_count = `Accepted Droplets`, Positives, Negatives) %>%
+  #mutate(Sample = gsub(pattern = "dd_", replacement = "dd", x = Sample)) %>%
+  separate(Sample, into = c("Type", "Process"), sep = "_", remove = FALSE) %>%
+  filter(!is.na(Sample)) %>%
+  mutate(percentage_positive = Positives/Droplet_count * 100,
+         Process = ifelse(is.na(Process), "Non-processed", Process),
+         Process = ifelse(Spiked == "Unspiked" & Process == "Concentrated", "Unspiked", Process),
+         Process = ifelse(grepl(pattern = "dil", x = Extra, ignore.case = T), "Dilution", Process),
+         Process = droplevels(factor(Process, level = c("Concentrated", "Unconcentrated", "Non-processed", "Unspiked","Dilution", "Frozen"))),
+         `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
+         Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed"))) %>%
+  filter(!is.na(`Conc(copies/uL)`))
+
+```
+
+
+```{r saving data to rstudio metadata folder (for github upload)}
+
+file.copy(run_dat_fp, "ddPCR_data_csv")
+
+```
+
+
+
+```{r data manip}
+
+dControls <- d %>%
+  filter(!grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type)) %>%
+  mutate(exp_con = ifelse(grepl(pattern = "PCR", x = Type ,ignore.case = T), "ddPCR control", "Extraction control"))
+
+dNeg <- dControls %>%
+  filter(grepl(pattern = "MHV_Un|ddPCR-H2O", x = Sample, ignore.case = T))
+
+threshold <- dNeg %>%
+  group_by(Type, Process, Target) %>%
+  summarize(
+    avg_pos_drop = mean(Positives),
+    sd_pos_drop = sd(Positives),
+    upper_limit_95 = avg_pos_drop + 1.96*sd_pos_drop
+    )
+
+dSamples <- d %>%
+  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type)) %>%
+  group_by(Type, Process, Spiked, Target) %>%
+  summarise(avg_pos_droplets = mean(Positives),
+            avg_conc = mean(`Conc(copies/uL)`),
+            sd_conc = sd(`Conc(copies/uL)`))
+
+dUnspiked <- d %>%
+  filter(Spiked == "Unspiked",
+         grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type)) 
+
+dControls_summarise <- dControls %>%
+  group_by(Type, Process, Target) %>%
+  summarise(avg_pos_droplets = mean(Positives),
+            avg_conc = mean(`Conc(copies/uL)`),
+            sd_conc = sd(`Conc(copies/uL)`)) %>%
+  mutate(stock_conc = stock_concentration_calc(concentration = avg_conc, 
+                                               rxn_vol = rxn_vol_uL, 
+                                               input_vol = input_vol_uL, 
+                                               extraction_vol = extraction_vol_uL, 
+                                               elution_vol = elution_vol_uL,
+                                               efficiency = 1, 
+                                               end_concentration_vol = end_concentration_vol_uL,
+                                               initial_concentration_vol = (init_concentration_vol_uL)) #multiplied to become uL
+    )
+
+datDilution <- d %>% 
+  filter(grepl(pattern = "SouthWest", x = Type),
+         !grepl(pattern = "DilB", x = Sample),
+         #Target == "MHV",
+         Process == "Concentrated" | Process == "Dilution") %>%
+  mutate(Extra = gsub(pattern = "lysed_", replacement = "", x = Extra),) %>%
+  separate(Extra, into = c("name", "dilution_factor", "series_num"), sep = "_") %>%
+  unite(dilution_factor, series_num, col = dilution_series, sep = "_") %>%
+  arrange(Type, Process, Well) %>%
+  mutate(name = ifelse(is.na(name), "stock", name),
+         dilution_series = ifelse(dilution_series == "NA_NA", "stock", dilution_series))
+
+  
+```
+
+
+```{r efficiency calculation}
+
+#initial concentrations of virus
+init_mhvcontrol_conc <- mhv_to_control_uL * MHV_concentration_copiesuL / (control_vol_mL * 1000)
+#init_mhvcontrol_nVirus <- mhv_to_control_uL*MHV_concentration_copiesuL
+init_sc2_conc <- SC2_concentration_copiesuL * sc2_to_control_uL / (control_vol_mL * 1000)
+#init_sc2_nVirus <- SC2_concentration_copiesuL * sc2_to_control_uL
+init_MHV_ww_conc <- MHV_concentration_copiesuL * mhv_ww_input_uL / (ww_vol_mL * 1000)
+#init_MHV_ww_nVirus <- MHV_concentration_copiesuL * mhv_ww_input_uL
+init_MHV_unconc_conc <- MHV_concentration_copiesuL * 2 / 800
+
+
+dInit_controls<- data.frame(Type = c("MHV", "E", "N2"), 
+                            initial_conc = c(init_mhvcontrol_conc, init_sc2_conc, init_sc2_conc))
+
+
+#resulting concentration of virus
+control_stock <- dControls_summarise %>%
+  filter(!grepl(pattern = "ddPCR-H2O", x = Type)) %>%
+  mutate(Type = gsub(pattern = "control", replacement = "MHV", x = Type)) %>%
+  left_join(dInit_controls, by = c("Target" = "Type")) %>%
+  mutate(stock_conc = ifelse(Process == "Unconcentrated", stock_conc * (init_concentration_vol_uL/end_concentration_vol_uL), stock_conc),
+         initial_conc = ifelse(Type == "MHV" & Process == "Unconcentrated", init_MHV_unconc_conc, initial_conc),
+         efficiency = stock_conc/initial_conc) %>%
+  select(Type, Process, Target, expected_conc = initial_conc, calculated_conc = stock_conc, efficiency) %>%
+
+    arrange(Type, Process, Target)
+
+sample_stock <- dSamples %>%
+  filter(Target == "MHV",
+         !grepl(pattern = "Dil", x = Type)) %>%
+  cbind(initial_conc = init_MHV_ww_conc) %>%
+  mutate(stock_conc = stock_concentration_calc(concentration = avg_conc, 
+                                               rxn_vol = rxn_vol_uL, 
+                                               input_vol = input_vol_uL, 
+                                               extraction_vol = extraction_vol_uL,
+                                               elution_vol = elution_vol_uL, 
+                                               efficiency = 1, 
+                                               end_concentration_vol = end_concentration_vol_uL,
+                                               initial_concentration_vol = (init_concentration_vol_uL))
+    ) %>%
+    mutate(stock_conc = ifelse(Process == "Unconcentrated", stock_conc * (init_concentration_vol_uL/end_concentration_vol_uL), stock_conc),
+           efficiency = stock_conc/initial_conc) %>%
+  select(Type, Process, Target, Spiked, expected_conc = initial_conc, calculated_conc = stock_conc, efficiency) %>%
+  arrange(Type, Process, Target, Spiked) %>%
+  filter(Spiked != "Unspiked")
+
+MHV_efficiency <- control_stock %>%
+         arrange(Type, Process, Target) %>%
+         filter(Type == "MHV",
+                Target == "MHV")
+
+SC2_efficiency <- control_stock %>%
+         arrange(Type, Process, Target) %>%
+         filter(Type == "ZeptoSC2")
+
+
+calc_efficiency <- MHV_efficiency %>%
+  filter(Process == "Concentrated",
+         Target ==  "MHV") %>%
+  pull(efficiency) %>%
+  mean()
+
+ww_SC2_conc_result <- dSamples %>%
+  filter(Process == "Concentrated",
+         Spiked == "Spiked",
+         Target != "MHV") %>%
+  mutate(stock_conc_GCuL = stock_concentration_calc(concentration = avg_conc, 
+                                               rxn_vol = rxn_vol_uL, 
+                                               input_vol = input_vol_uL, 
+                                               extraction_vol = extraction_vol_uL,
+                                               elution_vol = elution_vol_uL, 
+                                               efficiency = calc_efficiency, 
+                                               end_concentration_vol = end_concentration_vol_uL,
+                                               initial_concentration_vol = (init_concentration_vol_uL)),
+         stock_conc_GC_100eff = stock_concentration_calc(concentration = avg_conc, 
+                                               rxn_vol = rxn_vol_uL, 
+                                               input_vol = input_vol_uL, 
+                                               extraction_vol = extraction_vol_uL,
+                                               elution_vol = elution_vol_uL, 
+                                               efficiency = 1, 
+                                               end_concentration_vol = end_concentration_vol_uL,
+                                               initial_concentration_vol = (init_concentration_vol_uL)),
+         stock_conc_GC100mL = stock_conc_GCuL*100*1000
+    ) %>%
+  ungroup() %>%
+  select(Type, Target, stock_conc_GC_100eff, stock_conc_GCuL, stock_conc_GC100mL)
+
+```
