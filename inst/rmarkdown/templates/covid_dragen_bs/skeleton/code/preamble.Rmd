@@ -232,9 +232,13 @@ top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
   slice(1:10) %>%
   droplevels()
 
+dragen_metadata_fp <- here("data", paste0(sequencing_date, "_bs_metadata.csv"))
+
+run_dragen_app <- !file.exists(dragen_metadata_fp)
+
 ```
 
-```{r upload data to basespace and run the app, eval = dl_bs_data}
+```{r upload data to basespace and run the app, eval = run_dragen_app}
 
 dir.create(here("data", "processed_bs"), recursive = TRUE)
 
@@ -259,7 +263,7 @@ fastq_folder <- dirname(list.files(here(run_folder, latest_demux), pattern = "R[
 ### 1 - create the basespace project
 bs_cli_create_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_1_create_project.sh")
 project_id <- cli_submit(sh_exe_fp, bs_cli_create_fp, project_name)
-write(paste0(c("project_id", project_id), collapse = ","), here("data", paste0(sequencing_date, "_bs_metadata.csv")))
+write(paste0(c("project_id", project_id), collapse = ","), dragen_metadata_fp)
 
 ### 2 - upload the fastq files
 bs_cli_upload_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_2_upload_fastq.sh")
@@ -273,7 +277,7 @@ if(any(grepl("Error|Aborted|Failed", files_upload, ignore.case = TRUE))) {
 ### 3 - get the latest app version
 bs_cli_app_ver_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_3_get_app_version.sh")
 dragen_app_version <- cli_submit(sh_exe_fp, bs_cli_app_ver_fp, shQuote(app2run, type = "sh"))
-write(paste0(c("dragen_app_version", dragen_app_version), collapse = ","), here("data", paste0(sequencing_date, "_bs_metadata.csv")), append = TRUE)
+write(paste0(c("dragen_app_version", dragen_app_version), collapse = ","), dragen_metadata_fp, append = TRUE)
 
 
 ### 4 - launch the app
@@ -282,23 +286,40 @@ app_session_id <- cli_submit(sh_exe_fp, bs_cli_launch_fp, c(shQuote(app2run, typ
                                                               dragen_app_version,
                                                               project_id,
                                                               artic_primer_scheme))
-write(paste0(c("app_session_id", app_session_id), collapse = ","), here("data", paste0(sequencing_date, "_bs_metadata.csv")), append = TRUE)
+write(paste0(c("app_session_id", app_session_id), collapse = ","), dragen_metadata_fp, append = TRUE)
+
+```
+
+```{r download bs data check}
+
+bs_meta <- read_csv(dragen_metadata_fp, col_names = FALSE) %>%
+  column_to_rownames("X1") %>%
+  t() %>%
+  as.data.frame(stringsAsFactors = FALSE) %>%
+  mutate(project_id = as.numeric(project_id),
+         app_session_id = as.numeric(app_session_id))
+
+dl_bs_data <- is.null(bs_meta$app_run_date)
+
+```
+
+```{r, eval = dl_bs_data}
 
 ### 5 - wait until the app finished running
 bs_cli_await_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_5_await.sh")
-awaiting <- cli_submit(sh_exe_fp, bs_cli_await_fp, app_session_id)
+awaiting <- cli_submit(sh_exe_fp, bs_cli_await_fp, bs_meta$app_session_id)
 
 ### 6 - download data
 bs_cli_download_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_6_download.sh")
-downloading <- cli_submit(sh_exe_fp, bs_cli_download_fp, c(project_id,
+downloading <- cli_submit(sh_exe_fp, bs_cli_download_fp, c(bs_meta$project_id,
                                               shQuote(here("data", "processed_bs"), type = "sh")))
 
 ### 7 - get app date
 bs_cli_get_date_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_7_get_date.sh")
-app_run_date <- cli_submit(sh_exe_fp, bs_cli_get_date_fp, app_session_id) %>%
+app_run_date <- cli_submit(sh_exe_fp, bs_cli_get_date_fp, bs_meta$app_session_id) %>%
   as.Date() %>%
   as.character()
-write(paste0(c("app_run_date", app_run_date), collapse = ","), here("data", paste0(sequencing_date, "_bs_metadata.csv")), append = TRUE)
+write(paste0(c("app_run_date", app_run_date), collapse = ","), dragen_metadata_fp, append = TRUE)
 
 ```
 
@@ -429,11 +450,10 @@ next_clade <- nc_files_fps %>%
 
 ```{r write bs_results, eval = import_data}
 
-bs_meta <- read_csv(here("data", paste0(sequencing_date, "_bs_metadata.csv")), col_names = FALSE) %>%
+bs_meta <- read_csv(dragen_metadata_fp, col_names = FALSE) %>%
+  column_to_rownames("X1") %>%
   t() %>%
-  `colnames<-`(.[1, ]) %>%
-  as.data.frame() %>%
-  slice(-1)
+  as.data.frame(stringsAsFactors = FALSE)
 
 merge(coverage, kmer, by = "sample_id", all = TRUE) %>%
   merge(pango, by = "sample_id", all = TRUE) %>%
@@ -553,8 +573,9 @@ if(length(s_upload) > 0) {
   fastq_fps <- list.files(here("data", "processed_bs"), pattern = "scrubbed.*_001.fastq.gz", recursive = TRUE, full.names = TRUE)
   
   fastq2upload <- fastq_fps[grepl(paste0(s_upload, collapse = "|"), fastq_fps)]
-  invisible(sapply(fastq2upload, function(x) file.rename(x, to = paste0(here("upload", "fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", x)))))
-  
+  for(fastq_name_fp in fastq2upload) {
+    file.rename(fastq_name_fp, to = paste0(here("upload", "fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", fastq_name_fp)))
+  }
   
   #find all fasta files
   dir.create(here("upload", "fasta"), recursive = TRUE)
@@ -583,7 +604,9 @@ s_control <- s %>%
 dir.create(here("upload", "control_fastq"), recursive = TRUE)
   
 ctrl_fastq2upload <- fastq_fps[grepl(paste0(s_control, collapse = "|"), fastq_fps)]
-invisible(sapply(ctrl_fastq2upload, function(x) file.rename(x, to = paste0(here("upload", "control_fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", x)))))
+for(ctrl_fastq_name_fp in ctrl_fastq2upload) {
+  file.rename(ctrl_fastq_name_fp, to = paste0(here("upload", "control_fastq"), gsub(".*scrubbed\\.[0-9]*\\.", "/", ctrl_fastq_name_fp)))
+}
 
 ```
 
@@ -593,7 +616,7 @@ invisible(sapply(ctrl_fastq2upload, function(x) file.rename(x, to = paste0(here(
 gzip_fps <- list.files(here("data", "processed_bs"), pattern = "L001_R1_001.fastq.gz", recursive = TRUE, full.names = TRUE)
 
 #read in gzip files for control samples
-control_gzip_fps <- gzip_fps[grepl(gsub("20221223", "20221222", paste0(s[s$isControl, "sample_id"], collapse = "|")), gzip_fps)]
+control_gzip_fps <- gzip_fps[grepl(paste0(s[s$isControl, "sample_id"], collapse = "|"), gzip_fps)]
 
 #create blast directory
 dir.create(here("upload", "blast"), recursive = TRUE)
@@ -634,10 +657,12 @@ ann_geom_values[["sample_type_shapes"]] <- setNames(c(24:25, 8, 23,
                                                     c(9:14)[1:(length(lvls)-6)]), lvls)
 
 #make the controls and unassigned reads samples bigger in size
-ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 4, 4, 4, rep(1, length(lvls)-3)), lvls)
+ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 2, 4, 2, 4, rep(1, length(lvls)-5)), lvls)
 
 #make alpha for nasal swabs to 0.5
-ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, rep(0.2, length(lvls)-4)), lvls)
+ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, 1, rep(0.2, length(lvls)-5)), lvls)
+
+ann_geom_values[["linetype"]] <- setNames(c("solid", "twodash", "dotted"), c("good", "mediocre", "bad"))
 
 #scales::show_col(ann_geom_values[["sample_type_colors"]])
 
@@ -790,6 +815,44 @@ slide_window_coverage %>%
   annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
   } %>%
   ggsave(filename = here("data", paste0(sequencing_date, "_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
+
+col2show <- s %>%
+  filter(!isControl & sample_id != "Undetermined") %>%
+  select(plate_col) %>%
+  unique() %>%
+  pull()
+
+for(col_num in col2show) {
+  
+  filtered_samp_name <- s %>%
+    mutate(nc_qc_status = factor(nc_qc_status, levels = names(ann_geom_values$linetype))) %>%
+    filter(!isControl & sample_id != "Undetermined") %>%
+    filter(plate_col == col_num) %>%
+    droplevels() %>%
+    select(sample_id, lineage, nc_qc_status)
+
+  slide_window_coverage %>%
+    filter(sample_id %in% filtered_samp_name$sample_id) %>%
+    merge(filtered_samp_name, by = "sample_id", all = TRUE) %>%
+    {
+    ggplot(., aes(x = position, y = slide_window_100, color = lineage, group = sample_id, linetype = nc_qc_status)) +
+      geom_line() +
+      facet_wrap(~sample_id, ncol = 1, scales = "free_y") +
+      scale_linetype_manual(values = ann_geom_values$linetype[match(levels(.$nc_qc_status), names(ann_geom_values$linetype))]) +
+      scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
+      theme_bw() +
+      theme(
+        strip.background = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA, size = 1),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        ) +
+      labs(x="", y="Sliding window average (X)", color = "Variant", linetype = "Nextclade Quality") +
+    annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
+    } %>%
+    ggsave(filename = here("data", paste0(sequencing_date, "_sample_sliding_coverage_100_bp_col", col_num, ".png")), plot = ., width = 11, height = 8)
+}
 
 ```
 
