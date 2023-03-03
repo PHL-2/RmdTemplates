@@ -26,7 +26,7 @@ instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
 
 read_length <- "76"
 
-phi_info <- c("sample_name", "zip_char", "case_id")
+phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
 
 #file location of the nextera udi indices
 #don't have to change this if the file sits in a the metadata_references directory in the parent directory of the project
@@ -110,7 +110,7 @@ PHL_data <- PHL_fp %>%
   bind_rows() %>%
   mutate(SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y"), BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y")) %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
-  select(sample_name, sample_collection_date, DOB, age, gender, zip_char, priority, case_id, RLU) %>%
+  select(any_of(phi_info), sample_collection_date, DOB, age, gender, RLU) %>%
   mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
@@ -136,7 +136,7 @@ TU_data <- PHL_fp %>%
   bind_rows() %>%
   mutate(Collection_date = as.Date(Collection_date, format = "%m/%d/%Y")) %>%
   rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value", gender = "GENDER") %>%
-  select(sample_name, sample_collection_date, CT, age, gender, priority, case_id) %>%
+  select(any_of(phi_info), sample_collection_date, CT, age, gender) %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #filter empty columns
@@ -171,7 +171,8 @@ ENV_data <- read_csv(ENV_fp) %>%
 # Load all other samples
 ########################
 
-other_sheets <- excel_sheets(PHL_fp)[!grepl("PHL|Temple", excel_sheets(PHL_fp))]
+other_sheets <- unique(unlist(lapply(PHL_fp, excel_sheets)))
+other_sheets <- other_sheets[!grepl("PHL|Temple", other_sheets)]
 
 other_data <- data.frame(sample_name = "",
                          case_id = "",
@@ -206,7 +207,10 @@ for(sheet_name in other_sheets) {
               ~gsub(possible_zip_char, "zip_char", ., ignore.case = TRUE)) %>%
     rename_at(vars(contains(possible_ct_value)),
               ~gsub(possible_ct_value, "CT", ., ignore.case = TRUE)) %>%
-    select(-sample_type) %>%
+    mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:6, 9)), Inf),
+                              labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
+                              include.lowest = TRUE)) %>%
+    select(-c(sample_type, age)) %>%
     as.data.frame()
 
   other_data <- bind_rows(other_data, other_sheet)
@@ -400,10 +404,10 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 
 #does not contain PHI and accession numbers
 metadata_sheet %>%
-  select(-c(I7_Index_ID, I5_Index_ID, all_of(phi_info))) %>%
+  select(-c(I7_Index_ID, I5_Index_ID, any_of(phi_info))) %>%
   write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")), row.names = FALSE)
 
 #contains PHI and accession numbers
 metadata_sheet %>%
-  select(sample_id, all_of(phi_info)) %>%
+  select(sample_id, any_of(phi_info)) %>%
   write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")), row.names = FALSE)
