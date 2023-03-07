@@ -203,7 +203,8 @@ s %>%
 
 s %>%
   filter(isControl) %>%
-  mutate(sample_type_name = paste0(sample_type, ": ", environmental_site)) %>%
+  mutate(sample_type_name = ifelse(grepl("Environmental control", sample_type), paste0(sample_type, ":\n", environmental_site),
+                                   paste0(sample_type, ": ", environmental_site))) %>%
   mutate(sample_type_name = ifelse(is.na(environmental_site), gsub(": NA$", "", sample_type_name), sample_type_name)) %>%
   order_on_other_col(sample_type_name, read_counts) %>%
   droplevels() %>%
@@ -697,25 +698,21 @@ s_toPlot %>%
 
 \newpage
 
-### Figure showing conflicting variant assignments from pangolin, scorpio, and nextclade
+### Figure showing conflicting variant assignments from pangolin and nextclade
 Stars in boxes mean that the variants/sub-variants from different software agree
 
 ```{r conflicting assignments, fig.height=9, fig.width=8}
 
 s_toPlot %>%
-  select(sample_id, lineage, scorpio_lineage, Nextclade_pango, sample_type, nc_qc_status) %>%
-  rename(Scorpio = "scorpio_lineage", Pangolin = "lineage", NextClade = "Nextclade_pango") %>%
+  select(sample_id, lineage, Nextclade_pango, sample_type, nc_qc_status) %>%
+  rename(Pangolin = "lineage", NextClade = "Nextclade_pango") %>%
   rowwise() %>%
-  mutate(sp = grepl(Scorpio, Pangolin) | grepl(Pangolin, Scorpio)) %>%
-  mutate(sn = grepl(Scorpio, NextClade) | grepl(NextClade, Scorpio)) %>%
   mutate(pn = grepl(Pangolin, NextClade) | grepl(NextClade, Pangolin)) %>%
-  mutate(sp = ifelse(is.na(sp), FALSE, sp), sn = ifelse(is.na(sn), FALSE, sn), pn = ifelse(is.na(pn), FALSE, pn)) %>%
-  pivot_longer(cols = c("Pangolin", "Scorpio", "NextClade"), names_to = "software", values_to = "variants") %>%
+  mutate(pn = ifelse(is.na(pn), FALSE, pn)) %>%
+  pivot_longer(cols = c("Pangolin", "NextClade"), names_to = "software", values_to = "variants") %>%
   mutate(uniq = case_when(pn & grepl("Pangolin|NextClade", software) ~ "*",
-                          sn & grepl("Scorpio|NextClade", software) ~ "*",
-                          sp & grepl("Scorpio|Pangolin", software) ~ "*",
                           TRUE ~ "")) %>%
-  mutate(software = factor(software, levels = c("Scorpio", "Pangolin", "NextClade"))) %>%
+  mutate(software = factor(software, levels = c("Pangolin", "NextClade"))) %>%
   mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
   mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
   mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
@@ -828,18 +825,10 @@ if(length(has_pos_ctrl) == 0) {
   has_pos_ctrl <- FALSE
 }
 
-not_same_VOCs <- s %>%
-  mutate(compare = nc_VOC != scorpio_call) %>%
-  filter(!is.na(compare)) %>%
-  select(compare) %>%
-  pull() %>%
-  sum()
 
 ```
 
 `r if(!has_pos_ctrl | is.na(has_pos_ctrl)){paste0("\\textcolor{red}{\\huge Positive control is not correct lineage}")}`
-
-`r if(not_same_VOCs > 0){paste0("Number of NextClade VOC and scorpio constellation mismatches: ", not_same_VOCs)}`
 
 ## Nextclade
 
@@ -878,15 +867,15 @@ s_toPlot %>%
   group_by(PHL_sample_received_date) %>%
   mutate(all_samples_n = n()) %>%
   ungroup() %>%
-  select(PHL_sample_received_date, lineage, scorpio_call, sample_type, all_samples_n) %>%
-  group_by(PHL_sample_received_date, sample_type, scorpio_call, lineage) %>%
+  select(PHL_sample_received_date, lineage, clade_who, sample_type, all_samples_n) %>%
+  group_by(PHL_sample_received_date, sample_type, clade_who, lineage) %>%
   summarise(variant_percentages = n()/all_samples_n*100) %>%
   mutate(variant_percentages_text = paste0(round(variant_percentages, digits = 2), "\\%")) %>%
   ungroup() %>%
   arrange(PHL_sample_received_date, -variant_percentages) %>%
   select(-variant_percentages) %>%
   unique() %>%
-  rename(`Received date` = "PHL_sample_received_date", `Sample Type` = "sample_type", `WHO` = "scorpio_call", `Variant` = "lineage", `Variant percentage` = "variant_percentages_text") %>%
+  rename(`Received date` = "PHL_sample_received_date", `Sample Type` = "sample_type", `WHO` = "clade_who", `Variant` = "lineage", `Variant percentage` = "variant_percentages_text") %>%
   { if(use_kable)
       kable(., "latex", longtable = F, digits=2, booktabs=T, escape=F,
             col.names = linebreak(c("Sample\nreceived", "Sample Type", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
@@ -915,9 +904,9 @@ s_phi <- read_delim(PHI_file_fp, delim = ",")
 epi_report <- s_toPlot %>%
   merge(s_phi, by = "sample_id", all.x = TRUE) %>%
   filter4report() %>%
-  select(sample_name, sample_collected_by, sequencing_date, lineage, scorpio_call) %>%
+  select(sample_name, sample_collected_by, sequencing_date, lineage, clade_who) %>%
   arrange(sample_collected_by, sample_name) %>%
-  rename(accession_number = "sample_name", who_label = "scorpio_call")
+  rename(accession_number = "sample_name", who_label = "clade_who")
 
 epi_report %>%
   write_csv(epi_report_fp)

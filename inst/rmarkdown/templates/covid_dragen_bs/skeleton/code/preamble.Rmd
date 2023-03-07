@@ -377,7 +377,7 @@ coverage <- cov_files_fps %>%
 
 slide_window_coverage <- coverage %>%
   group_by(sample_id) %>%
-  mutate(slide_window_100 = rollmean(map_per_position, k=100, fill = NA, align = 'right')) %>%
+  mutate(slide_window_100 = rollmean(map_per_position, k=100, fill = 0, align = 'right')) %>%
   ungroup()
 
 coverage %<>%
@@ -423,11 +423,7 @@ pango <- pango_files_fps %>%
   do(read_delim(.$FileName, col_names = TRUE)) %>%
   ungroup() %>%
   select(-c(FileName)) %>%
-  rename(pango_qc_status = "qc_status", sample_id = "taxon") %>%
-  mutate(scorpio_lineage = gsub(".* \\(|-like.*|Unassigned.*", "", scorpio_call)) %>%
-  mutate(scorpio_call = gsub(" \\(.*", "", scorpio_call)) %>%
-  mutate(scorpio_call = gsub("Probable ", "", scorpio_call)) %>%
-  mutate(scorpio_call = ifelse(is.na(scorpio_call) & lineage == "B", "Reference", scorpio_call))
+  rename(pango_qc_status = "qc_status", sample_id = "taxon")
 
 ```
 
@@ -442,8 +438,7 @@ next_clade <- nc_files_fps %>%
   ungroup() %>%
   select(-c(FileName)) %>%
   rename(nc_qc_status = "qc.overallStatus", sample_id = "seqName", nc_index = "index") %>%
-  mutate(nc_VOC = gsub(".*\\(|\\).*", "", clade)) %>%
-  mutate(nc_VOC = gsub("^19A$", "Reference", nc_VOC))
+  mutate(clade_who = ifelse(clade_who == "unassigned" & Nextclade_pango == "B", "Reference", clade_who))
 
 ```
 
@@ -662,7 +657,7 @@ ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 2, 4, 2, 4, rep(1, lengt
 #make alpha for nasal swabs to 0.5
 ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, 1, rep(0.2, length(lvls)-5)), lvls)
 
-ann_geom_values[["linetype"]] <- setNames(c("solid", "twodash", "dotted"), c("good", "mediocre", "bad"))
+ann_geom_values[["linetype"]] <- setNames(c("solid", "twodash", "dotted", "dashed"), c("good", "mediocre", "bad", "control"))
 
 #scales::show_col(ann_geom_values[["sample_type_colors"]])
 
@@ -675,19 +670,18 @@ ann_geom_values[["variants"]] <- c()
 ann_geom_values[["who_label"]] <- c()
 
 #loop over the VOCs
-for(who_label in c("Reference", sort(unique(s$scorpio_call)[unique(s$scorpio_call) != "Reference"]))) {
+for(who_label in c("Reference", sort(unique(s$clade_who)[unique(s$clade_who) != "Reference"]))) {
   
   variant_list <- s %>%
-    filter(scorpio_call == who_label) %>%
+    filter(clade_who == who_label) %>%
     #is_designated means that the sample was assigned to a reference strain exactly using PANGO algorithm (decision tree) rather than PUSHER
     #the note section here for PUSHER will be 'Assigned from designation hash.' so its useless
-    #nextclade VOC shouldn't be too different from scorpio VOC
-    select(lineage, note, Nextclade_pango, scorpio_lineage) %>%
+    select(lineage, note, Nextclade_pango) %>%
     mutate(note = gsub("^.*: |; scorpio.*", "", note)) %>%
     mutate(note = ifelse(note == "Assigned from designation hash.", NA, note)) %>%
     #only coloring first two variants from pUSHER annotations
     separate(note, into = c("pusher_variant1", "pusher_variant2"), sep = " ", extra = "merge") %>%
-    pivot_longer(cols = c("lineage", "pusher_variant1", "pusher_variant2", "Nextclade_pango", "scorpio_lineage"), names_to = "variant_num", values_to = "variants") %>%
+    pivot_longer(cols = c("lineage", "pusher_variant1", "pusher_variant2", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
     mutate(variants = gsub("\\(.*", "", variants)) %>%
     select(variants) %>%
     filter(!is.na(variants)) %>%
@@ -708,7 +702,7 @@ for(who_label in c("Reference", sort(unique(s$scorpio_call)[unique(s$scorpio_cal
       sublineage <- combined_variant
     }
     
-    variant_color <- calc_pal()(12)[i]
+    variant_color <- calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)][i]
     variant_gradient <- colorRampPalette(c(variant_color, adjustcolor(variant_color, alpha.f = 0.1)), alpha = TRUE)(length(sublineage))
     names(variant_gradient) <- sublineage
     
@@ -817,7 +811,8 @@ slide_window_coverage %>%
   ggsave(filename = here("data", paste0(sequencing_date, "_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
 
 col2show <- s %>%
-  filter(!isControl & sample_id != "Undetermined") %>%
+  filter(sample_id != "Undetermined") %>%
+  filter(!is.na(median_coverage)) %>%
   select(plate_col) %>%
   unique() %>%
   pull()
@@ -825,20 +820,29 @@ col2show <- s %>%
 for(col_num in col2show) {
   
   filtered_samp_name <- s %>%
+    mutate(nc_qc_status = ifelse(is.na(nc_qc_status), "control", nc_qc_status)) %>%
     mutate(nc_qc_status = factor(nc_qc_status, levels = names(ann_geom_values$linetype))) %>%
-    filter(!isControl & sample_id != "Undetermined") %>%
+    mutate(who_label = ifelse(is.na(lineage), "control",
+                              paste0(clade_who, " - ", gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", lineage)))) %>%
+    mutate(who_label = factor(who_label, levels = c(names(ann_geom_values$who_label), "control"))) %>%
+    filter(sample_id != "Undetermined") %>%
     filter(plate_col == col_num) %>%
     droplevels() %>%
-    select(sample_id, lineage, nc_qc_status)
+    select(sample_id, who_label, nc_qc_status, sample_type)
+  
+  sample_type_label <- setNames(as.character(filtered_samp_name$sample_type), filtered_samp_name$sample_id)
 
   slide_window_coverage %>%
     filter(sample_id %in% filtered_samp_name$sample_id) %>%
     merge(filtered_samp_name, by = "sample_id", all = TRUE) %>%
+    droplevels() %>%
     {
-    ggplot(., aes(x = position, y = slide_window_100, color = lineage, group = sample_id, linetype = nc_qc_status)) +
+    ggplot(., aes(x = position, y = slide_window_100, group = sample_id, linetype = nc_qc_status, color = who_label)) +
       geom_line() +
-      facet_wrap(~sample_id, ncol = 1, scales = "free_y") +
+      facet_wrap(~sample_id, ncol = 1, scales = "free_y", labeller = labeller(sample_id = sample_type_label)) +
       scale_linetype_manual(values = ann_geom_values$linetype[match(levels(.$nc_qc_status), names(ann_geom_values$linetype))]) +
+      scale_color_manual(values = c(ann_geom_values$who_label, setNames("#000000", "control"))[match(levels(.$who_label),
+                                                                                                  c(names(ann_geom_values$who_label), "control"))]) +
       scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
       theme_bw() +
       theme(
@@ -848,7 +852,8 @@ for(col_num in col2show) {
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         ) +
-      labs(x="", y="Sliding window average (X)", color = "Variant", linetype = "Nextclade Quality") +
+      labs(x="", y="Sliding window average (X)", color = "WHO", linetype = "Nextclade Quality") +
+      guides(linetype = guide_legend(order = 1), color = guide_legend(order = 2)) +
     annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
     } %>%
     ggsave(filename = here("data", paste0(sequencing_date, "_sample_sliding_coverage_100_bp_col", col_num, ".png")), plot = ., width = 11, height = 8)
