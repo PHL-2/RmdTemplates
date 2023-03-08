@@ -48,7 +48,8 @@ library(pander)
 
 ```{r summary results}
 
-#Single figure and table
+pander(ww_SC2_conc_result,
+       digits = 10, round = 2)
 
 ```
 
@@ -56,17 +57,13 @@ library(pander)
 
 This report summarises the results for SARS-COV-2 waste water detection by ddPCR using the BioRad PREvalence ddPCR SARS-CoV-2 Wastewater Quantification Kit (manual can be found [here](https://www.bio-rad.com/sites/default/files/webroot/web/pdf/lsr/literature/10000142158.pdf)). In this process, we quantify the amount of SARS-COV-2 N2 and E genes in waste water samples. Our controls for this experiment are SARS-COV-2 and MHV and are spiked into control buffer (old wastewater).
 
-# Samples
+# Sample summary
 
 ```{r table of samples}
 
 d %>%
-  select(Sample, Type, Process, Well) %>%
+  select(Type, Process, Spiked, Sample_date, Well) %>%
   distinct() %>%
-  group_by(Type, Process) %>%
-  #summarize(n()) >%
-  select(Type, Process) %>%
-  table() %>%
   pander()
 
 ```

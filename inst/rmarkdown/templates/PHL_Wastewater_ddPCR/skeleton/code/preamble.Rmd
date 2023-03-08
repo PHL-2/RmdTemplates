@@ -56,7 +56,6 @@ d <- read_csv(file = run_dat_fp) %>%
   filter(!is.na(Sample)) %>%
   mutate(percentage_positive = Positives/Droplet_count * 100,
          Process = ifelse(is.na(Process), "Non-processed", Process),
-         Process = ifelse(Spiked == "Unspiked" & Process == "Concentrated", "Unspiked", Process),
          Process = ifelse(grepl(pattern = "dil", x = Extra, ignore.case = T), "Dilution", Process),
          Process = droplevels(factor(Process, level = c("Concentrated", "Unconcentrated", "Non-processed", "Unspiked","Dilution", "Frozen"))),
          `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
@@ -81,7 +80,7 @@ dControls <- d %>%
   mutate(exp_con = ifelse(grepl(pattern = "PCR", x = Type ,ignore.case = T), "ddPCR control", "Extraction control"))
 
 dNeg <- dControls %>%
-  filter(grepl(pattern = "MHV_Un|ddPCR-H2O", x = Sample, ignore.case = T))
+  filter(grepl(pattern = "oldww|MHV|ddPCR-H2O", x = Sample, ignore.case = T) | Process == "Unspiked")
 
 threshold <- dNeg %>%
   group_by(Type, Process, Target) %>%
@@ -92,7 +91,8 @@ threshold <- dNeg %>%
     )
 
 dSamples <- d %>%
-  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type)) %>%
+  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+         Process == "Concentrated") %>%
   group_by(Type, Process, Spiked, Target) %>%
   summarise(avg_pos_droplets = mean(Positives),
             avg_conc = mean(`Conc(copies/uL)`),
@@ -125,13 +125,13 @@ dControls_summarise <- dControls %>%
 
 ```{r efficiency calculation}
 
-#initial concentrations of virus
+
 init_mhvcontrol_conc <- mhv_to_control_uL * MHV_concentration_copiesuL / (control_vol_mL * 1000)
-#init_mhvcontrol_nVirus <- mhv_to_control_uL*MHV_concentration_copiesuL
+
 init_sc2_conc <- SC2_concentration_copiesuL * sc2_to_control_uL / (control_vol_mL * 1000)
-#init_sc2_nVirus <- SC2_concentration_copiesuL * sc2_to_control_uL
+
 init_MHV_ww_conc <- MHV_concentration_copiesuL * mhv_ww_input_uL / (ww_vol_mL * 1000)
-#init_MHV_ww_nVirus <- MHV_concentration_copiesuL * mhv_ww_input_uL
+
 init_MHV_unconc_conc <- MHV_concentration_copiesuL * 2 / 800
 
 

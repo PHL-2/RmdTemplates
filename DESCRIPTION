@@ -1,11 +1,17 @@
 Package: RmdTemplates
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Rmd templates for PHL bioinformatics runs 
 Version: 0.1.0
-Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
+Author: Vincent Tu (vincent.tu@phila.gov) and Christopher Gu (christopher.gu@phila.gov)
+Maintainer: Vincent Tu (vincent.tu@phila.gov) and Christopher Gu (christopher.gu@phila.gov)
+Description: Contains R markdown templates for generating project runs for PHL bioinformatics pipelines.
+    Specification for each template can be found in the respective SOP.
+Depends:
+    R (>= 4.2)
+    here,
+    tidyverse,
+    pander,
+    devtools
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true
