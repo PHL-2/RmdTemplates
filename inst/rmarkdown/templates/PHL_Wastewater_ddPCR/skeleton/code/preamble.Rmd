@@ -172,7 +172,7 @@ sample_stock <- dSamples %>%
 
 MHV_efficiency <- control_stock %>%
          arrange(Type, Process, Target) %>%
-         filter(Type == "MHV",
+         filter(Type == "MHV" | Type == "oldWW",
                 Target == "MHV")
 
 SC2_efficiency <- control_stock %>%
