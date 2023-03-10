@@ -1,7 +1,7 @@
 ---
 title: |
   ![](../../aux_files/forKnitting/logo_blk.png){width=5in}  
-  `r paste0('Results for wastewater ddPCR run ', basename(here()))`
+  `r paste0('Wastewater results for run ', basename(here()))`
 author: "Philadelphia Public Health Labs"
 date: \today
 geometry: margin=2cm
