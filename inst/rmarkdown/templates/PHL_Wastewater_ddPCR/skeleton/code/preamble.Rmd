@@ -92,7 +92,8 @@ threshold <- dNeg %>%
 
 dSamples <- d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-         Process == "Concentrated") %>%
+         Process == "Concentrated",
+         Spiked == "Spiked") %>%
   group_by(Type, Process, Spiked, Target) %>%
   summarise(avg_pos_droplets = mean(Positives),
             avg_conc = mean(`Conc(copies/uL)`),
