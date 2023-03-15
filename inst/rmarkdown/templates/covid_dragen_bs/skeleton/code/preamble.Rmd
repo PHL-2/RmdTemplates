@@ -852,7 +852,10 @@ for(col_num in col2show) {
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         ) +
-      labs(x="", y="Sliding window average (X)", color = "WHO", linetype = "Nextclade Quality") +
+      labs(x=paste0("Column ", col_num, " samples"),
+           y="Sliding window average (X)",
+           color = "WHO",
+           linetype = "Nextclade Quality") +
       guides(linetype = guide_legend(order = 1), color = guide_legend(order = 2)) +
     annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
     } %>%
