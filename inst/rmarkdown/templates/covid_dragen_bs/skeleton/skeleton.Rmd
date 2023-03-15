@@ -47,7 +47,7 @@ opts_chunk$set(
   fig.height=6,
   dev.args = list(pdf = list(useDingbats = FALSE))
 )
-
+ 
 pander::panderOptions("knitr.auto.asis", FALSE)
 #this also means that you have to put results='asis' in any block that has pander output
 #this lets you loop through variables and produce multiple pander tables and ggplots in a
