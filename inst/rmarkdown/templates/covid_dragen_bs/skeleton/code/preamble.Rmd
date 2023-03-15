@@ -21,10 +21,10 @@ library(stringdist)
 sequencing_folder_fp <- "Z:/MiSeq_runs/COVIDSeq"
 
 #full file path of the git shell executable
-sh_exe_fp <- "C:/Users/vincent.tu/AppData/Local/Programs/Git/bin/sh.exe"
+sh_exe_fp <- "C:/Users/christopher.gu/AppData/Local/Programs/Git/bin/sh.exe"
 
 #full file path of where the seqsender repo was cloned
-seqsender_fp <- "C:/Users/vincent.tu/OneDrive - City of Philadelphia/git_clones/seqsender"
+seqsender_fp <- "C:/Users/christopher.gu/OneDrive - City of Philadelphia/git_clones/seqsender"
 
 #application to run on basespace
 app2run <- "DRAGEN COVID Lineage"
