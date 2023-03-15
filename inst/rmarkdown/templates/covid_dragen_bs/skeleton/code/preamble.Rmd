@@ -353,7 +353,6 @@ invisible(sapply(bed_zip_files, function(x) unzip(x, exdir = here("data", "proce
 
 invisible(sapply(bed_zip_files, function(x) unzip(x, exdir = here("data", "processed_bs"), files = paste0("consensus/", gsub(".*/|_all_output_files.zip$", "", x), ".consensus_coverage_from_filtered_bam.bed"))))
 
-
 ```
 
 ```{r load coverage results, eval = import_data}
