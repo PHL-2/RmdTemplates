@@ -151,7 +151,7 @@ if(length(epi_sample_not_found) > 0) {
 }
 
 samples_removed <- PHL_data %>%
-  filter(RLU < 1000 | is.na(RLU) | SPECIMEN_NUMBER %in% HC1_samples)
+  filter(RLU < 1000 | SPECIMEN_NUMBER %in% HC1_samples)
 
 message("\nNumber of samples removed: ")
 message(nrow(samples_removed))
