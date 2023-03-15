@@ -246,7 +246,9 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   mutate(collection_device = ifelse(grepl("waste water|control", sample_type), NA, collection_device)) %>%
   #remove empty columns again
   select(where(function(x) any(!is.na(x)))) %>%
-  mutate(environmental_site = ifelse(grepl("Water control|Reagent control", sample_type), paste0(plate_row, plate_col), environmental_site))
+  mutate(environmental_site = case_when(grepl("Water control|Reagent control", sample_type) ~ paste0(plate_row, plate_col),
+                                        grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
+                                        TRUE ~ environmental_site))
 
 if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
   stop(simpleError(paste0("Some samples have collection dates more than 2 months ago. Investigate!!")))
