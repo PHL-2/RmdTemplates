@@ -1,0 +1,14 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+processed_bs/
+**/metadata/*
+!**/metadata/*_COVIDSeq_metadata.csv
+epi/
+fastq/
+*.fastq.gz
+aux_files/seqsender/
+*.pdf
+cp2admin.R
+.placeholder

@@ -1,0 +1,19 @@
+[Header]
+Experiment Name,COVIDSeq_Generic_Template
+Date,2023-01-06
+Workflow,GenerateFASTQ
+Library Prep Kit,COVIDSeq for Surveillance
+Index Kit,COVIDSeq indexes_IDT for Illumina-PCR Indexes Set 1 2 3 4
+Chemistry,Amplicon
+Instrument type,MiSeq
+
+[Reads]
+76
+76
+
+[Settings]
+adapter,CTGTCTCTTATACACATCT
+
+[Data]
+Sample_ID,index,index2
+sample,NNNNNNNNNN,NNNNNNNNNN

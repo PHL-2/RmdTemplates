@@ -1,0 +1,120 @@
+---
+general:
+  submission_directory: '/parent/directory/of/Rprojects' # *
+  submit_Genbank: True
+  submit_GISAID: True
+  submit_SRA: True
+  submit_BioSample: True
+  joint_SRA_BioSample_submission: True
+  contact_email1: 'phl.sequencing@phila.gov'
+  contact_email2: 'your.email@phila.gov' # *
+  organization_name: Philadelphia Department of Public Health
+  authorset:      # the following authorset fields can be copied and filled out for each corresponding author
+  - first: 'Your' # *
+    last: 'Name'  # *
+    middle: ''    # can leave blank
+    initials: ''  # can leave blank
+    suffix: ''    # can leave blank
+    title: ''     # can leave blank
+  ncbi_org_id: ''
+  submitter_info: # only one submitter
+    first: 'Your' # *
+    last: 'Name'  # *
+    middle: ''    # can leave blank
+    initials: ''  # can leave blank
+    suffix: ''    # can leave blank
+    title: ''     # can leave blank
+  organism_name: Severe acute respiratory syndrome coronavirus 2
+  metadata_file_sep: \t
+  fasta_sample_name_col: sample_id
+  collection_date_col: collection_date
+  baseline_surveillance: True
+ncbi:
+  hostname: ftp-private.ncbi.nlm.nih.gov
+  api_url: https://submit.ncbi.nlm.nih.gov/api/2.0/files/FILE_ID/?format=attachment
+  username: 'Check' # *
+  password: 'Email' # *
+  publication_title: SARS-CoV-2 sequencing for surveillance in Philadelphia
+  ncbi_ftp_path_to_submission_folders: 'submit' # the submit folder is the one watched by ncbi for submit.ready file
+  BioProject: 'PRJNA554557' # this is a test BioProject accession number
+  BioSample_sample_name_col: genbank_name
+  SRA_sample_name_col: sra_name
+  Genbank_sample_name_col: genbank_name
+  BioSample_package: SARS-CoV-2.cl.1.0
+  Center_title: Philadelphia Public Health Laboratory
+  Genbank_organization_type: center
+  Genbank_organization_role: owner
+  Genbank_spuid_namespace: ncbi-sarscov2-genbank
+  Genbank_auto_remove_sequences_that_fail_qc: True # keep this as True. GenBank will remove samples based on these errors: https://www.ncbi.nlm.nih.gov/genbank/sequencecheck/virus/. If False, bad samples will cause submission to fail
+  Genbank_wizard: BankIt_SARSCoV2_api
+  citation_address:
+    affil: 'Philadelphia Department of Public Health'
+    div: 'Public Health Laboratory'
+    city: 'Philadelphia'
+    sub: 'PA'
+    country: 'USA'
+    street: '500 South Broad Street'
+    postal-code: '19146'
+    email: 'phl.sequencing@phila.gov'
+    phone: ''
+  SRA_file_location: local
+  SRA_file_column1: 'sra_file_path_1'
+  SRA_file_column2: 'sra_file_path_2'
+  SRA_file_loader: ''
+genbank_src_metadata:
+  column_names:
+    isolate: genbank_name
+    host: host
+    country: location
+    isolation-source: isolation_source
+    note: genbank_note
+genbank_cmt_metadata:
+  create_cmt: True
+  column_names:
+    StructuredCommentPrefix: structured_comment
+    StructuredCommentSuffix: structured_comment
+    Assembly Method: assembly_method
+    Sequencing Technology: instrument
+BioSample_attributes:
+  column_names:
+    Isolate: genbank_name
+    collected_by: collected_by
+    host: host
+    host_disease: host_disease
+    isolation_source: isolation_source
+    geo_loc_name: location
+    host_sex: sex
+    host_age: host_age_bin
+    gisaid_virus_name: gisaid_name
+    gisaid_accession: gisaid_accession
+SRA_attributes:
+  column_names:
+    library_strategy: library_strategy
+    library_source: library_source
+    library_selection: library_selection
+    library_layout: library_layout
+    instrument_model: instrument
+    library_name: library
+gisaid:
+  column_names:
+    covv_passage: passage
+    covv_location: gisaid_location
+    covv_host: host
+    covv_gender: sex
+    covv_patient_age: host_age_bin
+    covv_patient_status: patient_status
+    covv_specimen: isolation_source
+    covv_seq_technology: instrument
+    covv_assembly_method: assembly_method
+    covv_coverage: median_coverage
+    covv_orig_lab: orig_lab
+    covv_orig_lab_addr: orig_lab_address
+    covv_subm_sample_id: sample_id
+  gisaid_sample_name_col: gisaid_name
+  cid: ''
+  username: 'gisaid.username' # *
+  password: ''
+  authfile_fp: '/parent/directory/of/Rprojects/aux_files/seqsender/gisaid_uploader_test.authtoken' # * path of the TEST token
+  type: betacoronavirus
+  Update_sequences_on_Genbank_auto_removal: False # update GISAID submission based on auto removal of GenBank samples. Keep this as False since we are uploading to GISAID before GenBank
+
