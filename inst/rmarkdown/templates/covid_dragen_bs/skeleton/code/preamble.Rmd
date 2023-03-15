@@ -459,7 +459,6 @@ merge(coverage, kmer, by = "sample_id", all = TRUE) %>%
   merge(samp_reads, by = "sample_id", all = TRUE) %>%
   write_delim(here("data", paste0(sequencing_date, "_bs_results.csv")), delim = ",")
 
-
 ```
 
 ```{r load data}
