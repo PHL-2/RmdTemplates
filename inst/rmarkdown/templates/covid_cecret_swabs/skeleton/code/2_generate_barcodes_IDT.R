@@ -25,6 +25,7 @@ instrument_select <- 1 #select 1 for MiSeq or 2 for NextSeq
 instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
 
 read_length <- "76"
+index_length <- "10"
 
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
 
@@ -242,6 +243,7 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   mutate(prj_descrip = prj_description) %>%
   mutate(instrument_type = instrument_type) %>%
   mutate(read_length = read_length) %>%
+  mutate(index_length = index_length) %>%
   mutate(environmental_material = ifelse(grepl("swab|control", sample_type), NA, environmental_material)) %>%
   mutate(collection_device = ifelse(grepl("waste water|control", sample_type), NA, collection_device)) %>%
   #remove empty columns again
@@ -292,7 +294,7 @@ for(x in c(cols2merge, "sample_id",
            "sample_type", "sample_collected_by", "PHL_sample_received_date",
            "organism", "host_scientific_name", "host_disease", "isolation_source",
            "index", "index2", "UDI_Index_ID", "I7_Index_ID", "I5_Index_ID",
-           "sequencing_date", "prj_descrip", "instrument_type", "read_length",
+           "sequencing_date", "prj_descrip", "instrument_type", "read_length", "index_length",
            "sample_collection_date", "host_age_bin", "gender", "zip_char", "priority")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     stop(simpleError(paste0("Missing column [", x, "] in the metadata sheet template!!!")))
@@ -368,36 +370,44 @@ samp_sheet_2_write <- metadata_sheet %>%
   rowwise() %>%
   mutate(Index_Plate = which(LETTERS == idt_set)) %>%
   mutate(Index_Plate_Well = paste0(idt_plate_row, idt_plate_col)) %>%
-  select(sample_id, Index_Plate, Index_Plate_Well, I7_Index_ID, index, I5_Index_ID, index2, UDI_Index_ID) %>%
+  #select(sample_id, Index_Plate, Index_Plate_Well, I7_Index_ID, index, I5_Index_ID, index2, UDI_Index_ID) %>%
+  #BCL Convert does not take Index Plate
+  select(sample_id, index, index2) %>%
   rename(Sample_ID = "sample_id")
 
-sample_sheet_fp <- here("metadata", "munge", "SampleSheet.csv")
+sample_sheet_fp <- here("metadata", "munge", "SampleSheet_v2.csv")
 
 write_samp <- function(line2write) {
   write(paste0(line2write, collapse = ","), file = sample_sheet_fp, append = TRUE)
 }
 
+#SampleSheet v2 seems to have multiple commas at the end
 write("[Header]", file = sample_sheet_fp)
-write_samp(c("Experiment Name", paste0(prj_description, "_", sequencing_date)))
+write_samp(c("FileFormatVersion", "2"))
+write_samp(c("RunName", paste0(prj_description, "_", sequencing_date)))
 write_samp(c("Date", sequencing_date))
-write_samp(c("Workflow", "GenerateFASTQ"))
-write_samp(c("Library Prep Kit", "COVIDSeq for Surveillance"))
-write_samp(c("Index Kit", "COVIDSeq indexes_IDT for Illumina-PCR Indexes Set 1 2 3 4"))
-write_samp(c("Chemistry", "Amplicon"))
-write_samp(c("Instrument type", instrument_type))
+write_samp(c("Workflow", "BCLConvert"))
+write_samp(c("InstrumentType", instrument_type))
 write_samp("")
 
 write_samp("[Reads]")
-#writing read length twice for paired reads
-write_samp(read_length)
-write_samp(read_length)
+write_samp(c("Read1Cycles", read_length))
+write_samp(c("Read2Cycles", read_length))
+write_samp(c("Index1Cycles", index_length))
+write_samp(c("Index2Cycles", index_length))
 write_samp("")
 
-write_samp("[Settings]")
-write_samp(c("adapter", "CTGTCTCTTATACACATCT"))
+write_samp("[Sequencing_Settings]")
+write_samp(c("Library Prep Kit", "COVIDSeq for Surveillance"))
+write_samp(c("Index Kit", "COVIDSeq indexes_IDT for Illumina-PCR Indexes Set 1 2 3 4"))
+write_samp(c("Chemistry", "Amplicon"))
 write_samp("")
 
-write_samp("[Data]")
+write_samp("[BCLConvert_Settings]")
+write_samp(c("CreateFastqForIndexReads", "1"))
+write_samp("")
+
+write_samp("[BCLConvert_Data]")
 write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append = TRUE)
 
 ################################
