@@ -353,7 +353,6 @@ invisible(sapply(bed_zip_files, function(x) unzip(x, exdir = here("data", "proce
 
 invisible(sapply(bed_zip_files, function(x) unzip(x, exdir = here("data", "processed_bs"), files = paste0("consensus/", gsub(".*/|_all_output_files.zip$", "", x), ".consensus_coverage_from_filtered_bam.bed"))))
 
-
 ```
 
 ```{r load coverage results, eval = import_data}
@@ -458,7 +457,6 @@ merge(coverage, kmer, by = "sample_id", all = TRUE) %>%
   mutate(nextclade_version = nc_v) %>%
   merge(samp_reads, by = "sample_id", all = TRUE) %>%
   write_delim(here("data", paste0(sequencing_date, "_bs_results.csv")), delim = ",")
-
 
 ```
 
@@ -852,7 +850,10 @@ for(col_num in col2show) {
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         ) +
-      labs(x="", y="Sliding window average (X)", color = "WHO", linetype = "Nextclade Quality") +
+      labs(x=paste0("Column ", col_num, " samples"),
+           y="Sliding window average (X)",
+           color = "WHO",
+           linetype = "Nextclade Quality") +
       guides(linetype = guide_legend(order = 1), color = guide_legend(order = 2)) +
     annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
     } %>%
