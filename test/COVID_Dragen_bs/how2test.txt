@@ -1,0 +1,8 @@
+To test the COVIDSeq template in this package:
+1. Create an RStudio project with the name 2022-08-01_COVIDSeq_test
+2. Initialize a COVIDSeq template
+	- rmarkdown::draft(file = "2022-08-01_COVIDSeq_test_QC_Report.Rmd", template = "covid_dragen_bs", package = "RmdTemplates", create_dir = FALSE)
+3. Copy the metadata folder from RmdTemplates and replace the metadata folder in the initialized project
+4. In the preamble.Rmd file, change the sequencing_folder_fp to where the test run folder is located (should be same file location as this text file)
+5. Generate the metadata sheet and knit the QC_Report.Rmd
+6. Compare lineage results in the epi csv file with the test_RLU csv file

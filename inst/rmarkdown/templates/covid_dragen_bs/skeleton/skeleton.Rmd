@@ -1,0 +1,1297 @@
+---
+title: |
+  ![](../aux_files/forKnitting/logo_blk.png){width=5in}  
+  `r paste0('QC report for sequencing run ', basename(here()))`
+author: "Philadelphia Public Health Labs"
+date: \today
+geometry: margin=3cm
+output:
+    pdf_document:
+        template: ../aux_files/forKnitting/toc_after.tex
+        keep_tex: false
+        toc: true
+        toc_depth: 3
+        includes:
+            in_header: ../aux_files/forKnitting/TeX_packages_commands.sty
+
+---
+
+\tableofcontents
+
+```{r only run this chunk once to install, eval=FALSE}
+### ================
+### packages install
+### ================
+install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx"))
+
+```
+
+<!-- ========================================================== -->
+<!--   Beginning of Preamble : Preamble seldom requires change  -->
+<!-- ========================================================== -->
+
+```{r setup, echo=FALSE}
+### ================
+###   knitr setup
+### ================
+library(knitr)
+opts_chunk$set(
+  tidy=FALSE,
+  cache=FALSE,
+  cache.lazy = FALSE,
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE,
+  dpi=100,
+  fig.width=6,
+  fig.height=6,
+  dev.args = list(pdf = list(useDingbats = FALSE))
+)
+
+pander::panderOptions("knitr.auto.asis", FALSE)
+#this also means that you have to put results='asis' in any block that has pander output
+#this lets you loop through variables and produce multiple pander tables and ggplots in a
+#single code block!
+
+```
+
+```{r filter out samples, eval = FALSE, message = TRUE}
+
+source("code/1_remove_low_RLU.R")
+
+```
+
+```{r generate SampleSheet and metadata, eval = FALSE, message = TRUE}
+
+source("code/2_generate_barcodes_IDT.R")
+
+```
+
+```{r child = 'code/preamble.Rmd', eval = load_preamble}
+```
+
+
+```{r check if primer selected}
+### ===========================
+###   check version input
+### ===========================
+  
+if (is.na(primer_select) | is.na(artic_primer_scheme) | is.na(bs_bed_file_used)) {
+  stop (simpleError("Please set the [primer_select] variable in the preamble as an integer from 1 to 3 according to the ARTIC primer scheme used for the library generation\n1: V3\n2: V4\n3: V4.1 (Experimental)"))
+}
+
+```
+
+```{r samples check}
+
+### possible issue 1: Samples found in the sample sheet but not in the results csv
+s_missing <- s %>%
+  filter(!sample_id %in% unique(bs_results$sample_id)) %>%
+  select(sample_id, sample_type, isControl) %>%
+  filter(sample_id != "None")
+
+if (any(!s_missing$isControl)) {
+  pander(filter(s_missing, !isControl), caption="These samples were in the sample sheet but had no results.")
+  #stop (simpleError("Please fix"))
+}
+
+```
+
+```{r Samples error check 2}
+### possible issue 2: Samples found in the results csv but not in the sample sheet. There must be an error!
+in_results_not_in_s <- setdiff(unique(bs_results$sample_id), s$sample_id)
+if (length(in_results_not_in_s) > 0) {
+  stop (simpleError("These SampleID(s) are in the results csv, but not found in the sample sheet.", paste(in_results_not_in_s, collapse=" ")))
+}
+```
+
+\newpage
+
+# Introduction
+
+This report summarizes the results of `r nrow(s)-1` COVID samples sequenced on `r samp_sh_header$Date` and analyzed with BaseSpace DRAGEN Lineage App version `r dragen_covid_lineage_version` on `r date_pipeline_was_run`. The results section contains lineage information using the pangolin software version `r pangolin_software_version` (https://cov-lineages.org/resources/pangolin.html) and Nextclade version `r nextclade_version` (https://clades.nextstrain.org/). Samples were amplified with the `r artic_primer_scheme` primer scheme 
+
+# Number of samples sequenced
+
+```{r samples sequenced}
+
+s %>%
+  filter(sample_type != "Unassigned reads") %>%
+  droplevels() %>%
+  group_by(sample_type) %>%
+  summarize(num = n()) %>%
+  ungroup() %>%
+  rename(`Sample Type` = "sample_type", n = "num") %>%
+  {if(use_kable) kable_style(.) else pander(.)}
+
+```
+
+\newpage
+
+# FASTQ generation, demultiplexing, and quality control
+
+## GenerateFASTQ
+
+The MiSeq machine uses the GenerateFASTQ workflow to demultiplex the samples and generate FASTQ files from BCL files (raw data files that contain sequence information and quality scores). `r workflow_name` version `r gen_fq_version` was used to generate the FASTQ files
+
+## Number of read pairs per sample after demultiplexing
+
+Samples were sequenced on the `r samp_sh_header$instrument_type` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` length run and demultiplexed on BaseSpace by the GenerateFASTQ module. The demultiplexing step involves matching the IDT barcode sequence associated with each sample to the index sequence of each read
+
+### Number of samples and their pass filter percentages
+
+```{r percent of reads that passed filter, echo=FALSE}
+s %>%
+  mutate(pf_percent=read_counts/total_raw_reads) %>%
+  ggplot(aes(x=pf_percent, fill = sample_type)) +
+    geom_histogram(binwidth=0.1, boundary=TRUE, color = "white") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_x_continuous(labels = scales::percent) +
+    theme_bw() + 
+    theme(panel.grid = element_blank()) +
+    labs(
+      x="Percent of reads that passed filter",
+      y="Number of samples", fill = "Sample Type"
+    )
+```
+
+### Distributions of reads across all samples
+
+```{r reads_histogram, echo=FALSE}
+s %>%
+  mutate(num_seq=read_counts/1000000) %>%
+  # remove reads that did not get assigned
+  ggplot(aes(x=num_seq, fill = sample_type)) +
+    geom_histogram(binwidth=0.1, boundary=TRUE, color = "white") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    theme(panel.grid = element_blank()) +
+    labs(
+      x="Number of read pairs in sample (millions, M)",
+      y="Number of samples",
+      fill = "Sample Type",
+      title = paste0("Total number of reads from run: ", round(sum(s$read_counts)/1000000, digits = 2), "M")
+    )
+```
+
+### Number of reads per sample type
+
+```{r reads per sample type}
+
+s %>%
+  ggplot(aes(y=read_counts, x=sample_type, fill = sample_type)) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_point(aes(size = sample_type), shape = 21, position = position_jitter(width = 0.2)) +
+    scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_size_manual(values = ann_geom_values$sample_type_sizes[match(levels(s$sample_type), names(ann_geom_values$sample_type_sizes))]) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(),
+          axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)) +
+    labs(
+      y="Read counts",
+      x="", fill = "Sample Type", size = "Sample Type"
+    )
+
+```
+
+\blandscape
+
+### Number of reads per control
+
+```{r reads per control, fig.height=6, fig.width=10}
+
+s %>%
+  filter(isControl) %>%
+  mutate(sample_type_name = ifelse(grepl("Environmental control", sample_type), paste0(sample_type, ":\n", environmental_site),
+                                   paste0(sample_type, ": ", environmental_site))) %>%
+  mutate(sample_type_name = ifelse(is.na(environmental_site), gsub(": NA$", "", sample_type_name), sample_type_name)) %>%
+  order_on_other_col(sample_type_name, read_counts) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=read_counts, y=sample_type_name, fill = sample_type)) +
+    geom_col() +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    facet_grid(sample_type~., scales = "free", space = "free") +
+    scale_x_continuous(labels = scales::label_comma()) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(),
+          axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5),
+          strip.background = element_blank(),
+          strip.text = element_blank()) +
+    labs(
+      x="Read counts",
+      y="", fill = "Sample Type"
+    )
+  }
+
+```
+
+\elandscape
+
+### Percentage of reads that make up the lane
+
+```{r percent reads of lane, echo=FALSE}
+s %>%
+  mutate(percent_of_lane = read_counts/sum(read_counts)) %>%
+  group_by(sample_type) %>%
+  mutate(tot_percent = sum(percent_of_lane)) %>%
+  ungroup() %>%
+  order_on_other_col(sample_type, tot_percent, decreasing = FALSE) %>%
+  order_on_other_col(sample_id, percent_of_lane) %>%
+  arrange(sample_id) %>%
+  {
+  ggplot(., aes(x = "", y = percent_of_lane, fill=sample_type)) +
+    geom_col(color = "white") +
+    scale_y_continuous(labels = scales::percent) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          axis.ticks.x.bottom = element_blank()) +
+    labs(
+      x="",
+      y="Percent of assigned reads by sample type",
+      fill = "Sample Type"
+    )
+  }
+
+```
+
+## Top 10 unassigned indices
+
+```{r unassigned indices}
+
+top_unkwn_indices %>%
+  ggplot(aes(y=fct_rev(index_sequence), x=number_of_reads)) +
+  geom_col() +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  labs(
+      x="Number of reads",
+      y="Unassigned index sequences"
+  )
+
+```
+
+These are the adapters: \newline
+`r paste0(gsub(",", ": ", unlist(sample_sheet$Settings)), collapse = "\n")`
+
+\blandscape
+
+## Read counts and the DNA concentration/viral values of each sample
+
+```{r reads and CT, fig.width=10, fig.height=5, eval = has_CT}
+
+s %>%
+  filter(!is.na(CT)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = CT, y = read_counts, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    scale_y_continuous(trans = "log10") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(y = "Read Counts", x = "CT value", fill = "Sample type")
+  }
+
+```
+
+```{r reads and RLU, fig.width=10, fig.height=5, eval = has_RLU}
+
+s %>%
+  filter(!is.na(RLU)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = RLU, y = read_counts, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    scale_y_continuous(trans = "log10") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(y = "Read Counts", x = "RLU value", fill = "Sample type")
+  }
+
+```
+
+```{r reads and DNA, fig.width=10, fig.height=5}
+
+s %>%
+  filter(!is.na(qubit_conc_ng_ul)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = qubit_conc_ng_ul, y = read_counts, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    scale_y_continuous(trans = "log10") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(y = "Read Counts", x = "DNA conc (ng/uL)", fill = "Sample type")
+  }
+
+```
+
+```{r CT and DNA, fig.width=10, fig.height=5, eval = has_CT}
+
+s %>%
+  filter(!is.na(CT)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = CT, y = qubit_conc_ng_ul, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(x = "CT value", y = "DNA conc (ng/uL)", fill = "Sample type")
+  }
+
+```
+
+```{r RLU and DNA, fig.width=10, fig.height=5, eval = has_RLU}
+
+s %>%
+  filter(!is.na(RLU)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = RLU, y = qubit_conc_ng_ul, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(x = "RLU value", y = "DNA conc (ng/uL)", fill = "Sample type")
+  }
+
+```
+
+\newpage
+
+## DNA concentration and read counts values per plate
+
+The samples are processed on a 96-well plate. These figures illustrate the viral values, DNA concentration, and read counts of each sample on a well. Wells without any samples are white while samples with low values begin with dark blue. 
+
+```{r CT on plate, eval = has_CT}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  droplevels() %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = CT)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 10) +
+    facet_wrap(~plate, ncol = 1) +
+    #if there is no covid quantity values, use the discrete fill
+    {
+      if(all(is.na(s$CT))) scale_fill_viridis_d(na.value = "white")
+      else scale_fill_viridis_c(na.value = "white")
+    } +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill="CT values"
+    )
+
+```
+
+```{r RLU on plate, eval = has_RLU}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  droplevels() %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = RLU)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 10) +
+    facet_wrap(~plate, ncol = 1) +
+    #if there is no covid quantity values, use the discrete fill
+    {
+      if(all(is.na(s$RLU))) scale_fill_viridis_d(na.value = "white")
+      else scale_fill_viridis_c(na.value = "white")
+    } +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill="RLU values"
+    )
+
+```
+
+```{r DNA on plate}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  droplevels() %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = qubit_conc_ng_ul)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 10) +
+    facet_wrap(~plate, ncol = 1) +
+    #if there is no DNA concentration, use the discrete fill
+    {
+      if(all(is.na(s$qubit_conc_ng_ul))) scale_fill_viridis_d(na.value = "white")
+      else scale_fill_viridis_c(na.value = "white")
+    } +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill="DNA\nconcentration\n(ng/ul)"
+    )
+```
+
+```{r reads on plate}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  droplevels() %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = read_counts)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 10) +
+    facet_wrap(~plate, ncol = 1) +
+    scale_fill_viridis_c(na.value = "white") +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill="Raw\nread\ncounts"
+    )
+```
+
+\elandscape
+
+# Results section
+
+DRAGEN COVID Lineage App (on BaseSpace cloud) version `r dragen_covid_lineage_version` \newline
+Lineage assignment software and version `r lineage_assignment_software_version` \newline
+Scorpio software version `r scorpio_software_version` \newline
+Constellation database version `r constellation_version`
+
+## Coverage
+
+### Median coverage
+
+```{r coverage results}
+
+s %>%
+  filter(!is.na(median_coverage)) %>%
+  droplevels() %>%
+  select(sample_type, median_coverage, pct_genome_coverage_over_30x) %>%
+  {
+  ggplot(., aes(x = median_coverage, y = pct_genome_coverage_over_30x, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    scale_y_continuous(labels=scales:::percent) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+      theme_classic() +
+      theme(
+        strip.background = element_rect(color = "white", size = 50)
+        ) +
+      labs(x="Median coverage", y="Percentage of genome\nwith >= 30X coverage", fill="Sample Type")
+  }
+
+```
+
+\blandscape
+
+### SARS-CoV-2 genome coverage
+
+```{r lower coverage results, fig.width=11}
+
+s %>%
+  select(sample_id, sample_type, matches("pct_genome_coverage_over")) %>%
+  pivot_longer(cols = matches("pct_genome_coverage_over"), names_to = "depth", values_to = "pct_coverage") %>%
+  filter(!is.na(pct_coverage)) %>%
+  mutate(depth = as.numeric(gsub(".*_|.$", "", depth))) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = depth, y = pct_coverage, fill = sample_type, group = sample_id)) +
+    geom_line(aes(color = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    scale_y_continuous(labels=scales:::percent) +
+    facet_wrap(~sample_type, nrow = 1) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      legend.position = "none",
+      aspect.ratio = 1
+      ) +
+    labs(x="Coverage depth (X)", y="Percentage genome coverage", fill="Sample Type", color = "Sample Type")
+  }
+
+```
+
+### Sliding window coverage (100 bp)
+
+```{r slide window results, fig.width=11, fig.height=8}
+
+knitr::include_graphics(here("data", paste0(sequencing_date, "_sliding_coverage_100_bp.png")))
+
+```
+
+\elandscape
+
+### Kmer results (number of unique SARS-CoV-2 fragments detected)
+
+```{r kmer numbers}
+
+s %>%
+  ggplot(aes(x=`SARS-CoV-2`, y = `SARS-CoV-2 Unique kmers detected`, fill = sample_type)) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_point(aes(size = sample_type), position = position_jitterdodge(), shape = 21) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_size_manual(values = ann_geom_values$sample_type_sizes[match(levels(s$sample_type), names(ann_geom_values$sample_type_sizes))]) +
+    theme_bw() + 
+    theme(panel.grid = element_blank()) +
+    labs(
+      x="COVID detection",
+      y="SARS-CoV-2\nkmer counts", fill = "Sample Type", size = "Sample Type"
+    )
+
+```
+
+### Kmer results (percentage of reference SARS-CoV-2 fragments detected)
+
+```{r COVID detection}
+
+s %>%
+  ggplot(aes(x=`SARS-CoV-2 Fraction kmers detected`, fill = sample_type)) +
+    geom_histogram(binwidth=0.1, boundary=TRUE, color = "white") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_x_continuous(labels=scales:::percent) +
+    theme_bw() + 
+    theme(panel.grid = element_blank()) +
+    labs(
+      x="Percent of SARS-CoV-2\nfragments detected",
+      y="Number of samples", fill = "Sample Type"
+    )
+
+```
+
+## Pangolin Lineage Results
+
+### Variant assignments from pangolin
+
+```{r variant assignments, fig.height=9, fig.width=7}
+
+s_toPlot %>%
+  select(sample_id, lineage, sample_type) %>%
+  group_by(sample_type) %>%
+  mutate(fraction = 1/n()) %>%
+  ungroup() %>%
+  mutate(variants = fct_lump(lineage, 20, w = fraction)) %>% 
+  select(-lineage) %>%
+  group_by(sample_type, variants) %>%
+  summarize(props = sum(fraction)) %>%
+  ungroup() %>%
+  mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=sample_type, y=props, fill=variants)) +
+    geom_bar(stat="identity", position = position_fill(reverse = FALSE)) +
+    facet_grid(.~sample_type, space="free", scales="free",
+               labeller = labeller(.default = function(x) {gsub(" ", "\n", x)}, .multi_line = FALSE)) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))]) +
+    scale_y_continuous(limits = c(0,1), expand=c(0,0), labels=scales:::percent) +
+    theme_classic() +
+    theme(
+      strip.background = element_rect(color = "white", size = 50),
+      strip.text = element_text(size = 12),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.title = element_text(hjust = 0.5)
+      ) +
+    labs(x="", y="Relative abundance", title = "Sample type", fill="Variants") +
+  who_legend
+  }
+
+```
+
+\newpage
+
+### Figure showing different pUSHER placements
+
+```{r multiple variant assignments, fig.height=9, fig.width=8}
+
+s_toPlot %>%
+  select(sample_id, note, sample_type, nc_qc_status) %>%
+  #remove "Usher placements" text in the front of note and scorpio notes
+  mutate(note = gsub("^.*: |; scorpio.*", "", note)) %>%
+  filter(note != "Assigned from designation hash.") %>%
+  #split note into two variant columns by the space
+  separate(note, into = c("variant1", "variant2"), sep = " ", extra = "merge") %>%
+  mutate(variant1_prop = gsub(".*\\(|\\)", "", variant1)) %>%
+  #if the notes say assigned, it means that PANGO software was used and found an exact match of the sequence to a representative lineage
+  mutate(variant1_prop = gsub("Assigned from designation hash.", "1", variant1_prop)) %>%
+  mutate(variant1_prop = unlist(lapply(variant1_prop, function(x) eval(parse(text=x))))) %>%
+  mutate(variant2_prop = gsub(".*\\(|\\)", "", variant2)) %>%
+  mutate(variant2_prop = unlist(lapply(variant2_prop, function(x) eval(parse(text=x))))) %>%
+  pivot_longer(cols = c("variant1_prop", "variant2_prop"), names_to = "variant_num", values_to = "props") %>%
+  mutate(variants = case_when(variant_num == "variant1_prop" ~ gsub("\\(.*", "", variant1),
+                             variant_num == "variant2_prop" ~ gsub("\\(.*", "", variant2),
+                             TRUE ~ NA_character_)) %>%
+  filter(!is.na(props)) %>%
+  mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
+  mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
+  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=props, y=sample_id, fill=variants)) +
+    geom_bar(stat="identity", position = position_fill(reverse = TRUE)) +
+    facet_grid(nc_qc_status+sample_type~., space="free", scales="free",
+               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))]) +
+    scale_x_continuous(limits = c(0,1), expand=c(0,0), labels=scales:::percent) +
+    theme_classic() +
+    theme(
+      strip.background = element_blank(),
+      strip.text.y = element_text(angle = 0, size = 6)
+      ) +
+    labs(y="", x="Relative abundance", fill="Variants") +
+  who_legend
+  }
+
+```
+
+\newpage
+
+### Figure showing conflicting variant assignments from pangolin and nextclade
+Stars in boxes mean that the variants/sub-variants from different software agree
+
+```{r conflicting assignments, fig.height=9, fig.width=8}
+
+s_toPlot %>%
+  select(sample_id, lineage, Nextclade_pango, sample_type, nc_qc_status) %>%
+  rename(Pangolin = "lineage", NextClade = "Nextclade_pango") %>%
+  rowwise() %>%
+  mutate(pn = grepl(Pangolin, NextClade) | grepl(NextClade, Pangolin)) %>%
+  mutate(pn = ifelse(is.na(pn), FALSE, pn)) %>%
+  pivot_longer(cols = c("Pangolin", "NextClade"), names_to = "software", values_to = "variants") %>%
+  mutate(uniq = case_when(pn & grepl("Pangolin|NextClade", software) ~ "*",
+                          TRUE ~ "")) %>%
+  mutate(software = factor(software, levels = c("Pangolin", "NextClade"))) %>%
+  mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
+  mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
+  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=software, y=sample_id, fill=variants, label=uniq)) +
+    geom_tile(stat="identity") +
+    geom_text() +
+    facet_grid(nc_qc_status+sample_type~., space="free", scales="free",
+               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))]) +
+    theme_classic() +
+    theme(
+      strip.background = element_blank(),
+      strip.text.y = element_text(angle = 0, size = 6),
+      axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)
+      ) +
+    labs(y="", x="Software used to determine variants", fill="Variants") +
+  who_legend
+  }
+
+```
+
+\blandscape
+
+### Plateview of results
+
+```{r pangolin plate, fig.width=11, fig.height=7}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  mutate(lineage = factor(lineage, levels = names(ann_geom_values$variants))) %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = lineage, label = lineage)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 16) +
+    geom_text(check_overlap = TRUE, size = 3, color = "white") +
+    facet_wrap(~plate, ncol = 1) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$lineage), names(ann_geom_values$variants))]) +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill = "Variants"
+    ) +
+    guides(fill = guide_legend(override.aes = list(size = 8)))  
+  }
+
+```
+
+```{r nc plate, fig.width=11, fig.height=7}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  mutate(sample_type = gsub(" - No Variant.*|Mock DNA ", "", sample_type)) %>%
+  mutate(sample_type = gsub(" ", "\n", sample_type)) %>%
+  mutate(sample_type = gsub("Environmental", "Environ", sample_type)) %>%
+  filter(!is.na(plate_coord)) %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  droplevels() %>%
+  mutate(nc_qc_status = factor(nc_qc_status, levels = c("bad", "mediocre", "good"))) %>%
+  {
+  ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = nc_qc_status, label = sample_type)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 16) +
+    geom_text(check_overlap = TRUE, size = 3, color = "black") +
+    scale_fill_manual(values = brewer.pal(6, "Set3")[c(4, 6, 1)]) +
+    #facet_wrap(~plate, ncol = 1) + names(ann_geom_values$sample_type_colors))]) +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill = "NextClade status",
+    ) +
+    guides(fill = guide_legend(override.aes = list(size = 8)))  
+  }
+
+```
+
+\elandscape
+
+```{r lineage and VOC checks}
+
+has_pos_ctrl <- s %>%
+  filter(grepl("Mock DNA", sample_type)) %>%
+  mutate(is_pos = lineage == "B") %>%
+  select(is_pos) %>%
+  pull()
+
+if(length(has_pos_ctrl) == 0) {
+  has_pos_ctrl <- FALSE
+}
+
+
+```
+
+`r if(!has_pos_ctrl | is.na(has_pos_ctrl)){paste0("\\textcolor{red}{\\huge Positive control is not correct lineage}")}`
+
+## Nextclade
+
+### Coverage and QC scores
+
+```{r nextclade coverage, fig.height=9, fig.width=7}
+
+s_toPlot %>%
+  select(sample_type, median_coverage, pct_genome_coverage_over_30x, nc_qc_status) %>%
+  filter(!is.na(median_coverage)) %>%
+  mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
+  {
+  ggplot(., aes(x = nc_qc_status, y = pct_genome_coverage_over_30x)) +
+    geom_hline(slope = 0, yintercept = 0.8, color = "grey", linetype = "dotted", lwd=0.75) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_point(aes(fill = median_coverage, shape = sample_type), position = position_jitterdodge(), size = 3) +
+    scale_shape_manual(values = ann_geom_values$sample_type_shapes[match(levels(.$sample_type), names(ann_geom_values$sample_type_shapes))]) +
+    scale_fill_viridis_c() +
+    scale_y_continuous(labels=scales:::percent) +
+    theme_classic() +
+    theme(
+      strip.background = element_rect(color = "white", size = 50)
+    ) +
+    labs(x="NextClade QC Status", y="Percentage of genome\nwith >= 30X coverage", fill = "Median\nCoverage (X)", shape = "Sample Type")
+  }
+
+```
+
+## Summary of variants
+Percentages of variants only in samples that meet criteria (Pangolin results)
+
+```{r percent table}
+
+s_toPlot %>%
+  filter4report() %>%
+  group_by(PHL_sample_received_date) %>%
+  mutate(all_samples_n = n()) %>%
+  ungroup() %>%
+  select(PHL_sample_received_date, lineage, clade_who, sample_type, all_samples_n) %>%
+  group_by(PHL_sample_received_date, sample_type, clade_who, lineage) %>%
+  summarise(variant_percentages = n()/all_samples_n*100) %>%
+  mutate(variant_percentages_text = paste0(round(variant_percentages, digits = 2), "\\%")) %>%
+  ungroup() %>%
+  arrange(PHL_sample_received_date, -variant_percentages) %>%
+  select(-variant_percentages) %>%
+  unique() %>%
+  rename(`Received date` = "PHL_sample_received_date", `Sample Type` = "sample_type", `WHO` = "clade_who", `Variant` = "lineage", `Variant percentage` = "variant_percentages_text") %>%
+  { if(use_kable)
+      kable(., "latex", longtable = F, digits=2, booktabs=T, escape=F,
+            col.names = linebreak(c("Sample\nreceived", "Sample Type", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
+      kable_styling(latex_options = c("scale_down", "repeat_header", "HOLD_position")) %>%
+      row_spec(0, bold = T, color="#7C0A02") %>%
+      collapse_rows(columns = 1:2, valign = "top")
+    else
+      pander(.)
+  }
+
+```
+
+
+```{r data export}
+
+dir.create(here("upload", "epi"), recursive = TRUE)
+dir.create(here("upload", "seqsender"), recursive = TRUE)
+
+if(length(PHI_file_fp) == 0) {
+  stop(simpleError("You are missing the PHI file. Check the Admin fileshare"))
+}
+
+s_phi <- read_delim(PHI_file_fp, delim = ",")
+
+# Export the data for EPI's
+epi_report <- s_toPlot %>%
+  merge(s_phi, by = "sample_id", all.x = TRUE) %>%
+  filter4report() %>%
+  select(sample_name, sample_collected_by, sequencing_date, lineage, clade_who) %>%
+  arrange(sample_collected_by, sample_name) %>%
+  rename(accession_number = "sample_name", who_label = "clade_who")
+
+epi_report %>%
+  write_csv(epi_report_fp)
+
+# Export the data for seqsender upload to sra, genbank, and gisaid
+seqsender <- s_toPlot %>%
+  filter4report() %>%
+  mutate(collection_date = case_when(!is.na(sample_collection_date) ~ sample_collection_date,
+                                     !is.na(PHL_sample_received_date) ~ PHL_sample_received_date,
+                                     TRUE ~ sequencing_date)) %>%
+  #the number at the end of the name for these samples must be the collection year, or the databases will complain
+  mutate(collection_year = format(collection_date, format = "%Y")) %>%
+  mutate(genbank_name = paste0("SARS-CoV-2/Human/USA/", sample_id, "/", collection_year)) %>%
+  mutate(sra_name = paste0("SARS-CoV-2/Human/USA/", sample_id)) %>%
+  #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/collection year. This name may conflict with samples collected/sequenced in different years
+  mutate(gisaid_name = paste0("hCoV-19/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sample_id), "/", collection_year)) %>%
+  mutate(gisaid_accession = "",
+         location = "USA: Pennsylvania",
+         gisaid_location = "North America/USA/Pennsylvania",
+         zip = "19146",
+         type = "betacoronavirus",
+         passage = "Original") %>%
+  #make gender and age for Temple samples as Unknown for now until they confirm its okay to submit these fields on their behalf
+  mutate(host_age_bin = ifelse(is.na(host_age_bin)|sample_collected_by == "Temple University", "Unknown", host_age_bin),
+         gender = ifelse(is.na(gender)|sample_collected_by == "Temple University", "Unknown", gender),
+         collected_by = sample_collected_by) %>%
+  select(-c(isolation_source)) %>%
+  rename(isolation_source = "sample_type",
+         host = "host_scientific_name",
+         sex = "gender",
+         orig_lab = "sample_collected_by") %>%
+  mutate(patient_status = "Unknown",
+         instrument = paste0("Illumina ", instrument_type),
+         library = "ARTIC Network Protocol V4",
+         assembly_method = paste0("DRAGEN COVID Lineage ", dragen_covid_lineage_version),
+         library_strategy = "AMPLICON",
+         library_source = "VIRAL RNA",
+         library_selection = "RT-PCR",
+         library_layout = "PAIRED",
+         structured_comment = "Assembly-Data",
+         genbank_note = "") %>%
+  mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "500 South Broad Street, Philadelphia, PA 19146 USA",
+                                      orig_lab == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122 USA",
+                                      TRUE ~ "Unknown")) %>%
+  mutate(sra_file_path_1 = here("upload", "fastq", paste0(sample_id, "_S", SampleNumber, "_L00", lane, "_R1_001.fastq.gz"))) %>%
+  mutate(sra_file_path_2 = here("upload", "fastq", paste0(sample_id, "_S", SampleNumber, "_L00", lane, "_R2_001.fastq.gz"))) %>%
+  mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC V4 primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
+  select(sample_id, genbank_name, sra_name, gisaid_name, gisaid_accession, collection_date, location, gisaid_location, zip, type, passage, organism,
+         isolation_source, host, host_disease, host_age_bin, sex, patient_status, 
+         instrument, library, assembly_method, library_strategy, library_source, library_selection, library_layout, structured_comment, median_coverage, genbank_note, design_description,
+         collected_by, orig_lab, orig_lab_address, sra_file_path_1, sra_file_path_2)
+
+seqsender %>%
+  write_tsv(seqsender_meta_fp)
+
+#double checking to see if number of samples match
+n_samples_report <- s %>%
+  filter(!grepl("None|Undetermined", sample_id)) %>%
+  filter(!grepl("control", sample_type, ignore.case = TRUE)) %>%
+  filter(!is.na(lineage)) %>%
+  filter(!is.na(nc_qc_status)) %>%
+  filter(nc_qc_status != "bad") %>%
+  filter(!(nc_qc_status == "mediocre" & pct_genome_coverage_over_30x < .8)) %>%
+  filter(pango_qc_status != "fail") %>%
+  nrow()
+
+```
+
+```{r final check}
+
+epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
+
+epi_report <- epi_2_upload_fp %>%
+  read_csv() %>%
+  select(accession_number) %>%
+  merge(select(s_phi, sample_id, sample_name), by.x = "accession_number", by.y = "sample_name", all.x = TRUE) %>%
+  mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
+  mutate(file = "epi") %>%
+  select(file, sample_id)
+
+seqsender_2_upload_fp <- list.files(here("upload", "seqsender"), pattern = ".tsv", recursive = TRUE, full.names = TRUE)
+
+
+all_sample_ids_from_seqsender <- seqsender_2_upload_fp %>%
+  read_tsv()%>%
+  select(sample_id, genbank_name, sra_name, gisaid_name) %>%
+  mutate(gisaid_name = gsub(".*PA-", "", gisaid_name)) %>%
+  #changing the year at the end of the gisaid name back to the sequencing year
+  mutate(gisaid_name = gsub("/.*$", paste0("/", str_sub(project_name, 1, 4)), gisaid_name)) %>%
+  mutate(gisaid_name = gsub(format(sequencing_date, "%m%d/%Y"), format(sequencing_date, "%Y%m%d"), gisaid_name)) %>%
+  pivot_longer(cols = c("genbank_name", "sra_name", "gisaid_name"), names_to = "file", values_to = "upload_id") %>%
+  mutate(upload_id = gsub(".*/USA/|/.*", "", upload_id)) %>%
+  mutate(all_sample_same = upload_id == sample_id)
+
+if (!all(all_sample_ids_from_seqsender$all_sample_same)) {
+  stop (simpleError("Some of the database names don't match the sample_id names!!"))
+}
+
+all_sample_ids_from_seqsender %<>% select(file, upload_id) %>%
+  rename(sample_id = "upload_id")
+
+#should be 1 set here
+fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
+  data.frame(FileName = .) %>%
+  mutate(sample_id = gsub(".*upload/fastq/|_S[0-9].*_L001_R[12]_001.fastq.gz$", "", FileName)) %>%
+  mutate(file = gsub(".*/", "", FileName)) %>%
+  select(-FileName)
+
+fastq2_compare <- fastq_2_upload %>%
+  filter(grepl("_L001_R1_001.fastq.gz", file))
+
+if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
+  stop (simpleError("Missing some fastq files!"))
+}
+
+#should be 1 set here
+fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
+  filter(grepl("^>", X1)) %>%
+  mutate(sample_id = gsub("^>", "", X1)) %>%
+  mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
+  select(-X1)
+
+check_all <- epi_report %>%
+  rbind(all_sample_ids_from_seqsender) %>%
+  rbind(fastq2_compare) %>%
+  rbind(fasta_samples) %>%
+  group_by(sample_id) %>%
+  mutate(count_all_samples = n()) %>%
+  ungroup()
+
+#can change this to 5 if you don't want to check the fastq files
+if (!all(check_all$count_all_samples == 6)) {
+  stop (simpleError("Some files are missing samples to upload!"))
+}
+
+#these are samples that failed in the pipeline for whatever reason. Can rerun pipeline to generate results for these samples
+rerun_samples <- s %>%
+  filter(is.na(`SARS-CoV-2 Fraction kmers detected`)) %>%
+  select(sample_id) %>%
+  pull()
+
+```
+
+\newpage
+
+# Appendix
+
+## Number of reads before and after filtering
+Red samples refer to results that will not be reported (controls or no lineage results) \newline
+Orange samples also refer to results that will not be reported (bad or mediocre NextClade QC with <80% 30X coverage) \newline
+The total number of samples with acceptable results for reporting is `r n_samples_report` out of `r nrow(s[grepl("Nasal swab", s$sample_type), ])` nasal samples sequenced. \newline
+Number of samples to send to epidemiologists: `r nrow(epi_report)` \newline
+Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "gisaid_name", "sample_id"])` \newline
+Number of samples to upload to SRA: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])` \newline
+Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])`\newline
+
+`r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge There are samples that didn't go through the pipeline correctly!! Just delete the project on BaseSpace and rerun. Or create a new RStudio project with a different name}")}`
+
+```{r trimmed reads, echo=FALSE}
+
+s %>%
+  arrange(-read_counts) %>%
+  { if(use_kable) 
+    mutate(., sample_id = cell_spec(sample_id, "latex",
+                               color = case_when((grepl(paste0(rerun_samples, collapse = "|"), sample_id) & length(rerun_samples) > 0) ~ "yellow",
+                                                 ((grepl("control|Unassigned reads", sample_type)) | (!(sample_id %in% s_toPlot$sample_id))) ~ "red",
+                                                 ((grepl("bad", nc_qc_status)) | (grepl("mediocre", nc_qc_status) & pct_genome_coverage_over_30x < .8) | (grepl("fail", pango_qc_status))) ~ "orange",
+                                                 TRUE ~ "black"))) %>%
+      select(sample_id,
+             sample_type,
+             total_raw_reads,
+             read_counts) %>%
+      kable_style()
+    else
+      select(., sample_id,
+             sample_type,
+             read_counts) %>%
+      pander()
+  }
+
+```
+
+\blandscape
+
+## Individual sample sliding window coverage (100 bp)
+
+```{r slide window results per sample, fig.width=11, fig.height=8, fig.align='center'}
+
+knitr::include_graphics(
+  path = list.files(here("data"), pattern = paste0(sequencing_date, "_sample_sliding_coverage_100_bp_col"), full.names = TRUE)
+)
+
+```
+
+# Review and Approval
+
+```{r sign off}
+
+data.frame(`Role and Name` = linebreak(c("Bioinformatician:\nVincent Tu, PhD",
+                                         "Sequencing Manager:\nMazen Sid Ahmed, PhD",
+                                         "Laboratory Directory:\nBernadette Matthis, MSBA"), align = "l"),
+           Signature = c("", "", ""),
+           Date = c(as.character(Sys.Date()), "", ""), check.names = FALSE) %>%
+  kable_style() %>%
+  #add signatures in the second column
+  column_spec(2, image = spec_image(c(tag, blank, blank), width = 500, height = 180))
+
+```
+
+\elandscape
+
+```{r Generate time stamped report, eval=FALSE, include=FALSE, message=TRUE}
+
+library(here)
+rstudioapi::documentSaveAll()
+dir.create(here("output"))
+project_name <- basename(here())
+
+qc_report_fp <- paste0(project_name, "_QC_Report.Rmd")
+qc_output_fp <- here("output", paste0(project_name, '.QC.report_gen.on.', Sys.Date(), '.pdf'))
+
+# load preamble the first time?
+load_preamble <- TRUE
+
+# need to import the data into a single tsv for the first time?
+import_data <- TRUE
+
+# print table as kable for pdf?
+use_kable <- TRUE
+
+rmarkdown::render(qc_report_fp, output_file = qc_output_fp)
+
+load_preamble <- FALSE
+use_kable <- FALSE
+rmarkdown::render(qc_report_fp, output_file = "README.md",
+                 output_format = rmarkdown::md_document(variant = "gfm", toc = TRUE))
+
+```
+
+```{r run R script, eval=FALSE, include=FALSE}
+
+#copy files if this script exists
+tryCatch(
+  {
+    source(file.path(dirname(here()), "cp2admin.R"))
+  }, error = function(e)
+  {
+
+  }
+)
+
+```
+
+```{r upload data if results look good, eval=FALSE, include=FALSE, message=TRUE}
+
+#intialize data_upload conda env
+use_condaenv("seqsender", required = TRUE)
+import("os")
+
+#do a test upload first. change this to FALSE when SRA upload and gisaid upload testing is successful and you want to submit the files for real
+test_upload <- TRUE 
+
+if(test_upload) {
+  test_flag <- "--test"
+  config2use <- seqsender_config_test_fp
+} else{
+  test_flag <- ""
+  config2use <- seqsender_config_fp
+}
+
+use_proxy <- TRUE #change this to FALSE to not use proxy
+
+if(use_proxy) {
+  proxy_flag <- "--proxy"
+} else{
+  proxy_flag <- ""
+}
+
+report_or_overwrite <- TRUE #change this to FALSE to overwrite the submitted files on the sFTP and to resubmit
+
+if(report_or_overwrite) {
+  overwrite_flag <- ""
+} else{
+  overwrite_flag <- "--overwrite"
+}
+
+seqsender_py <- file.path(seqsender_fp, "seqsender.py")
+
+file_create_success_msg <- c(paste0("Processing ", project_name, "."),
+                             "Processing Files.", 
+                             "Creating GISAID files.",
+                             "Creating Genbank files.",
+                             "Creating BioSample/SRA files.",
+                             paste0(project_name, " complete."))
+
+### generate GISAID files to upload. This will also generate test submissions for SRA and BioSample but they will be rewritten with the submit command
+upload_files_created <- cli_submit("python",
+                                   seqsender_py,
+                                   c(proxy_flag, "prep",
+                                     "--unique_name", project_name,
+                                     "--config", shQuote(seqsender_config_test_fp, type = "cmd"),
+                                     "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
+                                     "--fasta", shQuote(fasta_fp, type = "cmd")),
+                                   shQuote_type = "cmd")
+
+if(!all(file_create_success_msg %in% upload_files_created)) {
+  stop(simpleError("Seqsender failed to create some of the GISAID upload files!"))
+}
+
+gisaid_upload_success_msg <- c("Submitting now to gisaid.",
+                               "Waiting for file to write.",
+                               "No failed sequences.",
+                               "Cleaning up files.")
+
+### submit files to gisaid
+gisaid_uploaded <- cli_submit("python",
+                              seqsender_py,
+                              c(proxy_flag, "gisaid",
+                                "--unique_name", project_name,
+                                "--config", shQuote(config2use, type = "cmd"),
+                                test_flag, overwrite_flag),
+                              shQuote_type = "cmd")
+
+if(!all(gisaid_upload_success_msg %in% gisaid_uploaded)) {
+  stop(simpleError("Something went wrong! GISAID upload failed. Maybe there are duplicate entries already? If so, rename the GISAID name and resubmit"))
+}
+
+#include the GISAID Accession number for the SRA and GenBank submissions
+read_gisaid_accessions <- read_csv(here("gisaid", paste0(project_name, ".log")), col_names = FALSE) %>%
+  filter(grepl("msg: ", X1)) %>%
+  mutate(X1 = gsub("msg: ", "", X1))
+
+gisaid_number_submitted <- read_gisaid_accessions %>%
+  filter(grepl("submissions uploaded: ", X1)) %>%
+  mutate(X1 = gsub("submissions uploaded: ", "", X1)) %>%
+  pull() %>%
+  as.numeric()
+
+gisaid_number_failed <- read_gisaid_accessions %>%
+  filter(grepl("submissions failed: ", X1)) %>%
+  mutate(X1 = gsub("submissions failed: ", "", X1)) %>%
+  pull() %>%
+  as.numeric()
+
+if(gisaid_number_submitted != nrow(seqsender) & gisaid_number_failed != 0) {
+  
+  stop(simpleError("Some GISAID samples failed to upload."))
+  
+}
+  
+gisaid_accessions <- read_gisaid_accessions %>%
+  filter(!grepl("submissions uploaded: |submissions failed: ", X1)) %>%
+  separate(X1, into = c("gisaid_name", "gisaid_accession"), sep = "; ", extra = "merge") %>%
+  mutate(genbank_note = paste0("GISAID virus name: ", gisaid_name, "; GISAID accession: ", gisaid_accession))
+  
+if(!test_upload) {
+  
+  gisaid_accessions %>%
+    write_csv(here("gisaid", paste0(project_name, "_gisaid_accessions.csv")))
+  
+}
+
+#rewrite the seqsender file with the gisaid accession numbers and remove the old prepared files
+seqsender %>%
+  select(-c(gisaid_accession, genbank_note)) %>%
+  merge(gisaid_accessions, by = "gisaid_name", all.x = TRUE) %>%
+  write_tsv(seqsender_meta_fp)
+
+### submit files to biosample and sra
+cli_submit("python",
+           seqsender_py,
+           c(proxy_flag, "submit",
+             "--unique_name", project_name,
+             "--config", shQuote(config2use, type = "cmd"),
+             "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
+             "--fasta", shQuote(fasta_fp, type = "cmd"),
+             test_flag, overwrite_flag),
+           shQuote_type = "cmd")
+
+### submit files to genbank
+cli_submit("python",
+           seqsender_py,
+           c(proxy_flag, "genbank",
+             "--unique_name", project_name,
+             "--config", shQuote(config2use, type = "cmd"),
+             test_flag, overwrite_flag),
+           shQuote_type = "cmd")
+```
