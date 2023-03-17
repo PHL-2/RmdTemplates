@@ -19,6 +19,9 @@ munging_fp <- here("metadata", "munge")
 # Manual input
 ##############
 
+#s3 filepath to upload compressed sequencing run folder
+s3_bucket_incoming_fp <- "s3://incoming-run"
+
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
 instrument_select <- 1 #select 1 for MiSeq or 2 for NextSeq
@@ -53,6 +56,20 @@ tryCatch(
   },
   error = function(e) {
     stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+  }
+)
+
+###################################################
+# Load config
+###################################################
+
+#this file needs to sit in a [aux_files/config] directory path above this project directory
+tryCatch(
+  {
+    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+  },
+  error = function(e) {
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
   }
 )
 
@@ -423,3 +440,34 @@ metadata_sheet %>%
 metadata_sheet %>%
   select(sample_id, any_of(phi_info)) %>%
   write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")), row.names = FALSE)
+
+###########################
+#Get sequencing folder path
+###########################
+
+#get the newly added run folder
+run_folder <- sequencing_folder_fp %>%
+  list.files(full.names = T) %>%
+  file.info() %>%
+  filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), rownames(.))) %>%
+  rownames()
+
+folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
+  as.Date(format = "%Y%m%d")
+
+if(folder_date != gsub("_.*", "", basename(here()))) {
+  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+}
+
+sequencing_run <- gsub(".*/", "", run_folder)
+
+nf_demux_samplesheet <- data.frame(
+  id = sequencing_run,
+  samplesheet = file.path(s3_bucket_incoming_fp, sequencing_date, sample_sheet_fn),
+  lane = "",
+  flowcell = file.path(s3_bucket_incoming_fp, sequencing_date, paste0(sequencing_run, ".tar.gz"))
+)
+
+nf_demux_samplesheet %>%
+  write.csv(file = here("metadata", "munge", paste0(sequencing_date, "_nf_demux_samplesheet.csv")),
+            row.names = FALSE, quote = FALSE)
