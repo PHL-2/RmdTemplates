@@ -1,6 +1,6 @@
 [Header]
-Experiment Name,COVIDSeq_Generic_Template
-Date,2023-01-06
+Experiment Name,COVIDSeq_YYYY-MM-DD
+Date,YYYY-MM-DD
 Workflow,GenerateFASTQ
 Library Prep Kit,COVIDSeq for Surveillance
 Index Kit,COVIDSeq indexes_IDT for Illumina-PCR Indexes Set 1 2 3 4
@@ -15,5 +15,5 @@ Instrument type,MiSeq
 adapter,CTGTCTCTTATACACATCT
 
 [Data]
-Sample_ID,index,index2
-sample,NNNNNNNNNN,NNNNNNNNNN
+Sample_ID,Index_Plate,Index_Plate_Well,I7_Index_ID,index,I5_Index_ID,index2,UDI_Index_ID
+Undetermined,1,A01,UDP0001,NNNNNNNNNN,UDP0001,NNNNNNNNNN,UDP0001
