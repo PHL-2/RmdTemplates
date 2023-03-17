@@ -17,15 +17,6 @@ library(stringdist)
 
 ```{r versions and dates manual inputs}
 
-#file path of the directory holding the sequencing run folders
-sequencing_folder_fp <- "Z:/MiSeq_runs/COVIDSeq"
-
-#full file path of the git shell executable
-sh_exe_fp <- "C:/Users/vincent.tu/AppData/Local/Programs/Git/bin/sh.exe"
-
-#full file path of where the seqsender repo was cloned
-seqsender_fp <- "C:/Users/vincent.tu/OneDrive - City of Philadelphia/git_clones/seqsender"
-
 #application to run on basespace
 app2run <- "DRAGEN COVID Lineage"
 
@@ -39,7 +30,17 @@ min_reads <- 1000000
 
 ```
 
-```{r functions and load signature}
+```{r load personal variables, functions and signature}
+
+#this file needs to sit in a [aux_files/config] directory path above this project directory
+tryCatch(
+  {
+    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+  },
+  error = function(e) {
+  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+  }
+)
 
 #this file needs to sit in a [aux_files/functions] directory path above this project directory
 tryCatch(
