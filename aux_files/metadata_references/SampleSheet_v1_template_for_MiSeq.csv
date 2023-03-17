@@ -15,5 +15,5 @@ Instrument type,MiSeq
 adapter,CTGTCTCTTATACACATCT
 
 [Data]
-Sample_ID,index,index2
-Undetermined,NNNNNNNNNN,NNNNNNNNNN
+Sample_ID,Index_Plate,Index_Plate_Well,I7_Index_ID,index,I5_Index_ID,index2,UDI_Index_ID
+Undetermined,1,A01,UDP0001,NNNNNNNNNN,UDP0001,NNNNNNNNNN,UDP0001
