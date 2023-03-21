@@ -9,7 +9,6 @@ library(ggsci)
 library(ggthemes)
 library(RColorBrewer)
 library(patchwork)
-library(reticulate)
 library(zoo)
 library(stringdist)
 

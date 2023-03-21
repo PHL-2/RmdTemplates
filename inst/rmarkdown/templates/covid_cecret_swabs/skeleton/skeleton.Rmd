@@ -1163,6 +1163,7 @@ tryCatch(
 ```{r upload data if results look good, message=TRUE, include=FALSE, eval=FALSE}
 
 #intialize data_upload conda env
+library(reticulate)
 use_condaenv("seqsender", required = TRUE)
 import("os")
 
