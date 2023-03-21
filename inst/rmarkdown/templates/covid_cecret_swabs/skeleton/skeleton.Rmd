@@ -55,19 +55,19 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 
 ```
 
-```{r filter out samples, eval = FALSE, message = TRUE}
+```{r filter out samples, message = TRUE, eval = FALSE}
 
 source("code/1_remove_low_RLU.R")
 
 ```
 
-```{r generate SampleSheet and metadata, eval = FALSE, message = TRUE}
+```{r generate SampleSheet and metadata, message = TRUE, eval = FALSE}
 
 source("code/2_generate_barcodes_IDT.R")
 
 ```
 
-```{r child = 'code/preamble.Rmd', eval = load_preamble}
+```{r child = 'code/preamble.Rmd', message = NA, eval = load_preamble}
 ```
 
 
@@ -1118,7 +1118,7 @@ data.frame(`Role and Name` = linebreak(c("Bioinformatician:\nVincent Tu, PhD",
 
 \elandscape
 
-```{r Generate time stamped report, eval=FALSE, include=FALSE, message=TRUE}
+```{r Generate time stamped report, message=TRUE, include=FALSE, eval=FALSE}
 
 library(here)
 rstudioapi::documentSaveAll()
@@ -1146,7 +1146,7 @@ rmarkdown::render(qc_report_fp, output_file = "README.md",
 
 ```
 
-```{r run R script, eval=FALSE, include=FALSE}
+```{r run R script, include=FALSE, eval=FALSE}
 
 #copy files if this script exists
 tryCatch(
@@ -1160,7 +1160,7 @@ tryCatch(
 
 ```
 
-```{r upload data if results look good, eval=FALSE, include=FALSE, message=TRUE}
+```{r upload data if results look good, message=TRUE, include=FALSE, eval=FALSE}
 
 #intialize data_upload conda env
 use_condaenv("seqsender", required = TRUE)
