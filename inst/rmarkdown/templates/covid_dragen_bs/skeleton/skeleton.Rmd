@@ -1116,7 +1116,7 @@ data.frame(`Role and Name` = linebreak(c("Bioinformatician:\nVincent Tu, PhD",
 
 \elandscape
 
-```{r Generate time stamped report}
+```{r Generate time stamped report, message=TRUE, include=FALSE, eval=FALSE}
 
 library(here)
 rstudioapi::documentSaveAll()
