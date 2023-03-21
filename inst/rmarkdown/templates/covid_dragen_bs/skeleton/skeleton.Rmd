@@ -67,9 +67,8 @@ source("code/2_generate_barcodes_IDT.R")
 
 ```
 
-```{r child = 'code/preamble.Rmd', message = NA, eval = load_preamble}
+```{r child = 'code/preamble.Rmd', eval = load_preamble}
 ```
-
 
 ```{r check if primer selected}
 ### ===========================
@@ -136,7 +135,7 @@ The MiSeq machine uses the GenerateFASTQ workflow to demultiplex the samples and
 
 ## Number of read pairs per sample after demultiplexing
 
-Samples were sequenced on the `r samp_sh_header$instrument_type` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` length run and demultiplexed on BaseSpace by the GenerateFASTQ module. The demultiplexing step involves matching the IDT barcode sequence associated with each sample to the index sequence of each read
+Samples were sequenced on the `r unique(s_toPlot$instrument_type)` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` length run and demultiplexed on BaseSpace by the GenerateFASTQ module. The demultiplexing step involves matching the IDT barcode sequence associated with each sample to the index sequence of each read
 
 ### Number of samples and their pass filter percentages
 

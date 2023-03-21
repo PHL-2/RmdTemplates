@@ -237,7 +237,7 @@ run_dragen_app <- !file.exists(dragen_metadata_fp)
 
 ```
 
-```{r upload data to basespace and run the app, eval = run_dragen_app}
+```{r upload data to basespace and run the app, message = NA, eval = run_dragen_app}
 
 dir.create(here("data", "processed_bs"), recursive = TRUE)
 
@@ -302,7 +302,7 @@ dl_bs_data <- is.null(bs_meta$app_run_date)
 
 ```
 
-```{r, eval = dl_bs_data}
+```{r download bs data, message = NA, eval = dl_bs_data}
 
 ### 5 - wait until the app finished running
 bs_cli_await_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_5_await.sh")
