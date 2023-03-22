@@ -41,7 +41,7 @@ opts_chunk$set(
   cache.lazy = FALSE,
   echo=FALSE,
   warning=FALSE,
-  message=FALSE, #Set message to NA in chunks where message should be sent to stderr
+  message=FALSE,
   dpi=100,
   fig.width=6,
   fig.height=6,
@@ -67,8 +67,9 @@ source("code/2_generate_barcodes_IDT.R")
 
 ```
 
-```{r child = 'code/preamble.Rmd', eval = load_preamble}
+```{r child = 'code/preamble.Rmd', message = NA, eval = load_preamble}
 ```
+
 
 ```{r check if primer selected}
 ### ===========================
@@ -108,7 +109,7 @@ if (length(in_results_not_in_s) > 0) {
 
 # Introduction
 
-This report summarizes the results of `r nrow(s)-1` COVID samples sequenced on `r samp_sh_header$Date` and analyzed with BaseSpace DRAGEN Lineage App version `r dragen_covid_lineage_version` on `r date_pipeline_was_run`. The results section contains lineage information using the pangolin software version `r pangolin_software_version` (https://cov-lineages.org/resources/pangolin.html) and Nextclade version `r nextclade_version` (https://clades.nextstrain.org/). Samples were amplified with the `r artic_primer_scheme` primer scheme 
+This report summarizes the results of `r nrow(s)-1` COVID samples sequenced on `r samp_sh_header$Date` and analyzed with Cecret version `r dragen_covid_lineage_version` on `r date_pipeline_was_run`. The results section contains lineage information using the pangolin software version `r pangolin_software_version` (https://cov-lineages.org/resources/pangolin.html) and Nextclade version `r nextclade_version` (https://clades.nextstrain.org/). Samples were amplified with the `r artic_primer_scheme` primer scheme 
 
 # Number of samples sequenced
 
@@ -135,7 +136,7 @@ The MiSeq machine uses the GenerateFASTQ workflow to demultiplex the samples and
 
 ## Number of read pairs per sample after demultiplexing
 
-Samples were sequenced on the `r unique(s_toPlot$instrument_type)` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` length run and demultiplexed on BaseSpace by the GenerateFASTQ module. The demultiplexing step involves matching the IDT barcode sequence associated with each sample to the index sequence of each read
+Samples were sequenced on the `r samp_sh_header$instrument_type` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` length run and demultiplexed on BaseSpace by the GenerateFASTQ module. The demultiplexing step involves matching the IDT barcode sequence associated with each sample to the index sequence of each read
 
 ### Number of samples and their pass filter percentages
 
@@ -202,11 +203,13 @@ s %>%
 
 s %>%
   filter(isControl) %>%
-  mutate(environmental_site = ifelse(is.na(environmental_site), "", environmental_site)) %>%
-  order_on_other_col(environmental_site, read_counts) %>%
+  mutate(sample_type_name = ifelse(grepl("Environmental control", sample_type), paste0(sample_type, ":\n", environmental_site),
+                                   paste0(sample_type, ": ", environmental_site))) %>%
+  mutate(sample_type_name = ifelse(is.na(environmental_site), gsub(": NA$", "", sample_type_name), sample_type_name)) %>%
+  order_on_other_col(sample_type_name, read_counts) %>%
   droplevels() %>%
   {
-  ggplot(., aes(x=read_counts, y=environmental_site, fill = sample_type)) +
+  ggplot(., aes(x=read_counts, y=sample_type_name, fill = sample_type)) +
     geom_col() +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     facet_grid(sample_type~., scales = "free", space = "free") +
@@ -1160,7 +1163,6 @@ tryCatch(
 ```{r upload data if results look good, message=TRUE, include=FALSE, eval=FALSE}
 
 #intialize data_upload conda env
-library(reticulate)
 use_condaenv("seqsender", required = TRUE)
 import("os")
 

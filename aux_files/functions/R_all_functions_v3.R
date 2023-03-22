@@ -126,7 +126,7 @@ cli_submit <- function(exe_path, bs_cli_command, sh_arguments, shQuote_type = "s
 
   for(i in 1:n_tries) {
     Sys.sleep(time2sleep)
-    message(paste0("Trying ", basename(bs_cli_command), " ", i, " time"))
+    message(paste0("\nTrying ", basename(bs_cli_command), " ", i, " time"))
     shell_return <- system2(exe_path,                               #the git shell executable on windows
                             args = c(                               #some arguments need to be in quotes to be passed to shell
                               shQuote(bs_cli_command, type = shQuote_type), #the shell script to run
@@ -149,3 +149,16 @@ cli_submit <- function(exe_path, bs_cli_command, sh_arguments, shQuote_type = "s
   }
 
 }
+
+## =============================================================
+##   Read in Excel file with sheet name. Return NULL if no sheet
+## =============================================================
+
+read_excel_safely <- function(file, sheet) {
+
+  try_read_excel <- purrr::safely(readxl::read_excel, otherwise = NULL)
+
+  try_read_excel(file, sheet = sheet)$result
+
+}
+

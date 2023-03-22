@@ -19,12 +19,16 @@ munging_fp <- here("metadata", "munge")
 # Manual input
 ##############
 
+#s3 filepath to upload compressed sequencing run folder
+s3_bucket_incoming_fp <- "s3://incoming-run"
+
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
 instrument_select <- 1 #select 1 for MiSeq or 2 for NextSeq
 instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
 
 read_length <- "76"
+index_length <- "10"
 
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
 
@@ -52,6 +56,20 @@ tryCatch(
   },
   error = function(e) {
     stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+  }
+)
+
+###################################################
+# Load config
+###################################################
+
+#this file needs to sit in a [aux_files/config] directory path above this project directory
+tryCatch(
+  {
+    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+  },
+  error = function(e) {
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
   }
 )
 
@@ -242,6 +260,7 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   mutate(prj_descrip = prj_description) %>%
   mutate(instrument_type = instrument_type) %>%
   mutate(read_length = read_length) %>%
+  mutate(index_length = index_length) %>%
   mutate(environmental_material = ifelse(grepl("swab|control", sample_type), NA, environmental_material)) %>%
   mutate(collection_device = ifelse(grepl("waste water|control", sample_type), NA, collection_device)) %>%
   #remove empty columns again
@@ -292,7 +311,7 @@ for(x in c(cols2merge, "sample_id",
            "sample_type", "sample_collected_by", "PHL_sample_received_date",
            "organism", "host_scientific_name", "host_disease", "isolation_source",
            "index", "index2", "UDI_Index_ID", "I7_Index_ID", "I5_Index_ID",
-           "sequencing_date", "prj_descrip", "instrument_type", "read_length",
+           "sequencing_date", "prj_descrip", "instrument_type", "read_length", "index_length",
            "sample_collection_date", "host_age_bin", "gender", "zip_char", "priority")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     stop(simpleError(paste0("Missing column [", x, "] in the metadata sheet template!!!")))
@@ -368,36 +387,45 @@ samp_sheet_2_write <- metadata_sheet %>%
   rowwise() %>%
   mutate(Index_Plate = which(LETTERS == idt_set)) %>%
   mutate(Index_Plate_Well = paste0(idt_plate_row, idt_plate_col)) %>%
-  select(sample_id, Index_Plate, Index_Plate_Well, I7_Index_ID, index, I5_Index_ID, index2, UDI_Index_ID) %>%
+  #select(sample_id, Index_Plate, Index_Plate_Well, I7_Index_ID, index, I5_Index_ID, index2, UDI_Index_ID) %>%
+  #BCL Convert does not take Index Plate
+  select(sample_id, index, index2) %>%
   rename(Sample_ID = "sample_id")
 
-sample_sheet_fp <- here("metadata", "munge", "SampleSheet.csv")
+sample_sheet_fn <- paste0(sequencing_date, "_SampleSheet_v2.csv")
+
+sample_sheet_fp <- here("metadata", "munge", sample_sheet_fn)
 
 write_samp <- function(line2write) {
   write(paste0(line2write, collapse = ","), file = sample_sheet_fp, append = TRUE)
 }
 
 write("[Header]", file = sample_sheet_fp)
-write_samp(c("Experiment Name", paste0(prj_description, "_", sequencing_date)))
+write_samp(c("FileFormatVersion", "2"))
+write_samp(c("RunName", paste0(prj_description, "_", sequencing_date)))
 write_samp(c("Date", sequencing_date))
-write_samp(c("Workflow", "GenerateFASTQ"))
-write_samp(c("Library Prep Kit", "COVIDSeq for Surveillance"))
-write_samp(c("Index Kit", "COVIDSeq indexes_IDT for Illumina-PCR Indexes Set 1 2 3 4"))
-write_samp(c("Chemistry", "Amplicon"))
-write_samp(c("Instrument type", instrument_type))
+write_samp(c("Workflow", "BCLConvert"))
+write_samp(c("InstrumentType", instrument_type))
 write_samp("")
 
 write_samp("[Reads]")
-#writing read length twice for paired reads
-write_samp(read_length)
-write_samp(read_length)
+write_samp(c("Read1Cycles", read_length))
+write_samp(c("Read2Cycles", read_length))
+write_samp(c("Index1Cycles", index_length))
+write_samp(c("Index2Cycles", index_length))
 write_samp("")
 
-write_samp("[Settings]")
-write_samp(c("adapter", "CTGTCTCTTATACACATCT"))
+write_samp("[Sequencing_Settings]")
+write_samp(c("Library Prep Kit", "COVIDSeq for Surveillance"))
+write_samp(c("Index Kit", "COVIDSeq indexes_IDT for Illumina-PCR Indexes Set 1 2 3 4"))
+write_samp(c("Chemistry", "Amplicon"))
 write_samp("")
 
-write_samp("[Data]")
+write_samp("[BCLConvert_Settings]")
+write_samp(c("CreateFastqForIndexReads", "1"))
+write_samp("")
+
+write_samp("[BCLConvert_Data]")
 write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append = TRUE)
 
 ################################
@@ -413,3 +441,53 @@ metadata_sheet %>%
 metadata_sheet %>%
   select(sample_id, any_of(phi_info)) %>%
   write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")), row.names = FALSE)
+
+###########################
+#Get sequencing folder path
+###########################
+
+#get the newly added run folder
+run_folder <- sequencing_folder_fp %>%
+  list.files(full.names = T) %>%
+  file.info() %>%
+  filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), rownames(.))) %>%
+  rownames()
+
+folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
+  as.Date(format = "%Y%m%d")
+
+if(folder_date != gsub("_.*", "", basename(here()))) {
+  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+}
+
+sequencing_run <- gsub(".*/", "", run_folder)
+
+s3_samplesheet_fp <- file.path(s3_bucket_incoming_fp, sequencing_date, sample_sheet_fn)
+
+nf_demux_samplesheet <- data.frame(
+  id = sequencing_run,
+  samplesheet = s3_samplesheet_fp,
+  lane = "",
+  flowcell = file.path(s3_bucket_incoming_fp, sequencing_date, paste0(sequencing_run, ".tar.gz"))
+)
+
+nf_demux_samplesheet_fp <- here("metadata", "munge", paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
+s3_nf_demux_samplesheet_fp <- file.path(s3_bucket_incoming_fp, sequencing_date, paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
+
+nf_demux_samplesheet %>%
+  write.csv(file = nf_demux_samplesheet_fp,
+            row.names = FALSE, quote = FALSE)
+
+aws_cli_cp_fp <- file.path(dirname(here()), "aux_files", "aws_cli_commands", "aws_cli_1_cp.sh")
+
+aws_cp_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
+                                 c(shQuote(sample_sheet_fp, type = "sh"),
+                                   shQuote(s3_samplesheet_fp, type = "sh")))
+
+aws_cp_nf_demux_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
+                                          c(shQuote(nf_demux_samplesheet_fp, type = "sh"),
+                                            shQuote(s3_nf_demux_samplesheet_fp, type = "sh")))
+
+if(!all(grepl("Completed", c(aws_cp_samplesheet, aws_cp_nf_demux_samplesheet), ignore.case = TRUE))) {
+  stop(simpleError("Samplesheet upload to s3 bucket failed"))
+}

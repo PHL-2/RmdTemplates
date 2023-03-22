@@ -48,7 +48,7 @@ if(run_date != dat_date) {
 
 ```{r Reading ddPCR file and selecting useful columns}
 
-d <- read_csv(file = run_dat_fp) %>%
+d_pre <- read_csv(file = run_dat_fp) %>%
   select(
     Well, Sample = `Sample description 1`, Spiked = `Sample description 2`, Sample_date = `Sample description 3`, Extra = `Sample description 4`, SampleType, Target, `Conc(copies/uL)` = 7, Droplet_count = `Accepted Droplets`, Positives, Negatives) %>%
   #mutate(Sample = gsub(pattern = "dd_", replacement = "dd", x = Sample)) %>%
@@ -57,9 +57,12 @@ d <- read_csv(file = run_dat_fp) %>%
   mutate(percentage_positive = Positives/Droplet_count * 100,
          Process = ifelse(is.na(Process), "Non-processed", Process),
          Process = ifelse(grepl(pattern = "dil", x = Extra, ignore.case = T), "Dilution", Process),
-         Process = droplevels(factor(Process, level = c("Concentrated", "Unconcentrated", "Non-processed", "Unspiked","Dilution", "Frozen"))),
+         Process = ifelse(Spiked == "Unspiked", "Unspiked", Process),
+         Process = droplevels(factor(Process, level = c("Concentrated", "Unconcentrated", "Non-processed", "Unspiked","Dilution", "Frozen", "QuickExtract"))),
          `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
-         Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed"))) %>%
+         Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
+         Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d"))
+         ) %>%
   filter(!is.na(`Conc(copies/uL)`))
 
 ```
@@ -68,6 +71,14 @@ d <- read_csv(file = run_dat_fp) %>%
 ```{r saving data to rstudio metadata folder (for github upload)}
 
 file.copy(run_dat_fp, "ddPCR_data_csv")
+
+```
+
+
+```{r filter low droplet data}
+
+d <- d_pre %>%
+  filter(Droplet_count >= 10000)
 
 ```
 
@@ -83,7 +94,7 @@ dNeg <- dControls %>%
   filter(grepl(pattern = "oldww|MHV|ddPCR-H2O", x = Sample, ignore.case = T) | Process == "Unspiked")
 
 threshold <- dNeg %>%
-  group_by(Type, Process, Target) %>%
+  group_by(Type, Process, Target, Sample_date) %>%
   summarize(
     avg_pos_drop = mean(Positives),
     sd_pos_drop = sd(Positives),
@@ -92,9 +103,8 @@ threshold <- dNeg %>%
 
 dSamples <- d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-         Process == "Concentrated",
-         Spiked == "Spiked") %>%
-  group_by(Type, Process, Spiked, Target) %>%
+         Process == "Concentrated") %>%
+  group_by(Type, Process, Spiked, Target, Sample_date) %>%
   summarise(avg_pos_droplets = mean(Positives),
             avg_conc = mean(`Conc(copies/uL)`),
             sd_conc = sd(`Conc(copies/uL)`))
@@ -104,7 +114,7 @@ dUnspiked <- d %>%
          grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type)) 
 
 dControls_summarise <- dControls %>%
-  group_by(Type, Process, Target) %>%
+  group_by(Type, Process, Target, Spiked, Sample_date) %>%
   summarise(avg_pos_droplets = mean(Positives),
             avg_conc = mean(`Conc(copies/uL)`),
             sd_conc = sd(`Conc(copies/uL)`)) %>%
@@ -148,15 +158,15 @@ control_stock <- dControls_summarise %>%
   mutate(stock_conc = ifelse(Process == "Unconcentrated", stock_conc * (init_concentration_vol_uL/end_concentration_vol_uL), stock_conc),
          initial_conc = ifelse(Type == "MHV" & Process == "Unconcentrated", init_MHV_unconc_conc, initial_conc),
          efficiency = stock_conc/initial_conc) %>%
-  select(Type, Process, Target, expected_conc = initial_conc, calculated_conc = stock_conc, efficiency) %>%
-
+  select(Type, Process, Target, Spiked, Sample_date, expected_conc = initial_conc, calculated_conc = stock_conc, efficiency) %>%
     arrange(Type, Process, Target)
 
 sample_stock <- dSamples %>%
   filter(Target == "MHV",
          !grepl(pattern = "Dil", x = Type)) %>%
   cbind(initial_conc = init_MHV_ww_conc) %>%
-  mutate(stock_conc = stock_concentration_calc(concentration = avg_conc, 
+  mutate(initial_conc = ifelse(Sample_date >= as.Date("2023-02-28") | initial_conc == 13.9406, initial_conc/2, initial_conc),
+    stock_conc = stock_concentration_calc(concentration = avg_conc, 
                                                rxn_vol = rxn_vol_uL, 
                                                input_vol = input_vol_uL, 
                                                extraction_vol = extraction_vol_uL,
@@ -167,36 +177,41 @@ sample_stock <- dSamples %>%
     ) %>%
     mutate(stock_conc = ifelse(Process == "Unconcentrated", stock_conc * (init_concentration_vol_uL/end_concentration_vol_uL), stock_conc),
            efficiency = stock_conc/initial_conc) %>%
-  select(Type, Process, Target, Spiked, expected_conc = initial_conc, calculated_conc = stock_conc, efficiency) %>%
+  select(Type, Process, Target, Spiked, Sample_date, expected_conc = initial_conc, calculated_conc = stock_conc, efficiency) %>%
   arrange(Type, Process, Target, Spiked) %>%
   filter(Spiked != "Unspiked")
 
-MHV_efficiency <- control_stock %>%
+MHV_efficiency_controls <- control_stock %>%
          arrange(Type, Process, Target) %>%
-         filter(Type == "MHV" | Type == "oldWW",
-                Target == "MHV")
+         filter(Type == "oldWW" | Type == "MHV",
+           Target == "MHV",
+                ) %>%
+  ungroup() %>%
+  select(-Target)
+
+MHV_efficiency <- sample_stock %>%
+         arrange(Type, Process, Target) %>%
+         filter(Target == "MHV",
+                ) %>%
+  ungroup() %>%
+  select(-Target)
 
 SC2_efficiency <- control_stock %>%
          arrange(Type, Process, Target) %>%
          filter(Type == "ZeptoSC2")
 
 
-calc_efficiency <- MHV_efficiency %>%
-  filter(Process == "Concentrated",
-         Target ==  "MHV") %>%
-  pull(efficiency) %>%
-  mean()
-
 ww_SC2_conc_result <- dSamples %>%
   filter(Process == "Concentrated",
          Spiked == "Spiked",
          Target != "MHV") %>%
+  left_join(MHV_efficiency, by = c("Type", "Process", "Spiked", "Sample_date")) %>%
   mutate(stock_conc_GCuL = stock_concentration_calc(concentration = avg_conc, 
                                                rxn_vol = rxn_vol_uL, 
                                                input_vol = input_vol_uL, 
                                                extraction_vol = extraction_vol_uL,
                                                elution_vol = elution_vol_uL, 
-                                               efficiency = calc_efficiency, 
+                                               efficiency = efficiency, 
                                                end_concentration_vol = end_concentration_vol_uL,
                                                initial_concentration_vol = (init_concentration_vol_uL)),
          stock_conc_GC_100eff = stock_concentration_calc(concentration = avg_conc, 
@@ -210,6 +225,7 @@ ww_SC2_conc_result <- dSamples %>%
          stock_conc_GC100mL = stock_conc_GCuL*100*1000
     ) %>%
   ungroup() %>%
-  select(Type, Target, stock_conc_GC_100eff, stock_conc_GCuL, stock_conc_GC100mL)
+  select(Type, Target, Sample_date, stock_conc_GCuL, stock_conc_GC100mL) %>%
+  arrange(Sample_date, Type, Target)
 
 ```
