@@ -840,7 +840,7 @@ for(col_num in col2show) {
       scale_linetype_manual(values = ann_geom_values$linetype[match(levels(.$nc_qc_status), names(ann_geom_values$linetype))]) +
       scale_color_manual(values = c(ann_geom_values$who_label, setNames("#000000", "control"))[match(levels(.$who_label),
                                                                                                   c(names(ann_geom_values$who_label), "control"))]) +
-      scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
+      scale_x_continuous(expand = c(0,0), limits = c(0, 30000), position = "top") + 
       theme_bw() +
       theme(
         strip.background = element_blank(),
