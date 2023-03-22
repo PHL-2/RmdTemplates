@@ -70,7 +70,7 @@ d_pre <- read_csv(file = run_dat_fp) %>%
 
 ```{r saving data to rstudio metadata folder (for github upload)}
 
-file.copy(run_dat_fp, "ddPCR_data_csv")
+file.copy(run_dat_fp, "ddPCR_data.csv")
 
 ```
 
