@@ -1,12 +1,9 @@
+########### Config file for wastewater testing using the ddPCR ###########
 
-
-########### Config file for wastewater testing using the ddPCR ########### 
-
-##### File paths ##### 
+##### File paths #####
 
 ## Filepath of exported ddPCR analysis file (Please add quotation marks)
-dat_fp = "C:/Users/christopher.gu/OneDrive - City of Philadelphia/Wastewater/build/data_csv"
-
+dat_fp = file.path(dirname(here()), "build", "data_csv")
 
 ###### Volumes used in experiment ######
 
@@ -57,7 +54,7 @@ rxn_vol_uL = 20
 input_vol_uL = 9
 
 
-##### Stock information ##### 
+##### Stock information #####
 
 ####MHV stock information
 MHV_stock_name = "UPennMHV"
