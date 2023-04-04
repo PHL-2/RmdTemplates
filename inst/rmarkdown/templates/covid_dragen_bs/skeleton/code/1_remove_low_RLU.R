@@ -31,7 +31,7 @@ tryCatch(
 RLU_file_name <- "COVID_harvest_report.csv"
 date_RLU_file_name <- paste0(format(Sys.time(), "%Y%m%d"), "_", RLU_file_name)
 
-shared_RLU_fp <- list.files("//city.phila.local/shares/Health/PHL/Admin/Sequencing_harvest_reports", pattern = paste0("^", RLU_file_name, "$"), full.names = TRUE)
+shared_RLU_fp <- list.files("//city.phila.local/shares/Health/PHL/Admin/Sequencing_harvest_reports", pattern = paste0("^", date_RLU_file_name, "$"), full.names = TRUE)
 
 file.copy(shared_RLU_fp, file.path(dirname(shared_RLU_fp), date_RLU_file_name))
 file.copy(shared_RLU_fp, file.path(here("metadata", "extra_metadata"), date_RLU_file_name))
