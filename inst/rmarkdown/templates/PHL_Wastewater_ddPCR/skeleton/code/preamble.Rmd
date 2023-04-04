@@ -62,8 +62,7 @@ d_pre <- read_csv(file = run_dat_fp) %>%
          `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
          Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
          Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d"))
-         ) %>%
-  filter(!is.na(`Conc(copies/uL)`))
+         )
 
 ```
 
