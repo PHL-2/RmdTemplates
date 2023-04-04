@@ -61,11 +61,11 @@ input_vol_uL = 9
 
 ####MHV stock information
 MHV_stock_name = "UPennMHV"
-MHV_concentration_copiesuL = 69620.3
+MHV_concentration_copiesuL = 32234
 
 #SC2 stock information
 SC2_stock_name = "ZeptoSC2"
-SC2_concentration_copiesuL = 200
+SC2_concentration_copiesuL = 739.3
 
 
 

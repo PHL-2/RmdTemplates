@@ -19,12 +19,24 @@ project_name <- basename(here())
 ww_report_fp <- "code/ddPCR_analysis.Rmd"
 ww_output_fp <- here("output", paste0(project_name, '.report_gen.on.', Sys.Date(), '.pdf'))
 
+#Indicators for specific analysis
+has_oldWW <- TRUE
 has_dilutions <- FALSE
+has_QE <- FALSE
 
 rmarkdown::render(ww_report_fp, output_file = ww_output_fp, knit_root_dir = here())
 
-rmarkdown::render(input = ww_report_fp, output_file = "../README.md",
+```
+
+```{r github document}
+rmarkdown::render(input = ww_report_fp, output_file = "README.md",
                   knit_root_dir = here(),
                   output_format = rmarkdown::md_document(variant = "gfm", toc = TRUE))
+
+
+file.copy("code/README.md", "README.md")
+file.copy("code/README_files", here(), recursive = TRUE)
+
+unlink(c("code/README.md", "code/README_files"), recursive = TRUE)
 
 ```

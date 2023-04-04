@@ -44,36 +44,20 @@ library(pander)
 ```
 
 
-# Summary results
+# Summary results and important flags
 
 ```{r summary results}
 
-pander(ww_SC2_conc_result,
+if (sum(d_pre$Droplet_count<10000) > 0) {
+  print("Detected wells with <10000 droplets; wells will be excluded from analysis")
+  pander(
+    d_pre %>%
+      filter(Droplet_count< 10000)
+    ) 
+  }
+
+pander(ww_SC2_conc_result_summarised,
        digits = 10, round = 2)
-
-d %>% 
-  filter(Sample_date == as.Date("2/21/2023", format = "%m/%d/%Y") | Sample_date == as.Date("2/20/2023", format = "%m/%d/%Y"),
-         grepl("South", Sample),
-         Process == "Concentrated",
-         Spiked == "Spiked"
-         ) %>%
-  select(Well, Type, Process, Target, Positives, Droplet_count) %>%
-  mutate(pct_pos = Positives / Droplet_count * 100) %>%
-  pander()
-
-
-d %>% 
-  filter(Sample_date == as.Date("2/21/2023", format = "%m/%d/%Y") | Sample_date == as.Date("2/20/2023", format = "%m/%d/%Y"),
-         grepl("South", Sample),
-         Process == "Concentrated",
-         Spiked == "Spiked"
-         ) %>%
-  select(Well, Type, Process, Target, Positives, Droplet_count) %>%
-  mutate(pct_pos = Positives / Droplet_count * 100) %>%
-  group_by(Type, Target) %>%
-  summarise(avg_pos_drop = mean(Positives),
-            avg_pct_pos = mean(pct_pos)) %>%
-  pander()
 
 ```
 
@@ -473,8 +457,9 @@ Efficiency equation:
 
 pander(MHV_efficiency_controls)
 
-
 pander(SC2_efficiency)
+
+pander(sc2_n2)
 
 ```
 
@@ -495,55 +480,9 @@ Take average efficiency of N and E genes from control, concentrated ZeptoSC2, fo
 
 ```{r wastewater stock concentration calculations}
 
-pander(MHV_efficiency)
-
+print("Sample stock concentrations using N2 efficiency")
 pander(ww_SC2_conc_result,
        digits = 10, round = 2)
-
-```
-
-
-## QuickExtract
-```{r calc quickextract MHV}
-
-#MHV quick extract
-d %>%
-  filter(Process == "QuickExtract",
-         Target == "MHV") %>%
-  select(Sample, `Conc(copies/uL)`) %>%
-  mutate(input = as.numeric(str_extract(Sample, pattern = "[\\d]?[\\d]$")),
-    stock_conc_GC = stock_concentration_calc(concentration = `Conc(copies/uL)`, 
-                                               rxn_vol = rxn_vol_uL, 
-                                               input_vol = input_vol_uL, 
-                                               extraction_vol = 1,
-                                               elution_vol = 1, 
-                                               efficiency = 1, 
-                                               end_concentration_vol = 1,
-                                               initial_concentration_vol = 1)
-  ) %>%
-  mutate(fin_conc = ifelse(Sample == "MHV_QuickExtract_2", stock_conc_GC*(50/2), 
-                           ifelse(grepl(x=Sample, pattern = "oldWW-MHV"),stock_conc_GC * (10^input) * 25 / 2, stock_conc_GC))) %>%
-  pander()
-  
-
-#SC2 quick extract
-d %>%
-  filter(Process == "QuickExtract",
-         Target != "MHV",
-         grepl(x = Sample, pattern = "SC2")) %>%
-  select(Sample, `Conc(copies/uL)`) %>%
-  mutate(input = as.numeric(str_extract(Sample, pattern = "[\\d]?[\\d]$")),
-    stock_conc_GC = stock_concentration_calc(concentration = `Conc(copies/uL)`, 
-                                               rxn_vol = rxn_vol_uL, 
-                                               input_vol = input_vol_uL, 
-                                               extraction_vol = 1,
-                                               elution_vol = 1, 
-                                               efficiency = 1, 
-                                               end_concentration_vol = 1,
-                                               initial_concentration_vol = 1)
-  ) %>%
-  mutate(fin_conc = stock_conc_GC * 2 * 25) %>%
-  pander()
 
 ```
 
@@ -551,4 +490,6 @@ d %>%
 ```{r child = "code/dilutions.Rmd", eval = has_dilutions}
 ```
 
+
+```{r child = "code/quickextract.Rmd", eval = has_QE}
 
