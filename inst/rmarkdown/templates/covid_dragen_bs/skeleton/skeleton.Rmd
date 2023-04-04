@@ -22,7 +22,7 @@ output:
 ### ================
 ### packages install
 ### ================
-install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx"))
+install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx", "ggsci", "reticulate"))
 
 ```
 
@@ -41,7 +41,7 @@ opts_chunk$set(
   cache.lazy = FALSE,
   echo=FALSE,
   warning=FALSE,
-  message=FALSE,
+  message=FALSE, #Set message to NA in chunks where message should be sent to stderr
   dpi=100,
   fig.width=6,
   fig.height=6,
@@ -55,13 +55,13 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 
 ```
 
-```{r filter out samples, eval = FALSE, message = TRUE}
+```{r filter out samples, message = TRUE, eval = FALSE}
 
 source("code/1_remove_low_RLU.R")
 
 ```
 
-```{r generate SampleSheet and metadata, eval = FALSE, message = TRUE}
+```{r generate SampleSheet and metadata, message = TRUE, eval = FALSE}
 
 source("code/2_generate_barcodes_IDT.R")
 
@@ -69,7 +69,6 @@ source("code/2_generate_barcodes_IDT.R")
 
 ```{r child = 'code/preamble.Rmd', eval = load_preamble}
 ```
-
 
 ```{r check if primer selected}
 ### ===========================
@@ -136,7 +135,7 @@ The MiSeq machine uses the GenerateFASTQ workflow to demultiplex the samples and
 
 ## Number of read pairs per sample after demultiplexing
 
-Samples were sequenced on the `r samp_sh_header$instrument_type` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` length run and demultiplexed on BaseSpace by the GenerateFASTQ module. The demultiplexing step involves matching the IDT barcode sequence associated with each sample to the index sequence of each read
+Samples were sequenced on the `r unique(s_toPlot$instrument_type)` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` length run and demultiplexed on BaseSpace by the GenerateFASTQ module. The demultiplexing step involves matching the IDT barcode sequence associated with each sample to the index sequence of each read
 
 ### Number of samples and their pass filter percentages
 
@@ -203,13 +202,11 @@ s %>%
 
 s %>%
   filter(isControl) %>%
-  mutate(sample_type_name = ifelse(grepl("Environmental control", sample_type), paste0(sample_type, ":\n", environmental_site),
-                                   paste0(sample_type, ": ", environmental_site))) %>%
-  mutate(sample_type_name = ifelse(is.na(environmental_site), gsub(": NA$", "", sample_type_name), sample_type_name)) %>%
-  order_on_other_col(sample_type_name, read_counts) %>%
+  mutate(environmental_site = ifelse(is.na(environmental_site), "", environmental_site)) %>%
+  order_on_other_col(environmental_site, read_counts) %>%
   droplevels() %>%
   {
-  ggplot(., aes(x=read_counts, y=sample_type_name, fill = sample_type)) +
+  ggplot(., aes(x=read_counts, y=environmental_site, fill = sample_type)) +
     geom_col() +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     facet_grid(sample_type~., scales = "free", space = "free") +
@@ -1118,7 +1115,7 @@ data.frame(`Role and Name` = linebreak(c("Bioinformatician:\nVincent Tu, PhD",
 
 \elandscape
 
-```{r Generate time stamped report, eval=FALSE, include=FALSE, message=TRUE}
+```{r Generate time stamped report, message=TRUE, include=FALSE, eval=FALSE}
 
 library(here)
 rstudioapi::documentSaveAll()
@@ -1146,7 +1143,7 @@ rmarkdown::render(qc_report_fp, output_file = "README.md",
 
 ```
 
-```{r run R script, eval=FALSE, include=FALSE}
+```{r run R script, include=FALSE, eval=FALSE}
 
 #copy files if this script exists
 tryCatch(
@@ -1160,9 +1157,10 @@ tryCatch(
 
 ```
 
-```{r upload data if results look good, eval=FALSE, include=FALSE, message=TRUE}
+```{r upload data if results look good, message=TRUE, include=FALSE, eval=FALSE}
 
 #intialize data_upload conda env
+library(reticulate)
 use_condaenv("seqsender", required = TRUE)
 import("os")
 

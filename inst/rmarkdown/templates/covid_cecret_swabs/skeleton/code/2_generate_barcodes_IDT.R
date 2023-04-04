@@ -392,13 +392,14 @@ samp_sheet_2_write <- metadata_sheet %>%
   select(sample_id, index, index2) %>%
   rename(Sample_ID = "sample_id")
 
-sample_sheet_fp <- here("metadata", "munge", "SampleSheet_v2.csv")
+sample_sheet_fn <- paste0(sequencing_date, "_SampleSheet_v2.csv")
+
+sample_sheet_fp <- here("metadata", "munge", sample_sheet_fn)
 
 write_samp <- function(line2write) {
   write(paste0(line2write, collapse = ","), file = sample_sheet_fp, append = TRUE)
 }
 
-#SampleSheet v2 seems to have multiple commas at the end
 write("[Header]", file = sample_sheet_fp)
 write_samp(c("FileFormatVersion", "2"))
 write_samp(c("RunName", paste0(prj_description, "_", sequencing_date)))
@@ -461,13 +462,32 @@ if(folder_date != gsub("_.*", "", basename(here()))) {
 
 sequencing_run <- gsub(".*/", "", run_folder)
 
+s3_samplesheet_fp <- file.path(s3_bucket_incoming_fp, sequencing_date, sample_sheet_fn)
+
 nf_demux_samplesheet <- data.frame(
   id = sequencing_run,
-  samplesheet = file.path(s3_bucket_incoming_fp, sequencing_date, sample_sheet_fn),
+  samplesheet = s3_samplesheet_fp,
   lane = "",
   flowcell = file.path(s3_bucket_incoming_fp, sequencing_date, paste0(sequencing_run, ".tar.gz"))
 )
 
+nf_demux_samplesheet_fp <- here("metadata", "munge", paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
+s3_nf_demux_samplesheet_fp <- file.path(s3_bucket_incoming_fp, sequencing_date, paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
+
 nf_demux_samplesheet %>%
-  write.csv(file = here("metadata", "munge", paste0(sequencing_date, "_nf_demux_samplesheet.csv")),
+  write.csv(file = nf_demux_samplesheet_fp,
             row.names = FALSE, quote = FALSE)
+
+aws_cli_cp_fp <- file.path(dirname(here()), "aux_files", "aws_cli_commands", "aws_cli_1_cp.sh")
+
+aws_cp_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
+                                 c(shQuote(sample_sheet_fp, type = "sh"),
+                                   shQuote(s3_samplesheet_fp, type = "sh")))
+
+aws_cp_nf_demux_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
+                                          c(shQuote(nf_demux_samplesheet_fp, type = "sh"),
+                                            shQuote(s3_nf_demux_samplesheet_fp, type = "sh")))
+
+if(!all(grepl("Completed", c(aws_cp_samplesheet, aws_cp_nf_demux_samplesheet), ignore.case = TRUE))) {
+  stop(simpleError("Samplesheet upload to s3 bucket failed"))
+}
