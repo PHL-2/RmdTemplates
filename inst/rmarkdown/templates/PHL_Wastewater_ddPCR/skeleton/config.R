@@ -5,7 +5,7 @@
 ##### File paths ##### 
 
 ## Filepath of exported ddPCR analysis file (Please add quotation marks)
-dat_fp = "C:/Users/christopher.gu/OneDrive - City of Philadelphia/Wastewater/build/data_csv"
+dat_fp = "//city.phila.local/shares/Health/PHL/Admin/Wastewater_testing/results/csv"
 
 
 ###### Volumes used in experiment ######

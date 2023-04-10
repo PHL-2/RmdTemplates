@@ -43,18 +43,28 @@ library(pander)
 ```{r child = 'code/preamble.Rmd', include = FALSE}
 ```
 
+\newpage
 
-# Summary results and important flags
+# Summary checks and results
 
-```{r summary results}
+## Flags
+
+```{r summary droplet counts check}
 
 if (sum(d_pre$Droplet_count<10000) > 0) {
   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
-  pander(
-    d_pre %>%
-      filter(Droplet_count< 10000)
-    ) 
+  } else if (sum(d_var$cv_conc > 30, na.rm = T) > 0 | sum(d_sd$sd_from_mean > 1.96, na.rm = T) > 0) {
+  print("Detected high variation; please check samples")
+
+  } else {
+  print("No flags")
   }
+
+```
+
+## Results
+
+```{r summary results}
 
 pander(ww_SC2_conc_result_summarised,
        digits = 10, round = 2)
@@ -81,7 +91,7 @@ d_pre %>%
 
 
 \newpage
-
+\blandscape
 
 # Quality control
 
@@ -93,13 +103,35 @@ if (sum(d_pre$Droplet_count<10000) > 0) {
   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
   pander(
     d_pre %>%
-      filter(Droplet_count< 10000)
+      filter(Droplet_count< 10000),
+      split.table = 500
     ) 
   } else {
     print("No detected wells with <10000 droplets")
   }
 
 ```
+
+## Variance check
+
+```{r variance check}
+
+if (sum(d_sd$cv_conc>30, na.rm = T) > 0 | sum(d_sd$sd_from_mean > 1.96, na.rm = T) > 0) {
+  print("Detected high variation; please check samples")
+  pander (
+    d_sd %>%
+      filter(cv_conc>30 | sd_from_mean > 1.96) %>%
+      select(Well, Sample, Sample_date, Spiked, Target, `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean) %>%
+      arrange(Sample),
+      split.table = 500
+  )
+}
+
+
+```
+
+
+\elandscape
 
 ## Number of overall positive droplets per sample
 
@@ -184,6 +216,8 @@ d %>%
 
 ## Positive and negative controls
 
+###
+
 ```{r Positive and negative control figures}
 
 #Negative controls
@@ -204,6 +238,10 @@ dControls %>%
     y = "Number of Positive droplets",
     x = "Samples"
   )
+```
+
+
+```{r}
 
 dControls %>%
   filter(exp_con == "Extraction control") %>%
@@ -260,15 +298,22 @@ dControls %>%
 
 ```
 
+
+\newpage
+\blandscape
+
 ## Limit of detection based on negative controls
 
 ```{r Detection threshold based on negative controls}
 
 threshold %>%
-  pander(digits = 10, round = 2)
+  ungroup() %>%
+  select(-Process) %>%
+  pander(digits = 10, round = 2, split.table = 500)
 
 ```
 
+\elandscape
 
 # Results
 
@@ -420,6 +465,7 @@ dSamples %>%
 ```
 
 \newpage
+\blandscape
 
 ## Efficiency
 
@@ -455,11 +501,11 @@ Efficiency equation:
 ```{r calculating efficiency from MHV}
 
 
-pander(MHV_efficiency_controls)
+pander(MHV_efficiency_controls, split.table = 500)
 
-pander(SC2_efficiency)
+pander(SC2_efficiency, split.table = 500)
 
-pander(sc2_n2)
+pander(sc2_n2, split.table = 500)
 
 ```
 
@@ -469,7 +515,7 @@ pander(sc2_n2)
 ```{r}
 
 pander(sample_stock %>% ungroup() %>% arrange() %>%
-         select(-Spiked), digits = 10, round = 2)
+         select(-Spiked), digits = 10, round = 2, split.table = 500)
 
 ```
 
@@ -482,9 +528,11 @@ Take average efficiency of N and E genes from control, concentrated ZeptoSC2, fo
 
 print("Sample stock concentrations using N2 efficiency")
 pander(ww_SC2_conc_result,
-       digits = 10, round = 2)
+       digits = 10, round = 2, split.table = 500)
 
 ```
+
+\elandscape
 
 
 ```{r child = "code/dilutions.Rmd", eval = has_dilutions}
@@ -492,4 +540,5 @@ pander(ww_SC2_conc_result,
 
 
 ```{r child = "code/quickextract.Rmd", eval = has_QE}
+```
 

@@ -53,7 +53,8 @@ d_pre <- read_csv(file = run_dat_fp) %>%
     Well, Sample = `Sample description 1`, Spiked = `Sample description 2`, Sample_date = `Sample description 3`, Extra = `Sample description 4`, SampleType, Target, `Conc(copies/uL)` = 7, Droplet_count = `Accepted Droplets`, Positives, Negatives) %>%
   #mutate(Sample = gsub(pattern = "dd_", replacement = "dd", x = Sample)) %>%
   separate(Sample, into = c("Type", "Process"), sep = "_", remove = FALSE) %>%
-  filter(!is.na(Sample)) %>%
+  filter(!is.na(Sample),
+         Sample != "Buffer") %>%
   mutate(percentage_positive = Positives/Droplet_count * 100,
          Process = ifelse(is.na(Process), "Non-processed", Process),
          Process = ifelse(grepl(pattern = "dil", x = Extra, ignore.case = T), "Dilution", Process),
@@ -62,14 +63,14 @@ d_pre <- read_csv(file = run_dat_fp) %>%
          `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
          Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
          Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d"))
-         )
+  )
 
 ```
 
 
 ```{r saving data to rstudio metadata folder (for github upload)}
 
-file.copy(run_dat_fp, "ddPCR_data.csv")
+file.copy(run_dat_fp, to = here())
 
 ```
 
@@ -80,6 +81,25 @@ d <- d_pre %>%
   filter(Droplet_count >= 10000)
 
 ```
+
+```{r check variance}
+
+d_var <- d %>%
+  group_by(Type, Process, Spiked, Target, Sample_date) %>%
+  summarise(avg_pos_droplets = mean(Positives),
+            avg_conc = mean(`Conc(copies/uL)`),
+            sd_pos_droplets = sd(Positives),
+            sd_conc = sd(`Conc(copies/uL)`),
+            num_points = n()) %>%
+  mutate(cv_conc = sd_conc/avg_conc * 100,
+         cv_pos_droplets = sd_pos_droplets/avg_pos_droplets * 100)
+
+d_sd <- d %>%
+  left_join(d_var, by = c("Type", "Process", "Spiked", "Target", "Sample_date")) %>%
+  mutate(sd_from_mean = abs(`Conc(copies/uL)` - avg_conc)/(sd_conc))
+  
+```
+
 
 ```{r data manip}
 
