@@ -361,17 +361,23 @@ cov_files_fps <- list.files(here("data", "processed_bs", "consensus"), pattern =
 
 coverage <- cov_files_fps %>%
   data_frame(FileName = .) %>%
+  #if there are control samples that also have an unfiltered fastq file, just get use the filtered fastq
+  mutate(sample_id = gsub(".*/", "", FileName)) %>%
+  mutate(sample_id = gsub("\\.consensus.*", "", sample_id)) %>%
+  group_by(sample_id) %>%
+  mutate(num_samples = n()) %>%
+  ungroup() %>%
+  filter(num_samples < 2 | grepl("_filtered_bam", FileName)) %>%
   group_by(FileName) %>%
   do(read_delim(.$FileName, col_names = FALSE)) %>%
   ungroup() %>%
   filter(X1 == "NC_045512.2") %>%
+  mutate(sample_id = gsub(".*/", "", FileName)) %>%
+  mutate(sample_id = gsub("\\.consensus.*", "", sample_id)) %>%
   #get column 3 if its a tsv, otherwise get column 4
   mutate(map_per_position = ifelse(grepl("tsv$", FileName), X3, X4)) %>%
   rename(position = "X2") %>%
-  select(FileName, map_per_position, position) %>%
-  mutate(sample_id = gsub(".*/", "", FileName)) %>%
-  mutate(sample_id = gsub("\\.consensus.*", "", sample_id)) %>%
-  select(-c(FileName))
+  select(sample_id, map_per_position, position)
 
 slide_window_coverage <- coverage %>%
   group_by(sample_id) %>%
