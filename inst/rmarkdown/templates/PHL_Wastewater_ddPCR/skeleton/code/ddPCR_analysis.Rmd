@@ -53,7 +53,7 @@ library(pander)
 
 if (sum(d_pre$Droplet_count<10000) > 0) {
   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
-  } else if if (sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1.00, na.rm = T) > 0 $|$ sum(d_sd$outlier_median > 5)) {
+  } else if if (sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1.00, na.rm = T) > 0 & sum(d_sd$outlier_median > 5)) {
   print("Detected high variation; please check samples")
 
   } else {
