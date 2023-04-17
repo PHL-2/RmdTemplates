@@ -5,7 +5,7 @@
 ##### File paths ##### 
 
 ## Filepath of exported ddPCR analysis file (Please add quotation marks)
-dat_fp = "//city.phila.local/shares/Health/PHL/Admin/Wastewater_testing/results/csv"
+dat_fp = "//city.phila.local/shares/Health/PHL/Admin/Wastewater_testing/results"
 
 
 ###### Volumes used in experiment ######
