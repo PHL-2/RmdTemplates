@@ -1,6 +1,6 @@
 #file path of the directory holding the sequencing run folders
 #currently, the sequencing folders are held in //dph-500-fs2/Users/vincent.tu/MiSeq_runs/COVIDSeq
-sequencing_folder_fp <- "path/to/sequencing/folder"
+sequencing_folder_fp <- "//dph-500-fs2/Users/vincent.tu/MiSeq_runs/COVIDSeq"
 
 #full file path of the git shell executable, dependent on where git was installed
 #on a Windows OS, it may be installed at C:/Users/user.name/AppData/Local/Programs/Git/bin/sh.exe

@@ -78,12 +78,12 @@ barcodes <- tryCatch(
 )
 
 if(sequencing_date == "2022-08-01") {
-  barcodes <- data.frame(idt_plate_coord = paste0("Z_", LETTERS[1:6], "01"),
+  barcodes <- data.frame(idt_plate_coord = paste0("Z_", LETTERS[1:8], "01"),
                          I7_Index_ID = "UDP9999", I5_Index_ID = "UDP9999", UDI_Index_ID = "UDP9999",
-                         index = c("CTTCCTAGGA", "GAGGCCTATT", "GTGACACGCA",
-                                   "GTGGACAAGT", "ATTATCCACT", "AGTGTTGCAC"),
-                         index2 = c("CCTAGAGTAT", "CTAGTCCGGA", "GCTTACGGAC",
-                                    "CCGTGGCCTT", "TACGCACGTA", "CTGGTACACG"))
+                         index = c("CTTCCTAGGA", "GAGGCCTATT", "GTGACACGCA", "CTGACTCTAC",
+                                   "AGATCCATTA", "GTGGACAAGT", "ATTATCCACT", "AGTGTTGCAC"),
+                         index2 = c("CCTAGAGTAT", "CTAGTCCGGA", "GCTTACGGAC", "ACGGCCGTCA",
+                                    "ATCTCTACCA", "CCGTGGCCTT", "TACGCACGTA", "CTGGTACACG"))
 }
 
 #####################
@@ -93,14 +93,23 @@ if(sequencing_date == "2022-08-01") {
 metadata_input_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
 
 read_sheet <- function(fp, sheet_name) {
-  read_excel(fp, sheet = sheet_name) %>%
-    #filter rows where sample_id is NA
-    filter(!is.na(sample_name)) %>%
-    #filter empty columns
-    select(where(function(x) any(!is.na(x)))) %>%
-    select(!matches("^\\.\\.\\.")) %>%
-    mutate(across(matches("_col$|coord$"), ~ str_replace_all(., "\\d+", function(m) sprintf("%02d", as.numeric(m))))) %>%
-    mutate(plate_coord = gsub("^0", "", plate_coord))
+
+  tryCatch(
+    {
+      read_excel(fp, sheet = sheet_name) %>%
+        #filter rows where sample_id is NA
+        filter(!is.na(sample_name)) %>%
+        #filter empty columns
+        select(where(function(x) any(!is.na(x)))) %>%
+        select(!matches("^\\.\\.\\.")) %>%
+        mutate(across(matches("_col$|coord$"), ~ str_replace_all(., "\\d+", function(m) sprintf("%02d", as.numeric(m))))) %>%
+        mutate(plate_coord = gsub("^0", "", plate_coord))
+    },
+    error = function(e) {
+      stop (simpleError("The sample metadata file from the wet lab scientists may be missing or mis-formatted"))
+    }
+  )
+
 }
 
 index_sheet <- read_sheet(metadata_input_fp, "Index")
