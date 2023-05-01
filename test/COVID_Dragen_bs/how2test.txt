@@ -4,25 +4,20 @@ To test the COVIDSeq template in this package:
 
 2. Copy the aux_files folder under RmdTemplates into the parent folder
 
-3. Edit the config_variables.R file in 'parent folder'/aux_files/config by replacing the sequencing_folder_fp variable with the path of the test fastq files
-  3.1. The path should be same file location as this text file such as: /full/path/to/RmdTemplates/test/COVID_Dragen_bs
-  3.2. The path name should be the full path relevant to your system
-  3.3. Once testing with this dataset is done, sequencing_folder_fp can be changed to where the fastq files are normally held for the sequencing runs
+3. Edit the config_variables.R file in 'parent folder'/aux_files/config by replacing the sh_exe_fp variable to the full path of where the shell executable is located on your system
 
-4. Change the sh_exe_fp variable to the full path of where the shell executable is located on your system
+4. Create an RStudio project (with a new project folder) with the name 2022-08-01_COVIDSeq_test in the parent folder
 
-5. Create an RStudio project (with a new project folder) with the name 2022-08-01_COVIDSeq_test in the parent folder
+5. Initialize a COVIDSeq template in the R console
+  5.1 rmarkdown::draft(file = "2022-08-01_COVIDSeq_test_QC_Report.Rmd", template = "covid_dragen_bs", package = "RmdTemplates", create_dir = FALSE)
 
-6. Initialize a COVIDSeq template in the R console
-  6.1 rmarkdown::draft(file = "2022-08-01_COVIDSeq_test_QC_Report.Rmd", template = "covid_dragen_bs", package = "RmdTemplates", create_dir = FALSE)
+6. Copy the metadata folder under RmdTemplates/test/COVID_Dragen_bs and replace the metadata folder in the initialized project
 
-7. Copy the metadata folder under RmdTemplates/test/COVID_Dragen_bs and replace the metadata folder in the initialized project
+7. In the '2022-08-01_COVIDSeq_test_QC_Report.Rmd', run the 2nd chunk called 'generate SampleSheet and metadata' to get the metadata sheet for analysis
 
-8. In the '2022-08-01_COVIDSeq_test_QC_Report.Rmd', run the 2nd chunk called 'generate SampleSheet and metadata' to get the metadata sheet for analysis
-
-9. In the '2022-08-01_COVIDSeq_test_QC_Report.Rmd', run the chunk called 'generate time stamped report' to generate the pdf file
+8. In the '2022-08-01_COVIDSeq_test_QC_Report.Rmd', run the chunk called 'generate time stamped report' to generate the pdf file
   9.1. Running this chunk may take >40 minutes. This chunk uploads the fastq files to BaseSpace, runs the DRAGEN Lineage App, downloads the processed data files, and creates figures
   9.2. If there are any errors, following the warning prompts from the console
 
-10. Once the lineage results have been generated in the upload/epi/...results.csv file, compared the results with the test_EpiSheet_filtered.csv file in metadata/extra_metadata
-  10.1. The Test-Positive sample should be the B lineage
+9. Once the lineage results have been generated in the upload/epi/...results.csv file, compared the results with the test_EpiSheet_filtered.csv file in metadata/extra_metadata
+  9.1. The Test-Positive sample should be the B lineage
