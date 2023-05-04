@@ -1,82 +1,12 @@
----
-title: |
-  ![](../aux_files/forKnitting/logo_blk.png){width=5in}  
-  `r paste0('QC report for sequencing run ', basename(here()))`
-author: "Philadelphia Public Health Labs"
-date: \today
-geometry: margin=3cm
-output:
-    pdf_document:
-        template: ../aux_files/forKnitting/toc_after.tex
-        keep_tex: false
-        toc: true
-        toc_depth: 3
-        includes:
-            in_header: ../aux_files/forKnitting/TeX_packages_commands.sty
 
----
+<!-- QC section -->
 
-\tableofcontents
+```{r primer check}
 
-```{r only run this chunk once to install, eval=FALSE}
-### ================
-### packages install
-### ================
-install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx", "ggsci", "reticulate"))
+#check primer input
 
-```
-
-<!-- ========================================================== -->
-<!--   Beginning of Preamble : Preamble seldom requires change  -->
-<!-- ========================================================== -->
-
-```{r setup, echo=FALSE}
-### ================
-###   knitr setup
-### ================
-library(knitr)
-opts_chunk$set(
-  tidy=FALSE,
-  cache=FALSE,
-  cache.lazy = FALSE,
-  echo=FALSE,
-  warning=FALSE,
-  message=FALSE,
-  dpi=100,
-  fig.width=6,
-  fig.height=6,
-  dev.args = list(pdf = list(useDingbats = FALSE))
-)
-
-pander::panderOptions("knitr.auto.asis", FALSE)
-#this also means that you have to put results='asis' in any block that has pander output
-#this lets you loop through variables and produce multiple pander tables and ggplots in a
-#single code block!
-
-```
-
-```{r filter out samples, message = TRUE, eval = FALSE}
-
-source("code/1_remove_low_RLU.R")
-
-```
-
-```{r generate SampleSheet and metadata, message = TRUE, eval = FALSE}
-
-source("code/2_generate_barcodes_IDT.R")
-
-```
-
-```{r child = 'code/preamble.Rmd', eval = load_preamble}
-```
-
-```{r check if primer selected}
-### ===========================
-###   check version input
-### ===========================
-  
-if (is.na(primer_select) | is.na(artic_primer_scheme) | is.na(bs_bed_file_used)) {
-  stop (simpleError("Please set the [primer_select] variable in the preamble as an integer from 1 to 3 according to the ARTIC primer scheme used for the library generation\n1: V3\n2: V4\n3: V4.1 (Experimental)"))
+if (is.na(primer_select) | is.na(artic_primer_scheme)) {
+  stop (simpleError("Please set the [primer_select] variable in the preamble as an integer from 1 to 4 according to the ARTIC primer scheme used for the library generation\n1: V3\n2: V4\n3: V4.1\n4:V5.3.2 (Experimental)"))
 }
 
 ```
@@ -84,6 +14,7 @@ if (is.na(primer_select) | is.na(artic_primer_scheme) | is.na(bs_bed_file_used))
 ```{r samples check}
 
 ### possible issue 1: Samples found in the sample sheet but not in the results csv
+
 s_missing <- s %>%
   filter(!sample_id %in% unique(bs_results$sample_id)) %>%
   select(sample_id, sample_type, isControl) %>%
@@ -97,18 +28,18 @@ if (any(!s_missing$isControl)) {
 ```
 
 ```{r Samples error check 2}
+
 ### possible issue 2: Samples found in the results csv but not in the sample sheet. There must be an error!
+
 in_results_not_in_s <- setdiff(unique(bs_results$sample_id), s$sample_id)
 if (length(in_results_not_in_s) > 0) {
   stop (simpleError("These SampleID(s) are in the results csv, but not found in the sample sheet.", paste(in_results_not_in_s, collapse=" ")))
 }
 ```
 
-\newpage
-
 # Introduction
 
-This report summarizes the results of `r nrow(s)-1` COVID samples sequenced on `r samp_sh_header$Date` and analyzed with Cecret version `r dragen_covid_lineage_version` on `r date_pipeline_was_run`. The results section contains lineage information using the pangolin software version `r pangolin_software_version` (https://cov-lineages.org/resources/pangolin.html) and Nextclade version `r nextclade_version` (https://clades.nextstrain.org/). Samples were amplified with the `r artic_primer_scheme` primer scheme 
+This report summarizes the results of `r nrow(s)-1` COVID samples sequenced on `r samp_sh_header$Date` and analyzed with BaseSpace DRAGEN Lineage App version `r dragen_covid_lineage_version` on `r date_pipeline_was_run`. The results section contains lineage information using the pangolin software version `r pangolin_software_version` (https://cov-lineages.org/resources/pangolin.html) and Nextclade version `r nextclade_version` (https://clades.nextstrain.org/). Samples were amplified with the `r artic_primer_scheme` primer scheme 
 
 # Number of samples sequenced
 
@@ -202,13 +133,11 @@ s %>%
 
 s %>%
   filter(isControl) %>%
-  mutate(sample_type_name = ifelse(grepl("Environmental control", sample_type), paste0(sample_type, ":\n", environmental_site),
-                                   paste0(sample_type, ": ", environmental_site))) %>%
-  mutate(sample_type_name = ifelse(is.na(environmental_site), gsub(": NA$", "", sample_type_name), sample_type_name)) %>%
-  order_on_other_col(sample_type_name, read_counts) %>%
+  mutate(environmental_site = ifelse(is.na(environmental_site), "", environmental_site)) %>%
+  order_on_other_col(environmental_site, read_counts) %>%
   droplevels() %>%
   {
-  ggplot(., aes(x=read_counts, y=sample_type_name, fill = sample_type)) +
+  ggplot(., aes(x=read_counts, y=environmental_site, fill = sample_type)) +
     geom_col() +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     facet_grid(sample_type~., scales = "free", space = "free") +
@@ -573,6 +502,8 @@ knitr::include_graphics(here("data", paste0(sequencing_date, "_sliding_coverage_
 
 \elandscape
 
+<!-- Analysis section -->
+
 ### Kmer results (number of unique SARS-CoV-2 fragments detected)
 
 ```{r kmer numbers}
@@ -609,6 +540,7 @@ s %>%
     )
 
 ```
+
 
 ## Pangolin Lineage Results
 
@@ -784,13 +716,13 @@ empty_plate %>%
   mutate(plate = paste("Plate", plate)) %>%
   mutate(plate_col = as.numeric(plate_col)) %>%
   droplevels() %>%
-  mutate(nc_qc_status = factor(nc_qc_status, levels = c("bad", "mediocre", "good"))) %>%
+  mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
   {
   ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = nc_qc_status, label = sample_type)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 16) +
     geom_text(check_overlap = TRUE, size = 3, color = "black") +
-    scale_fill_manual(values = brewer.pal(6, "Set3")[c(4, 6, 1)]) +
+    scale_fill_manual(values = ann_geom_values$nc_qc) +
     #facet_wrap(~plate, ncol = 1) + names(ann_geom_values$sample_type_colors))]) +
     scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
     theme_bw() +
@@ -887,168 +819,6 @@ s_toPlot %>%
 
 ```
 
-
-```{r data export}
-
-dir.create(here("upload", "epi"), recursive = TRUE)
-dir.create(here("upload", "seqsender"), recursive = TRUE)
-
-if(length(PHI_file_fp) == 0) {
-  stop(simpleError("You are missing the PHI file. Check the Admin fileshare"))
-}
-
-s_phi <- read_delim(PHI_file_fp, delim = ",")
-
-# Export the data for EPI's
-epi_report <- s_toPlot %>%
-  merge(s_phi, by = "sample_id", all.x = TRUE) %>%
-  filter4report() %>%
-  select(sample_name, sample_collected_by, sequencing_date, lineage, clade_who) %>%
-  arrange(sample_collected_by, sample_name) %>%
-  rename(accession_number = "sample_name", who_label = "clade_who")
-
-epi_report %>%
-  write_csv(epi_report_fp)
-
-# Export the data for seqsender upload to sra, genbank, and gisaid
-seqsender <- s_toPlot %>%
-  filter4report() %>%
-  mutate(collection_date = case_when(!is.na(sample_collection_date) ~ sample_collection_date,
-                                     !is.na(PHL_sample_received_date) ~ PHL_sample_received_date,
-                                     TRUE ~ sequencing_date)) %>%
-  #the number at the end of the name for these samples must be the collection year, or the databases will complain
-  mutate(collection_year = format(collection_date, format = "%Y")) %>%
-  mutate(genbank_name = paste0("SARS-CoV-2/Human/USA/", sample_id, "/", collection_year)) %>%
-  mutate(sra_name = paste0("SARS-CoV-2/Human/USA/", sample_id)) %>%
-  #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/collection year. This name may conflict with samples collected/sequenced in different years
-  mutate(gisaid_name = paste0("hCoV-19/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sample_id), "/", collection_year)) %>%
-  mutate(gisaid_accession = "",
-         location = "USA: Pennsylvania",
-         gisaid_location = "North America/USA/Pennsylvania",
-         zip = "19146",
-         type = "betacoronavirus",
-         passage = "Original") %>%
-  #make gender and age for Temple samples as Unknown for now until they confirm its okay to submit these fields on their behalf
-  mutate(host_age_bin = ifelse(is.na(host_age_bin)|sample_collected_by == "Temple University", "Unknown", host_age_bin),
-         gender = ifelse(is.na(gender)|sample_collected_by == "Temple University", "Unknown", gender),
-         collected_by = sample_collected_by) %>%
-  select(-c(isolation_source)) %>%
-  rename(isolation_source = "sample_type",
-         host = "host_scientific_name",
-         sex = "gender",
-         orig_lab = "sample_collected_by") %>%
-  mutate(patient_status = "Unknown",
-         instrument = paste0("Illumina ", instrument_type),
-         library = "ARTIC Network Protocol V4",
-         assembly_method = paste0("DRAGEN COVID Lineage ", dragen_covid_lineage_version),
-         library_strategy = "AMPLICON",
-         library_source = "VIRAL RNA",
-         library_selection = "RT-PCR",
-         library_layout = "PAIRED",
-         structured_comment = "Assembly-Data",
-         genbank_note = "") %>%
-  mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "500 South Broad Street, Philadelphia, PA 19146 USA",
-                                      orig_lab == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122 USA",
-                                      TRUE ~ "Unknown")) %>%
-  mutate(sra_file_path_1 = here("upload", "fastq", paste0(sample_id, "_S", SampleNumber, "_L00", lane, "_R1_001.fastq.gz"))) %>%
-  mutate(sra_file_path_2 = here("upload", "fastq", paste0(sample_id, "_S", SampleNumber, "_L00", lane, "_R2_001.fastq.gz"))) %>%
-  mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC V4 primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
-  select(sample_id, genbank_name, sra_name, gisaid_name, gisaid_accession, collection_date, location, gisaid_location, zip, type, passage, organism,
-         isolation_source, host, host_disease, host_age_bin, sex, patient_status, 
-         instrument, library, assembly_method, library_strategy, library_source, library_selection, library_layout, structured_comment, median_coverage, genbank_note, design_description,
-         collected_by, orig_lab, orig_lab_address, sra_file_path_1, sra_file_path_2)
-
-seqsender %>%
-  write_tsv(seqsender_meta_fp)
-
-#double checking to see if number of samples match
-n_samples_report <- s %>%
-  filter(!grepl("None|Undetermined", sample_id)) %>%
-  filter(!grepl("control", sample_type, ignore.case = TRUE)) %>%
-  filter(!is.na(lineage)) %>%
-  filter(!is.na(nc_qc_status)) %>%
-  filter(nc_qc_status != "bad") %>%
-  filter(!(nc_qc_status == "mediocre" & pct_genome_coverage_over_30x < .8)) %>%
-  filter(pango_qc_status != "fail") %>%
-  nrow()
-
-```
-
-```{r final check}
-
-epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
-
-epi_report <- epi_2_upload_fp %>%
-  read_csv() %>%
-  select(accession_number) %>%
-  merge(select(s_phi, sample_id, sample_name), by.x = "accession_number", by.y = "sample_name", all.x = TRUE) %>%
-  mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
-  mutate(file = "epi") %>%
-  select(file, sample_id)
-
-seqsender_2_upload_fp <- list.files(here("upload", "seqsender"), pattern = ".tsv", recursive = TRUE, full.names = TRUE)
-
-
-all_sample_ids_from_seqsender <- seqsender_2_upload_fp %>%
-  read_tsv()%>%
-  select(sample_id, genbank_name, sra_name, gisaid_name) %>%
-  mutate(gisaid_name = gsub(".*PA-", "", gisaid_name)) %>%
-  #changing the year at the end of the gisaid name back to the sequencing year
-  mutate(gisaid_name = gsub("/.*$", paste0("/", str_sub(project_name, 1, 4)), gisaid_name)) %>%
-  mutate(gisaid_name = gsub(format(sequencing_date, "%m%d/%Y"), format(sequencing_date, "%Y%m%d"), gisaid_name)) %>%
-  pivot_longer(cols = c("genbank_name", "sra_name", "gisaid_name"), names_to = "file", values_to = "upload_id") %>%
-  mutate(upload_id = gsub(".*/USA/|/.*", "", upload_id)) %>%
-  mutate(all_sample_same = upload_id == sample_id)
-
-if (!all(all_sample_ids_from_seqsender$all_sample_same)) {
-  stop (simpleError("Some of the database names don't match the sample_id names!!"))
-}
-
-all_sample_ids_from_seqsender %<>% select(file, upload_id) %>%
-  rename(sample_id = "upload_id")
-
-#should be 1 set here
-fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
-  data.frame(FileName = .) %>%
-  mutate(sample_id = gsub(".*upload/fastq/|_S[0-9].*_L001_R[12]_001.fastq.gz$", "", FileName)) %>%
-  mutate(file = gsub(".*/", "", FileName)) %>%
-  select(-FileName)
-
-fastq2_compare <- fastq_2_upload %>%
-  filter(grepl("_L001_R1_001.fastq.gz", file))
-
-if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
-  stop (simpleError("Missing some fastq files!"))
-}
-
-#should be 1 set here
-fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
-  filter(grepl("^>", X1)) %>%
-  mutate(sample_id = gsub("^>", "", X1)) %>%
-  mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
-  select(-X1)
-
-check_all <- epi_report %>%
-  rbind(all_sample_ids_from_seqsender) %>%
-  rbind(fastq2_compare) %>%
-  rbind(fasta_samples) %>%
-  group_by(sample_id) %>%
-  mutate(count_all_samples = n()) %>%
-  ungroup()
-
-#can change this to 5 if you don't want to check the fastq files
-if (!all(check_all$count_all_samples == 6)) {
-  stop (simpleError("Some files are missing samples to upload!"))
-}
-
-#these are samples that failed in the pipeline for whatever reason. Can rerun pipeline to generate results for these samples
-rerun_samples <- s %>%
-  filter(is.na(`SARS-CoV-2 Fraction kmers detected`)) %>%
-  select(sample_id) %>%
-  pull()
-
-```
-
 \newpage
 
 # Appendix
@@ -1116,182 +886,3 @@ data.frame(`Role and Name` = linebreak(c("Bioinformatician:\nVincent Tu, PhD",
 ```
 
 \elandscape
-
-```{r Generate time stamped report, message=TRUE, include=FALSE, eval=FALSE}
-
-library(here)
-rstudioapi::documentSaveAll()
-dir.create(here("output"))
-project_name <- basename(here())
-
-qc_report_fp <- paste0(project_name, "_QC_Report.Rmd")
-qc_output_fp <- here("output", paste0(project_name, '.QC.report_gen.on.', Sys.Date(), '.pdf'))
-
-# load preamble the first time?
-load_preamble <- TRUE
-
-# need to import the data into a single tsv for the first time?
-import_data <- TRUE
-
-# print table as kable for pdf?
-use_kable <- TRUE
-
-rmarkdown::render(qc_report_fp, output_file = qc_output_fp)
-
-load_preamble <- FALSE
-use_kable <- FALSE
-rmarkdown::render(qc_report_fp, output_file = "README.md",
-                 output_format = rmarkdown::md_document(variant = "gfm", toc = TRUE))
-
-```
-
-```{r run R script, include=FALSE, eval=FALSE}
-
-#copy files if this script exists
-tryCatch(
-  {
-    source(file.path(dirname(here()), "cp2admin.R"))
-  }, error = function(e)
-  {
-
-  }
-)
-
-```
-
-```{r upload data if results look good, message=TRUE, include=FALSE, eval=FALSE}
-
-#intialize data_upload conda env
-library(reticulate)
-use_condaenv("seqsender", required = TRUE)
-import("os")
-
-#do a test upload first. change this to FALSE when SRA upload and gisaid upload testing is successful and you want to submit the files for real
-test_upload <- TRUE 
-
-if(test_upload) {
-  test_flag <- "--test"
-  config2use <- seqsender_config_test_fp
-} else{
-  test_flag <- ""
-  config2use <- seqsender_config_fp
-}
-
-use_proxy <- TRUE #change this to FALSE to not use proxy
-
-if(use_proxy) {
-  proxy_flag <- "--proxy"
-} else{
-  proxy_flag <- ""
-}
-
-report_or_overwrite <- TRUE #change this to FALSE to overwrite the submitted files on the sFTP and to resubmit
-
-if(report_or_overwrite) {
-  overwrite_flag <- ""
-} else{
-  overwrite_flag <- "--overwrite"
-}
-
-seqsender_py <- file.path(seqsender_fp, "seqsender.py")
-
-file_create_success_msg <- c(paste0("Processing ", project_name, "."),
-                             "Processing Files.", 
-                             "Creating GISAID files.",
-                             "Creating Genbank files.",
-                             "Creating BioSample/SRA files.",
-                             paste0(project_name, " complete."))
-
-### generate GISAID files to upload. This will also generate test submissions for SRA and BioSample but they will be rewritten with the submit command
-upload_files_created <- cli_submit("python",
-                                   seqsender_py,
-                                   c(proxy_flag, "prep",
-                                     "--unique_name", project_name,
-                                     "--config", shQuote(seqsender_config_test_fp, type = "cmd"),
-                                     "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
-                                     "--fasta", shQuote(fasta_fp, type = "cmd")),
-                                   shQuote_type = "cmd")
-
-if(!all(file_create_success_msg %in% upload_files_created)) {
-  stop(simpleError("Seqsender failed to create some of the GISAID upload files!"))
-}
-
-gisaid_upload_success_msg <- c("Submitting now to gisaid.",
-                               "Waiting for file to write.",
-                               "No failed sequences.",
-                               "Cleaning up files.")
-
-### submit files to gisaid
-gisaid_uploaded <- cli_submit("python",
-                              seqsender_py,
-                              c(proxy_flag, "gisaid",
-                                "--unique_name", project_name,
-                                "--config", shQuote(config2use, type = "cmd"),
-                                test_flag, overwrite_flag),
-                              shQuote_type = "cmd")
-
-if(!all(gisaid_upload_success_msg %in% gisaid_uploaded)) {
-  stop(simpleError("Something went wrong! GISAID upload failed. Maybe there are duplicate entries already? If so, rename the GISAID name and resubmit"))
-}
-
-#include the GISAID Accession number for the SRA and GenBank submissions
-read_gisaid_accessions <- read_csv(here("gisaid", paste0(project_name, ".log")), col_names = FALSE) %>%
-  filter(grepl("msg: ", X1)) %>%
-  mutate(X1 = gsub("msg: ", "", X1))
-
-gisaid_number_submitted <- read_gisaid_accessions %>%
-  filter(grepl("submissions uploaded: ", X1)) %>%
-  mutate(X1 = gsub("submissions uploaded: ", "", X1)) %>%
-  pull() %>%
-  as.numeric()
-
-gisaid_number_failed <- read_gisaid_accessions %>%
-  filter(grepl("submissions failed: ", X1)) %>%
-  mutate(X1 = gsub("submissions failed: ", "", X1)) %>%
-  pull() %>%
-  as.numeric()
-
-if(gisaid_number_submitted != nrow(seqsender) & gisaid_number_failed != 0) {
-  
-  stop(simpleError("Some GISAID samples failed to upload."))
-  
-}
-  
-gisaid_accessions <- read_gisaid_accessions %>%
-  filter(!grepl("submissions uploaded: |submissions failed: ", X1)) %>%
-  separate(X1, into = c("gisaid_name", "gisaid_accession"), sep = "; ", extra = "merge") %>%
-  mutate(genbank_note = paste0("GISAID virus name: ", gisaid_name, "; GISAID accession: ", gisaid_accession))
-  
-if(!test_upload) {
-  
-  gisaid_accessions %>%
-    write_csv(here("gisaid", paste0(project_name, "_gisaid_accessions.csv")))
-  
-}
-
-#rewrite the seqsender file with the gisaid accession numbers and remove the old prepared files
-seqsender %>%
-  select(-c(gisaid_accession, genbank_note)) %>%
-  merge(gisaid_accessions, by = "gisaid_name", all.x = TRUE) %>%
-  write_tsv(seqsender_meta_fp)
-
-### submit files to biosample and sra
-cli_submit("python",
-           seqsender_py,
-           c(proxy_flag, "submit",
-             "--unique_name", project_name,
-             "--config", shQuote(config2use, type = "cmd"),
-             "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
-             "--fasta", shQuote(fasta_fp, type = "cmd"),
-             test_flag, overwrite_flag),
-           shQuote_type = "cmd")
-
-### submit files to genbank
-cli_submit("python",
-           seqsender_py,
-           c(proxy_flag, "genbank",
-             "--unique_name", project_name,
-             "--config", shQuote(config2use, type = "cmd"),
-             test_flag, overwrite_flag),
-           shQuote_type = "cmd")
-```
