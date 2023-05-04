@@ -1,4 +1,37 @@
 
+```{r only run this chunk once to install, include=FALSE, eval=FALSE}
+### ================
+### packages install
+### ================
+install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx", "ggsci", "reticulate"))
+
+```
+
+```{r setup for the pdf, echo=FALSE}
+### ================
+###   knitr setup
+### ================
+library(knitr)
+opts_chunk$set(
+  tidy=FALSE,
+  cache=FALSE,
+  cache.lazy = FALSE,
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE, #Set message to NA in chunks where message should be sent to stderr
+  dpi=100,
+  fig.width=6,
+  fig.height=6,
+  dev.args = list(pdf = list(useDingbats = FALSE))
+)
+
+pander::panderOptions("knitr.auto.asis", FALSE)
+#this also means that you have to put results='asis' in any block that has pander output
+#this lets you loop through variables and produce multiple pander tables and ggplots in a
+#single code block!
+
+```
+
 ```{r libraries}
 library(here)
 library(tidyverse)
@@ -14,12 +47,9 @@ library(stringdist)
 
 ```
 
-```{r versions and dates manual inputs}
+```{r ARTIC primer bed file to use}
 
-#application to run on basespace
-app2run <- "DRAGEN COVID Lineage"
-
-primer_select <- 2 # set variable as 1 for V3, 2 for V4, or 3 for V4.1
+primer_select <- 1 # set variable as 1 for V3, 2 for V4, or 3 for V4.1
 
 artic_primer_scheme <- c("ncov2019", "articv4", "articv4.1")[primer_select]
 bs_bed_file_used <- c("nCov-2019.bed", "artic_V4_primer_scheme_NC_045512.2.bed", "artic_v4.1_primers_nc045512.2.bed")[primer_select]
@@ -65,41 +95,43 @@ tryCatch(
 
 ```
 
+<!-- QC section -->
+
 ```{r find newest run folder}
 
 project_name <- basename(here())
 sequencing_date <- as.Date(gsub("_.*", "", project_name))
 
-#get the newly added run folder
-run_folder <- sequencing_folder_fp %>%
-  list.files(full.names = T) %>%
-  file.info() %>%
-  filter(grepl(format(sequencing_date, "%y%m%d"), rownames(.))) %>%
-  rownames()
-
-folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
-  as.Date(format = "%Y%m%d")
-
-if(folder_date != gsub("_.*", "", basename(here()))) {
- stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
-}
+# #get the newly added run folder
+# run_folder <- sequencing_folder_fp %>%
+#   list.files(full.names = T) %>%
+#   file.info() %>%
+#   filter(grepl(format(sequencing_date, "%y%m%d"), rownames(.))) %>%
+#   rownames()
+# 
+# folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
+#   as.Date(format = "%Y%m%d")
+# 
+# if(folder_date != gsub("_.*", "", basename(here()))) {
+#  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+# }
 
 ```
 
 ```{r copy run folder files}
 
-dir.create(here("data", "demux_reads"), recursive = TRUE)
-
-latest_demux <- max(list.files(run_folder, pattern = "Alignment_"))
-
-#copy from
-cp_list <- c(list.files(here(run_folder, latest_demux), pattern = "CompletedJobInfo.xml", recursive = TRUE, full.names = TRUE),
-             list.files(here(run_folder, latest_demux), pattern = "DemultiplexSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
-             list.files(here(run_folder, latest_demux), pattern = "FastqSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
-             list.files(here(run_folder, latest_demux), pattern = "SampleSheetUsed.csv", recursive = TRUE, full.names = TRUE))
-
-#copy to
-invisible(sapply(cp_list, file.copy, here("data", "demux_reads"), TRUE))
+# dir.create(here("data", "demux_reads"), recursive = TRUE)
+# 
+# latest_demux <- max(list.files(run_folder, pattern = "Alignment_"))
+# 
+# #copy from
+# cp_list <- c(list.files(here(run_folder, latest_demux), pattern = "CompletedJobInfo.xml", recursive = TRUE, full.names = TRUE),
+#              list.files(here(run_folder, latest_demux), pattern = "DemultiplexSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
+#              list.files(here(run_folder, latest_demux), pattern = "FastqSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
+#              list.files(here(run_folder, latest_demux), pattern = "SampleSheetUsed.csv", recursive = TRUE, full.names = TRUE))
+# 
+# #copy to
+# invisible(sapply(cp_list, file.copy, here("data", "demux_reads"), TRUE))
 
 ```
 
@@ -111,248 +143,225 @@ mapping_file_fp <- list.files(here("metadata"), pattern = "_metadata.csv", full.
 PHI_file_fp <- list.files(here("metadata"), pattern = "_PHI.csv", full.names = TRUE)
 
 ### demultiplexing results from BaseSpace
-gen_fq_fp <- here("data", "demux_reads", "CompletedJobInfo.xml")
-demuxsum_fp <- here("data", "demux_reads", "DemultiplexSummaryF1L1.txt")
-fastqsum_fp <- here("data", "demux_reads", "FastqSummaryF1L1.txt")
-SampleSheet_fp <- here("data", "demux_reads", "SampleSheetUsed.csv")
+# gen_fq_fp <- here("data", "demux_reads", "CompletedJobInfo.xml")
+# demuxsum_fp <- here("data", "demux_reads", "DemultiplexSummaryF1L1.txt")
+# fastqsum_fp <- here("data", "demux_reads", "FastqSummaryF1L1.txt")
+# SampleSheet_fp <- here("data", "demux_reads", "SampleSheetUsed.csv")
 
 ```
 
 ```{r load bcl2fq, eval = FALSE}
 
-bcl2fq_version <- read_delim(b2fq_v_fp, skip = 1, col_names = FALSE) %>%
-  slice(1) %>%
-  select(X2) %>%
-  pull()
-
-#just reading in command file as one column
-bcl2fq_flags <- read_delim(b2fq_c_fp, col_names = FALSE, col_types = cols(.default = "c"), delim = ";") %>%
-  slice(1) %>%
-  mutate(X1 = gsub("^.*bcl2fastq", "bcl2fastq", X1)) %>%
-  mutate(X1 = gsub(" --", "\n\t--", X1)) %>%
-  mutate(X1 = gsub(" -", "\n\t-", X1)) %>%
-  pull()
+# bcl2fq_version <- read_delim(b2fq_v_fp, skip = 1, col_names = FALSE) %>%
+#   slice(1) %>%
+#   select(X2) %>%
+#   pull()
+# 
+# #just reading in command file as one column
+# bcl2fq_flags <- read_delim(b2fq_c_fp, col_names = FALSE, col_types = cols(.default = "c"), delim = ";") %>%
+#   slice(1) %>%
+#   mutate(X1 = gsub("^.*bcl2fastq", "bcl2fastq", X1)) %>%
+#   mutate(X1 = gsub(" --", "\n\t--", X1)) %>%
+#   mutate(X1 = gsub(" -", "\n\t-", X1)) %>%
+#   pull()
 
 ```
 
 ```{r load GenerateFASTQ module}
 
-JobCompletedInfo <- xml2::read_xml(gen_fq_fp)
-
-workflow_name <- JobCompletedInfo %>%
-  html_elements("Analysis") %>%
-  html_text2()
-
-gen_fq_version <- JobCompletedInfo %>%
-  html_elements("WorkflowVersion") %>%
-  html_text2()
+# JobCompletedInfo <- xml2::read_xml(gen_fq_fp)
+# 
+# workflow_name <- JobCompletedInfo %>%
+#   html_elements("Analysis") %>%
+#   html_text2()
+# 
+# gen_fq_version <- JobCompletedInfo %>%
+#   html_elements("WorkflowVersion") %>%
+#   html_text2()
 
 ```
 
 ```{r load read numbers}
 
 # read counts by sample number
-fastq_sum <- read_delim(fastqsum_fp) %>%
-  group_by(SampleNumber) %>%
-  #PF means reads that have passed filter
-  summarise(total_raw_reads = sum(NumberOfReadsRaw)*2,
-            read_counts = sum(NumberOfReadsPF)*2) %>%
-  ungroup()
-
-# SampleSheet.csv loading
-
-sample_sheet <- load_sample_sheet(SampleSheet_fp)
-
-samp_sh_header <- data.frame(X1 = unlist(sample_sheet$Header)) %>%
-  mutate(col_names = gsub(",.*", "", X1)) %>%
-  mutate(col_names = gsub(" ", "_", col_names)) %>%
-  mutate(X1 = gsub(".*,", "", X1)) %>%
-  pivot_wider(names_from = "col_names", values_from = "X1")
-
-samp_sh_check <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE) %>%
-  #split each line into columns using row 1 as the column names
-  separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
-  slice(-1) %>%
-  rename(sample_id = "Sample_ID") %>%
-  mutate(same_UDI = I7_Index_ID == I5_Index_ID) %>%
-  select(same_UDI)
-
-#if any of the barcode ID's dont match, raise an error
-if(!all(samp_sh_check$same_UDI)) {
-  stop(simpleError("One of the barcode ID's don't match! Check samp_sh_check dataframe"))
-}
-
-samp_sh_s <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE) %>%
-  #split each line into columns using row 1 as the column names
-  separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
-  slice(-1) %>%
-  #this is for bcl2fastq
-  #rename(SampleName = "Sample_Name", SampleNumber = "BASESPACE_ONLY_ORIGINAL_SAMPLE_NUMBER") %>%
-  #mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
-  #select(SampleName, I7_Index_ID, I5_Index_ID, Barcode_sequence, Sample_Type, UDI_Index_ID)
-  rename(sample_id = "Sample_ID") %>%
-  mutate(UDI_Index_ID = I7_Index_ID) %>%
-  mutate(I7_Index_ID = index, I5_Index_ID = index2) %>%
-  mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
-  select(sample_id, I7_Index_ID, I5_Index_ID, Barcode_sequence, UDI_Index_ID) %>%
-  mutate(sample_id = gsub("_", "-", sample_id))
-
-#merge sample names with read counts
-samp_reads <- read_delim(demuxsum_fp, col_names = FALSE) %>%
-  filter(grepl("Sample", X1)) %>%
-  t() %>%
-  as.data.frame(stringsAsFactors = FALSE) %>%
-  purrr::set_names(as.character(slice(., 1))) %>%
-  slice(-1) %>%
-  filter(!is.na(SampleNumber)) %>%
-  merge(fastq_sum, by = "SampleNumber", all = TRUE) %>%
-  rename(sample_id = "SampleName") %>%
-  mutate(sample_id = gsub("_", "-", sample_id)) %>%
-  mutate(sample_id = ifelse(sample_id == "None", "Undetermined", sample_id)) %>%
-  merge(samp_sh_s, by = "sample_id", all = TRUE) %>%
-  mutate(percent_reads_passed_filter = read_counts/total_raw_reads) %>%
-  mutate(percent_of_lane = read_counts/sum(read_counts))
-
-top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
-  filter(is.na(X6)) %>%
-  filter(!is.na(X4)) %>%
-  rename(index_sequence1 = "X1", index_sequence2 = "X3", number_of_reads = "X5") %>%
-  filter(!grepl("###", index_sequence1)) %>%
-  select(index_sequence1, index_sequence2, number_of_reads) %>%
-  mutate(index_sequence = paste0(index_sequence1, "+", index_sequence2)) %>%
-  filter(!index_sequence %in% samp_reads$Barcode_sequence) %>%
-  #get the minimum distance to the barcode sequences used for demultiplexing
-  #levenshtein distance is useful for accounting for insertions and deletions between strings, but not needed in this case to determine barcode distances
-  mutate(min_dist = sapply(index_sequence,
-                           function(x) min(stringdist(x, b = samp_reads$Barcode_sequence[!is.na(samp_reads$Barcode_sequence)], method = "hamming")))) %>%
-  filter(min_dist > 1) %>%
-  select(-c(index_sequence1, index_sequence2, min_dist)) %>%
-  mutate(number_of_reads = as.numeric(number_of_reads)) %>%
-  order_on_other_col(index_sequence, number_of_reads) %>%
-  slice(1:10) %>%
-  droplevels()
-
-dragen_metadata_fp <- here("data", paste0(sequencing_date, "_bs_metadata.csv"))
-
-run_dragen_app <- !file.exists(dragen_metadata_fp)
+# fastq_sum <- read_delim(fastqsum_fp) %>%
+#   group_by(SampleNumber) %>%
+#   #PF means reads that have passed filter
+#   summarise(total_raw_reads = sum(NumberOfReadsRaw)*2,
+#             read_counts = sum(NumberOfReadsPF)*2) %>%
+#   ungroup()
+# 
+# # SampleSheet.csv loading
+# 
+# sample_sheet <- load_sample_sheet(SampleSheet_fp)
+# 
+# samp_sh_header <- data.frame(X1 = unlist(sample_sheet$Header)) %>%
+#   mutate(col_names = gsub(",.*", "", X1)) %>%
+#   mutate(col_names = gsub(" ", "_", col_names)) %>%
+#   mutate(X1 = gsub(".*,", "", X1)) %>%
+#   pivot_wider(names_from = "col_names", values_from = "X1")
+# 
+# samp_sh_check <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE) %>%
+#   #split each line into columns using row 1 as the column names
+#   separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
+#   slice(-1) %>%
+#   rename(sample_id = "Sample_ID") %>%
+#   mutate(same_UDI = I7_Index_ID == I5_Index_ID) %>%
+#   select(same_UDI)
+# 
+# #if any of the barcode ID's dont match, raise an error
+# if(!all(samp_sh_check$same_UDI)) {
+#   stop(simpleError("One of the barcode ID's don't match! Check samp_sh_check dataframe"))
+# }
+# 
+# samp_sh_s <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE) %>%
+#   #split each line into columns using row 1 as the column names
+#   separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
+#   slice(-1) %>%
+#   #this is for bcl2fastq
+#   #rename(SampleName = "Sample_Name", SampleNumber = "BASESPACE_ONLY_ORIGINAL_SAMPLE_NUMBER") %>%
+#   #mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
+#   #select(SampleName, I7_Index_ID, I5_Index_ID, Barcode_sequence, Sample_Type, UDI_Index_ID)
+#   rename(sample_id = "Sample_ID") %>%
+#   mutate(UDI_Index_ID = I7_Index_ID) %>%
+#   mutate(I7_Index_ID = index, I5_Index_ID = index2) %>%
+#   mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
+#   select(sample_id, I7_Index_ID, I5_Index_ID, Barcode_sequence, UDI_Index_ID) %>%
+#   mutate(sample_id = gsub("_", "-", sample_id))
+# 
+# #merge sample names with read counts
+# samp_reads <- read_delim(demuxsum_fp, col_names = FALSE) %>%
+#   filter(grepl("Sample", X1)) %>%
+#   t() %>%
+#   as.data.frame(stringsAsFactors = FALSE) %>%
+#   purrr::set_names(as.character(slice(., 1))) %>%
+#   slice(-1) %>%
+#   filter(!is.na(SampleNumber)) %>%
+#   merge(fastq_sum, by = "SampleNumber", all = TRUE) %>%
+#   rename(sample_id = "SampleName") %>%
+#   mutate(sample_id = gsub("_", "-", sample_id)) %>%
+#   mutate(sample_id = ifelse(sample_id == "None", "Undetermined", sample_id)) %>%
+#   merge(samp_sh_s, by = "sample_id", all = TRUE) %>%
+#   mutate(percent_reads_passed_filter = read_counts/total_raw_reads) %>%
+#   mutate(percent_of_lane = read_counts/sum(read_counts))
+# 
+# top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
+#   filter(is.na(X6)) %>%
+#   filter(!is.na(X4)) %>%
+#   rename(index_sequence1 = "X1", index_sequence2 = "X3", number_of_reads = "X5") %>%
+#   filter(!grepl("###", index_sequence1)) %>%
+#   select(index_sequence1, index_sequence2, number_of_reads) %>%
+#   mutate(index_sequence = paste0(index_sequence1, "+", index_sequence2)) %>%
+#   filter(!index_sequence %in% samp_reads$Barcode_sequence) %>%
+#   #get the minimum distance to the barcode sequences used for demultiplexing
+#   #levenshtein distance is useful for accounting for insertions and deletions between strings, but not needed in this case to determine barcode distances
+#   mutate(min_dist = sapply(index_sequence,
+#                            function(x) min(stringdist(x, b = samp_reads$Barcode_sequence[!is.na(samp_reads$Barcode_sequence)], method = "hamming")))) %>%
+#   filter(min_dist > 1) %>%
+#   select(-c(index_sequence1, index_sequence2, min_dist)) %>%
+#   mutate(number_of_reads = as.numeric(number_of_reads)) %>%
+#   order_on_other_col(index_sequence, number_of_reads) %>%
+#   slice(1:10) %>%
+#   droplevels()
+# 
+# dragen_metadata_fp <- here("data", paste0(sequencing_date, "_bs_metadata.csv"))
+# 
+# run_dragen_app <- !file.exists(dragen_metadata_fp)
 
 ```
 
 ```{r upload data to basespace and run the app, message = NA, eval = run_dragen_app}
 
-dir.create(here("data", "processed_bs"), recursive = TRUE)
-
-list_of_indexes <- list.files(here(run_folder, latest_demux), pattern = "*I[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)
-
-#if there are index files in the run folder, move them somewhere else
-if(length(list_of_indexes) > 0) {
-  
-  #make index folder by replace the slashes
-  dir.create(file.path(dirname(dirname(list_of_indexes[1])), "indices"), recursive = TRUE)
-  
-  for(index in list_of_indexes) {
-    file.rename(index, file.path(dirname(dirname(list_of_indexes[1])), "indices", basename(index)))
-  }
-
-}
-
-fastq_folder <- dirname(list.files(here(run_folder, latest_demux), pattern = "R[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)[1])
-
-#have to break the shell script into parts because of proxy authentication issue which can be solved by initializing a new shell script each time
-
-### 1 - create the basespace project
-bs_cli_create_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_1_create_project.sh")
-project_id <- cli_submit(sh_exe_fp, bs_cli_create_fp, project_name)
-write(paste0(c("project_id", project_id), collapse = ","), dragen_metadata_fp)
-
-### 2 - upload the fastq files
-bs_cli_upload_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_2_upload_fastq.sh")
-files_upload <- cli_submit(sh_exe_fp, bs_cli_upload_fp, c(project_id,
-                                             shQuote(fastq_folder, type = "sh")))
-
-if(any(grepl("Error|Aborted|Failed", files_upload, ignore.case = TRUE))) {
-  stop(simpleError("Sample upload to BaseSpace was aborted"))
-}
-
-### 3 - get the latest app version
-bs_cli_app_ver_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_3_get_app_version.sh")
-dragen_app_version <- cli_submit(sh_exe_fp, bs_cli_app_ver_fp, shQuote(app2run, type = "sh"))
-write(paste0(c("dragen_app_version", dragen_app_version), collapse = ","), dragen_metadata_fp, append = TRUE)
-
-
-### 4 - launch the app
-bs_cli_launch_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_4_launch_app.sh")
-app_session_id <- cli_submit(sh_exe_fp, bs_cli_launch_fp, c(shQuote(app2run, type = "sh"),
-                                                              dragen_app_version,
-                                                              project_id,
-                                                              artic_primer_scheme))
-write(paste0(c("app_session_id", app_session_id), collapse = ","), dragen_metadata_fp, append = TRUE)
+# dir.create(here("data", "processed_bs"), recursive = TRUE)
+# 
+# list_of_indexes <- list.files(here(run_folder, latest_demux), pattern = "*I[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)
+# 
+# #if there are index files in the run folder, move them somewhere else
+# if(length(list_of_indexes) > 0) {
+#   
+#   #make index folder by replace the slashes
+#   dir.create(file.path(dirname(dirname(list_of_indexes[1])), "indices"), recursive = TRUE)
+#   
+#   for(index in list_of_indexes) {
+#     file.rename(index, file.path(dirname(dirname(list_of_indexes[1])), "indices", basename(index)))
+#   }
+# 
+# }
+# 
+# fastq_folder <- dirname(list.files(here(run_folder, latest_demux), pattern = "R[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)[1])
+# 
+# #have to break the shell script into parts because of proxy authentication issue which can be solved by initializing a new shell script each time
+# 
+# ### 1 - create the basespace project
+# bs_cli_create_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_1_create_project.sh")
+# project_id <- cli_submit(sh_exe_fp, bs_cli_create_fp, project_name)
+# write(paste0(c("project_id", project_id), collapse = ","), dragen_metadata_fp)
+# 
+# ### 2 - upload the fastq files
+# bs_cli_upload_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_2_upload_fastq.sh")
+# files_upload <- cli_submit(sh_exe_fp, bs_cli_upload_fp, c(project_id,
+#                                              shQuote(fastq_folder, type = "sh")))
+# 
+# if(any(grepl("Error|Aborted|Failed", files_upload, ignore.case = TRUE))) {
+#   stop(simpleError("Sample upload to BaseSpace was aborted"))
+# }
+# 
+# ### 3 - get the latest app version
+# bs_cli_app_ver_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_3_get_app_version.sh")
+# dragen_app_version <- cli_submit(sh_exe_fp, bs_cli_app_ver_fp, shQuote(app2run, type = "sh"))
+# write(paste0(c("dragen_app_version", dragen_app_version), collapse = ","), dragen_metadata_fp, append = TRUE)
+# 
+# 
+# ### 4 - launch the app
+# bs_cli_launch_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_4_launch_app.sh")
+# app_session_id <- cli_submit(sh_exe_fp, bs_cli_launch_fp, c(shQuote(app2run, type = "sh"),
+#                                                               dragen_app_version,
+#                                                               project_id,
+#                                                               artic_primer_scheme))
+# write(paste0(c("app_session_id", app_session_id), collapse = ","), dragen_metadata_fp, append = TRUE)
 
 ```
 
 ```{r download bs data check}
 
-bs_meta <- read_csv(dragen_metadata_fp, col_names = FALSE) %>%
-  column_to_rownames("X1") %>%
-  t() %>%
-  as.data.frame(stringsAsFactors = FALSE) %>%
-  mutate(project_id = as.numeric(project_id),
-         app_session_id = as.numeric(app_session_id))
-
-dl_bs_data <- is.null(bs_meta$app_run_date)
+# bs_meta <- read_csv(dragen_metadata_fp, col_names = FALSE) %>%
+#   column_to_rownames("X1") %>%
+#   t() %>%
+#   as.data.frame(stringsAsFactors = FALSE) %>%
+#   mutate(project_id = as.numeric(project_id),
+#          app_session_id = as.numeric(app_session_id))
+# 
+# dl_bs_data <- is.null(bs_meta$app_run_date)
 
 ```
 
 ```{r download bs data, message = NA, eval = dl_bs_data}
 
-### 5 - wait until the app finished running
-bs_cli_await_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_5_await.sh")
-awaiting <- cli_submit(sh_exe_fp, bs_cli_await_fp, bs_meta$app_session_id)
-
-### 6 - download data
-bs_cli_download_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_6_download.sh")
-downloading <- cli_submit(sh_exe_fp, bs_cli_download_fp, c(bs_meta$project_id,
-                                              shQuote(here("data", "processed_bs"), type = "sh")))
-
-### 7 - get app date
-bs_cli_get_date_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_7_get_date.sh")
-app_run_date <- cli_submit(sh_exe_fp, bs_cli_get_date_fp, bs_meta$app_session_id) %>%
-  as.Date() %>%
-  as.character()
-write(paste0(c("app_run_date", app_run_date), collapse = ","), dragen_metadata_fp, append = TRUE)
-
-```
-
-```{r get nextclade version by downloading Undetermined file, eval = import_data}
-
-nextclade_version_fp <- list.files(here("data", "processed_bs"), pattern = "Undetermined_report_metrics.json", recursive = TRUE, full.names = TRUE)
-
-#reading in json like a csv and then handling it in a hacky way
-nc_v <- nextclade_version_fp %>%
-  read_csv(col_names = FALSE) %>%
-  select_if(~ any(grepl("nextclade_version", .))) %>%
-  mutate_all(~gsub(".*nextclade ", "", .)) %>%
-  pull()
+# ### 5 - wait until the app finished running
+# bs_cli_await_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_5_await.sh")
+# awaiting <- cli_submit(sh_exe_fp, bs_cli_await_fp, bs_meta$app_session_id)
+# 
+# ### 6 - download data
+# bs_cli_download_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_6_download.sh")
+# downloading <- cli_submit(sh_exe_fp, bs_cli_download_fp, c(bs_meta$project_id,
+#                                               shQuote(here("data", "processed_bs"), type = "sh")))
+# 
+# ### 7 - get app date
+# bs_cli_get_date_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_7_get_date.sh")
+# app_run_date <- cli_submit(sh_exe_fp, bs_cli_get_date_fp, bs_meta$app_session_id) %>%
+#   as.Date() %>%
+#   as.character()
+# write(paste0(c("app_run_date", app_run_date), collapse = ","), dragen_metadata_fp, append = TRUE)
 
 ```
 
-```{r unzip fastq files and bed files, eval = import_data}
+```{r aligned fastq and depth files, eval = import_data}
 
-#find all zipped files
-zip_fps <- list.files(here("data", "processed_bs"), pattern = ".zip", recursive = TRUE, full.names = TRUE)
+#copy aligned fastq files for SRA submission
+filtered_fqs <- list.files(here("data", "processed_cecret", "filter"), pattern = ".R[12].fastq.gz", recursive = TRUE, full.names = TRUE)
 
-#extract scrubbed fastq files
-scrubbed_zip_files <- zip_fps[grepl("ScrubbedFASTQsNode", zip_fps)]
-invisible(sapply(scrubbed_zip_files, function(x) unzip(x, exdir = dirname(x))))
-
-#extract just the bed files
-bed_zip_files <- zip_fps[grepl("_all_output_files", zip_fps)]
-#sometimes these files are bed and other times they are tsv files...
-#be wary of the extract to file path. if the length of the path exceeds 256 characters, it may throw an error
-invisible(sapply(bed_zip_files, function(x) unzip(x, exdir = here("data", "processed_bs"), files = as.character(paste0("consensus/", gsub(".*/|_all_output_files.zip$", "", x), ".consensus_coverage_from_filtered_bam.tsv")))))
-
-invisible(sapply(bed_zip_files, function(x) unzip(x, exdir = here("data", "processed_bs"), files = paste0("consensus/", gsub(".*/|_all_output_files.zip$", "", x), ".consensus_coverage_from_filtered_bam.bed"))))
-
+#copy aligned fastq files for SRA submission
+depth_fps <- list.files(here("data", "processed_cecret", "samtools_depth"), pattern = ".depth.txt", recursive = TRUE, full.names = TRUE)
 
 ```
 
@@ -393,6 +402,8 @@ coverage %<>%
   ungroup()
 
 ```
+
+<!-- Analysis section -->
 
 ```{r load kmer results, eval = import_data}
 

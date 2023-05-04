@@ -162,23 +162,6 @@ SampleSheet_fp <- here("data", "demux_reads", "SampleSheetUsed.csv")
 
 ```
 
-```{r load bcl2fq, eval = FALSE}
-
-bcl2fq_version <- read_delim(b2fq_v_fp, skip = 1, col_names = FALSE) %>%
-  slice(1) %>%
-  select(X2) %>%
-  pull()
-
-#just reading in command file as one column
-bcl2fq_flags <- read_delim(b2fq_c_fp, col_names = FALSE, col_types = cols(.default = "c"), delim = ";") %>%
-  slice(1) %>%
-  mutate(X1 = gsub("^.*bcl2fastq", "bcl2fastq", X1)) %>%
-  mutate(X1 = gsub(" --", "\n\t--", X1)) %>%
-  mutate(X1 = gsub(" -", "\n\t-", X1)) %>%
-  pull()
-
-```
-
 ```{r load GenerateFASTQ module}
 
 JobCompletedInfo <- xml2::read_xml(gen_fq_fp)

@@ -232,7 +232,12 @@ TU_samples <- TU_data %>%
 environmental_samples_fp <- list.files(here("metadata", "extra_metadata"), pattern = "enviro.*.xlsx", full.names = TRUE, ignore.case = TRUE)
 
 if(length(environmental_samples_fp) > 0) {
-  enviro_samples <- read_excel(environmental_samples_fp, col_names = TRUE) %>%
+  enviro_samples <- environmental_samples_fp %>%
+    data_frame(FileName = .) %>%
+    group_by(FileName) %>%
+    do(read_excel(.$FileName, col_names = TRUE)) %>%
+    ungroup() %>%
+    select(-FileName) %>%
     rename(sample_name = 1, environmental_site = 2) %>%
     select(sample_name, environmental_site)
 } else {
