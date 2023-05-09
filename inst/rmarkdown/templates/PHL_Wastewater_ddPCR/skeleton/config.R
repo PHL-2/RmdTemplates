@@ -36,7 +36,7 @@ sc2_to_control_uL = 40
 init_concentration_vol_uL = 9600
 
 ## Concentration: Elution volume (uL)
-end_concentration_vol_uL = 500
+end_concentration_vol_uL = 400
 
 
 
