@@ -51,8 +51,7 @@ library(stringdist)
 
 primer_select <- 1 # set variable as 1 for V3, 2 for V4, or 3 for V4.1
 
-artic_primer_scheme <- c("ncov2019", "articv4", "articv4.1")[primer_select]
-bs_bed_file_used <- c("nCov-2019.bed", "artic_V4_primer_scheme_NC_045512.2.bed", "artic_v4.1_primers_nc045512.2.bed")[primer_select]
+artic_primer_scheme <- c("ncov_V3", "ncov_V4", "ncov_V4.1")[primer_select]
 
 # minimum acceptable number of reads
 min_reads <- 1000000
@@ -102,36 +101,39 @@ tryCatch(
 project_name <- basename(here())
 sequencing_date <- as.Date(gsub("_.*", "", project_name))
 
-# #get the newly added run folder
-# run_folder <- sequencing_folder_fp %>%
-#   list.files(full.names = T) %>%
-#   file.info() %>%
-#   filter(grepl(format(sequencing_date, "%y%m%d"), rownames(.))) %>%
-#   rownames()
-# 
-# folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
-#   as.Date(format = "%Y%m%d")
-# 
-# if(folder_date != gsub("_.*", "", basename(here()))) {
-#  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
-# }
+#get the newly added run folder
+run_folder <- sequencing_folder_fp %>%
+  list.files(full.names = T) %>%
+  file.info() %>%
+  filter(grepl(format(sequencing_date, "%y%m%d"), rownames(.))) %>%
+  rownames()
+
+#run_folder_name <- gsub(".*/", "", run_folder) #real run folder name
+run_folder_name <- "230310_M08007_0043_000000000-KV34C"
+
+folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
+  as.Date(format = "%Y%m%d")
+
+if(folder_date != gsub("_.*", "", basename(here()))) {
+ stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+}
 
 ```
 
-```{r copy run folder files}
+```{r}
 
-# dir.create(here("data", "demux_reads"), recursive = TRUE)
+# tar.gz the run folder
 # 
-# latest_demux <- max(list.files(run_folder, pattern = "Alignment_"))
+# upload to s3 bucket with the date
 # 
-# #copy from
-# cp_list <- c(list.files(here(run_folder, latest_demux), pattern = "CompletedJobInfo.xml", recursive = TRUE, full.names = TRUE),
-#              list.files(here(run_folder, latest_demux), pattern = "DemultiplexSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
-#              list.files(here(run_folder, latest_demux), pattern = "FastqSummaryF1L1.txt", recursive = TRUE, full.names = TRUE),
-#              list.files(here(run_folder, latest_demux), pattern = "SampleSheetUsed.csv", recursive = TRUE, full.names = TRUE))
+# run the nf-core demux pipeline 
 # 
-# #copy to
-# invisible(sapply(cp_list, file.copy, here("data", "demux_reads"), TRUE))
+# download the output files into data/processed_nfcore_demux
+
+# aws s3 cp s3://output-bucket/directory here(data, processed_demux) --recursive --exclude "*"
+#--include "*software_versions.yml" --include "*Demultiplex_Stats.csv" --include "*Quality_Metrics.csv" --include "*SampleSheet.csv" --include "*Top_Unknown_Barcodes.csv" --include "*.fastq.gz_fastqc_data.txt"
+
+#later, change the demux pipeline to run locally on the EC2 instance. It is probably faster and cheaper
 
 ```
 
@@ -142,131 +144,111 @@ sequencing_date <- as.Date(gsub("_.*", "", project_name))
 mapping_file_fp <- list.files(here("metadata"), pattern = "_metadata.csv", full.names = TRUE)
 PHI_file_fp <- list.files(here("metadata"), pattern = "_PHI.csv", full.names = TRUE)
 
-### demultiplexing results from BaseSpace
-# gen_fq_fp <- here("data", "demux_reads", "CompletedJobInfo.xml")
-# demuxsum_fp <- here("data", "demux_reads", "DemultiplexSummaryF1L1.txt")
-# fastqsum_fp <- here("data", "demux_reads", "FastqSummaryF1L1.txt")
-# SampleSheet_fp <- here("data", "demux_reads", "SampleSheetUsed.csv")
+### demultiplexing results from nfcore
+demux_software_fp <- here("data", "processed_demux", "pipeline_info", "software_versions.yml")
+quality_metrics_fp <- here("data", "processed_demux", run_folder_name, "Reports", "Quality_Metrics.csv")
+demuxsum_fp <- here("data", "processed_demux", run_folder_name, "Reports", "Demultiplex_Stats.csv")
+samplesheet_fp <- here("data", "processed_demux", run_folder_name, "Reports", "SampleSheet.csv")
+top_unkwn_fp <- here("data", "processed_demux", run_folder_name, "Reports", "Top_Unknown_Barcodes.csv")
 
 ```
 
-```{r load bcl2fq, eval = FALSE}
+```{r load demux software versions}
 
-# bcl2fq_version <- read_delim(b2fq_v_fp, skip = 1, col_names = FALSE) %>%
-#   slice(1) %>%
-#   select(X2) %>%
-#   pull()
-# 
-# #just reading in command file as one column
-# bcl2fq_flags <- read_delim(b2fq_c_fp, col_names = FALSE, col_types = cols(.default = "c"), delim = ";") %>%
-#   slice(1) %>%
-#   mutate(X1 = gsub("^.*bcl2fastq", "bcl2fastq", X1)) %>%
-#   mutate(X1 = gsub(" --", "\n\t--", X1)) %>%
-#   mutate(X1 = gsub(" -", "\n\t-", X1)) %>%
-#   pull()
-
-```
-
-```{r load GenerateFASTQ module}
-
-# JobCompletedInfo <- xml2::read_xml(gen_fq_fp)
-# 
-# workflow_name <- JobCompletedInfo %>%
-#   html_elements("Analysis") %>%
-#   html_text2()
-# 
-# gen_fq_version <- JobCompletedInfo %>%
-#   html_elements("WorkflowVersion") %>%
-#   html_text2()
+demux_software_v <- read_delim(demux_software_fp, delim = " ", col_names = FALSE) %>%
+  filter(grepl("Nextflow: |nf-core/demultiplex: |bclconvert: |untar: |falco: ", X1)) %>%
+  separate(col = "X1", into = c("software", "version"), sep = ": ") %>%
+  mutate(software = gsub("^ *", "", software),
+         software = gsub("/", "-", software)) %>%
+  mutate(version = gsub("'", "", version)) %>%
+  t() %>%
+  `colnames<-`(.[1,]) %>%
+  .[-1,]
 
 ```
 
 ```{r load read numbers}
 
-# read counts by sample number
-# fastq_sum <- read_delim(fastqsum_fp) %>%
-#   group_by(SampleNumber) %>%
-#   #PF means reads that have passed filter
-#   summarise(total_raw_reads = sum(NumberOfReadsRaw)*2,
-#             read_counts = sum(NumberOfReadsPF)*2) %>%
-#   ungroup()
-# 
-# # SampleSheet.csv loading
-# 
-# sample_sheet <- load_sample_sheet(SampleSheet_fp)
-# 
-# samp_sh_header <- data.frame(X1 = unlist(sample_sheet$Header)) %>%
-#   mutate(col_names = gsub(",.*", "", X1)) %>%
-#   mutate(col_names = gsub(" ", "_", col_names)) %>%
-#   mutate(X1 = gsub(".*,", "", X1)) %>%
-#   pivot_wider(names_from = "col_names", values_from = "X1")
-# 
-# samp_sh_check <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE) %>%
-#   #split each line into columns using row 1 as the column names
-#   separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
-#   slice(-1) %>%
-#   rename(sample_id = "Sample_ID") %>%
-#   mutate(same_UDI = I7_Index_ID == I5_Index_ID) %>%
-#   select(same_UDI)
-# 
-# #if any of the barcode ID's dont match, raise an error
-# if(!all(samp_sh_check$same_UDI)) {
-#   stop(simpleError("One of the barcode ID's don't match! Check samp_sh_check dataframe"))
-# }
-# 
-# samp_sh_s <- data.frame(X1 = unlist(sample_sheet$Data), stringsAsFactors = FALSE) %>%
-#   #split each line into columns using row 1 as the column names
-#   separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
-#   slice(-1) %>%
-#   #this is for bcl2fastq
-#   #rename(SampleName = "Sample_Name", SampleNumber = "BASESPACE_ONLY_ORIGINAL_SAMPLE_NUMBER") %>%
-#   #mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
-#   #select(SampleName, I7_Index_ID, I5_Index_ID, Barcode_sequence, Sample_Type, UDI_Index_ID)
-#   rename(sample_id = "Sample_ID") %>%
-#   mutate(UDI_Index_ID = I7_Index_ID) %>%
-#   mutate(I7_Index_ID = index, I5_Index_ID = index2) %>%
-#   mutate(Barcode_sequence = paste0(I7_Index_ID, "+", I5_Index_ID)) %>%
-#   select(sample_id, I7_Index_ID, I5_Index_ID, Barcode_sequence, UDI_Index_ID) %>%
-#   mutate(sample_id = gsub("_", "-", sample_id))
-# 
-# #merge sample names with read counts
-# samp_reads <- read_delim(demuxsum_fp, col_names = FALSE) %>%
-#   filter(grepl("Sample", X1)) %>%
-#   t() %>%
-#   as.data.frame(stringsAsFactors = FALSE) %>%
-#   purrr::set_names(as.character(slice(., 1))) %>%
-#   slice(-1) %>%
-#   filter(!is.na(SampleNumber)) %>%
-#   merge(fastq_sum, by = "SampleNumber", all = TRUE) %>%
-#   rename(sample_id = "SampleName") %>%
-#   mutate(sample_id = gsub("_", "-", sample_id)) %>%
-#   mutate(sample_id = ifelse(sample_id == "None", "Undetermined", sample_id)) %>%
-#   merge(samp_sh_s, by = "sample_id", all = TRUE) %>%
-#   mutate(percent_reads_passed_filter = read_counts/total_raw_reads) %>%
-#   mutate(percent_of_lane = read_counts/sum(read_counts))
-# 
-# top_unkwn_indices <- read_delim(demuxsum_fp, col_names = FALSE) %>%
-#   filter(is.na(X6)) %>%
-#   filter(!is.na(X4)) %>%
-#   rename(index_sequence1 = "X1", index_sequence2 = "X3", number_of_reads = "X5") %>%
-#   filter(!grepl("###", index_sequence1)) %>%
-#   select(index_sequence1, index_sequence2, number_of_reads) %>%
-#   mutate(index_sequence = paste0(index_sequence1, "+", index_sequence2)) %>%
-#   filter(!index_sequence %in% samp_reads$Barcode_sequence) %>%
-#   #get the minimum distance to the barcode sequences used for demultiplexing
-#   #levenshtein distance is useful for accounting for insertions and deletions between strings, but not needed in this case to determine barcode distances
-#   mutate(min_dist = sapply(index_sequence,
-#                            function(x) min(stringdist(x, b = samp_reads$Barcode_sequence[!is.na(samp_reads$Barcode_sequence)], method = "hamming")))) %>%
-#   filter(min_dist > 1) %>%
-#   select(-c(index_sequence1, index_sequence2, min_dist)) %>%
-#   mutate(number_of_reads = as.numeric(number_of_reads)) %>%
-#   order_on_other_col(index_sequence, number_of_reads) %>%
-#   slice(1:10) %>%
-#   droplevels()
-# 
+quality_metrics <- read_delim(quality_metrics_fp) %>%
+  rename(lane = "Lane", sample_id = "SampleID", Q30 = "% Q30") %>%
+  select(lane, sample_id, index, index2, ReadNumber, Q30) %>%
+  filter(!grepl("^I", ReadNumber)) %>%
+  mutate(ReadNumber = paste0("R", ReadNumber, "_Q30")) %>%
+  pivot_wider(names_from = "ReadNumber", values_from = "Q30")
+  
+
+#read counts by sample number
+fastq_sum <- read_delim(demuxsum_fp) %>%
+  rename_all(.funs = tolower) %>%
+  rename_all(.funs = function(x) gsub("# ", "", x)) %>%
+  rename_all(.funs = function(x) gsub("% ", "percent_", x)) %>%
+  rename_all(.funs = function(x) gsub(" ", "_", x)) %>%
+  rename(sample_id = "sampleid", Barcode_sequence = "index", read_counts = "reads", percent_of_lane = "percent_reads") %>%
+  mutate(sample_id = gsub("_", "-", sample_id)) %>%
+  mutate(Barcode_sequence = gsub("-", "+", Barcode_sequence)) %>%
+  merge(quality_metrics, by = c("lane", "sample_id"), all = TRUE)
+
+# SampleSheet.csv loading
+sample_sheet <- load_sample_sheet(samplesheet_fp)
+
+sample_sheet_lengths <- data.frame(X1 = unlist(sample_sheet$Reads)) %>%
+  filter(grepl("Read1Cycles|Index1Cycles", X1)) %>%
+  mutate(X1 = gsub(".*,", "", X1)) %>%
+  pull() %>%
+  as.numeric()
+
+read_length <- sample_sheet_lengths[1]
+index_length <- sample_sheet_lengths[2]
+
+samp_sh_header <- data.frame(X1 = unlist(sample_sheet$Header)) %>%
+  mutate(col_names = gsub(",.*", "", X1)) %>%
+  mutate(col_names = gsub(" ", "_", col_names)) %>%
+  mutate(X1 = gsub(".*,", "", X1)) %>%
+  pivot_wider(names_from = "col_names", values_from = "X1")
+
+samp_reads <- data.frame(X1 = unlist(sample_sheet$BCLConvert_Data), stringsAsFactors = FALSE) %>%
+  #split each line into columns using row 1 as the column names
+  separate(col = "X1", strsplit(as.character(slice(., 1)), ",")[[1]], sep = ",") %>%
+  slice(-1) %>%
+  rename(sample_id = "Sample_ID") %>%
+  mutate(sample_id = gsub("_", "-", sample_id)) %>%
+  mutate(Barcode_sequence = paste0(index, "+", index2)) %>%
+  merge(fastq_sum, by = c("sample_id", "Barcode_sequence", "index", "index2"), all = TRUE)
+
+top_unkwn_indices <- read_delim(top_unkwn_fp) %>%
+  rename_all(.funs = tolower) %>%
+  rename_all(.funs = function(x) gsub("# ", "", x)) %>%
+  rename_all(.funs = function(x) gsub("% ", "percent_", x)) %>%
+  rename_all(.funs = function(x) gsub(" ", "_", x)) %>%
+  mutate(Barcode_sequence = paste0(index, "+", index2)) %>%
+  #get the minimum distance to the barcode sequences used for demultiplexing
+  #levenshtein distance is useful for accounting for insertions and deletions between strings, but not needed in this case to determine barcode distances
+  mutate(min_dist = sapply(Barcode_sequence,
+                           function(x) min(stringdist(x, b = samp_reads$Barcode_sequence[!is.na(samp_reads$Barcode_sequence)], method = "hamming")))) %>%
+  rename(read_counts = "reads") %>%
+  order_on_other_col(Barcode_sequence, read_counts) %>%
+  droplevels()
+
+#throw error if the top unknown index is greater than 0.5% percent of all reads
+if(max(top_unkwn_indices$percent_of_all_reads) > 0.005) {
+  stop(simpleError("Top unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode"))
+}
+
+#throw error if Undetermined sample has more reads than the median
+if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] > median(samp_reads$read_counts)) {
+  stop(simpleError("Undetermined sample has more reads than the median. Double check the sample barcodes"))
+}
+
+```
+
+```{r demux check}
+
+
+
 # dragen_metadata_fp <- here("data", paste0(sequencing_date, "_bs_metadata.csv"))
 # 
 # run_dragen_app <- !file.exists(dragen_metadata_fp)
+
 
 ```
 
@@ -355,33 +337,93 @@ PHI_file_fp <- list.files(here("metadata"), pattern = "_PHI.csv", full.names = T
 
 ```
 
-```{r aligned fastq and depth files, eval = import_data}
+```{r load fastqc files if doing fastqc from demux, eval = import_data}
 
-#copy aligned fastq files for SRA submission
-filtered_fqs <- list.files(here("data", "processed_cecret", "filter"), pattern = ".R[12].fastq.gz", recursive = TRUE, full.names = TRUE)
+fastqc_fps <- list.files(here("data", "processed_demux", run_folder_name), pattern = "fastqc_data.txt", recursive = TRUE, full.names = TRUE)
 
-#copy aligned fastq files for SRA submission
+fastqc <- lapply(fastqc_fps, function(f) {
+  #skip the first 13 lines, assuming the fastqc_data file format does not change
+  read_qc <- read_tsv(f, skip = 12, n_max = read_length)
+  read_qc$sample_id <- gsub(".*/|_S[0-9]*_L00[0-9]*_R[12].*", "", f)
+  read_qc$direction <- gsub(".*(R[12]).*", "\\1", f)
+  return(read_qc)
+  }) %>%
+  do.call("rbind", .) %>%
+  rename(position = "#Base")
+
+length_check <- fastqc %>%
+  group_by(sample_id, direction) %>%
+  summarize(max_length = max(position)) %>%
+  ungroup() %>%
+  select(max_length) %>%
+  pull()
+
+#throw error if fastqc does not have the max read length
+if(!all(length_check == read_length)) {
+  stop(simpleError(paste0("Some samples did not have reads up to ", read_length, " bp")))
+}
+
+```
+
+```{r unzip and load fastqc files if doing fastqc from cecret, eval = FALSE}
+
+#find all zipped files
+zip_fps <- list.files(here("data", "processed_cecret", "fastqc"), pattern = ".zip", recursive = TRUE, full.names = TRUE)
+
+#extract fastqc  files
+invisible(sapply(zip_fps, function(x) unzip(x,
+                                            exdir = here("data", "processed_cecret", "fastqc"),
+                                            files = as.character(paste0(gsub(".*/|.zip$", "", x), "/fastqc_data.txt")))))
+
+fastqc_fps <- list.files(here("data", "processed_cecret", "fastqc"), pattern = "fastqc_data.txt", recursive = TRUE, full.names = TRUE)
+
+#try to calculate the amount of lines to read, based on the sequence read length
+num_lines <- ceiling((read_length-10)/2+10)
+
+fastqc <- lapply(fastqc_fps, function(f) {
+  #skip the first 13 lines, assuming the fastqc_data file format does not change
+  read_qc <- read_tsv(f, skip = 13, n_max = num_lines)
+  read_qc$sample_read <- gsub(".*/fastqc/|/.*", "", f)
+  return(read_qc)
+  }) %>%
+  do.call("rbind", .)
+
+#throw error if Undetermined sample has more reads than the median
+if(TRUE) {
+  stop(simpleError(paste0("Some samples did not have fastqc scores up to the max read length of ", read_length, " bp")))
+}
+
+#TODO: make a check for read_length
+throw error if not enough reads or low Q30 scores
+```
+
+```{r load aligned fastq, and depth files, eval = import_data}
+
+#fastq files for SRA submission
+fastq_fps <- list.files(here("data", "processed_cecret", "filter"), pattern = ".R[12].fastq.gz", recursive = TRUE, full.names = TRUE)
+
+#consensus fasta files for GenBank submission
+fasta_fps <- list.files(here("data", "processed_cecret", "consensus"), pattern = ".consensus.fa", recursive = TRUE, full.names = TRUE)
+
+filtered_fas <- list.files(here("data", "processed_cecret", "filter"), pattern = ".R[12].fastq.gz", recursive = TRUE, full.names = TRUE)
+
+#coverage depth files
 depth_fps <- list.files(here("data", "processed_cecret", "samtools_depth"), pattern = ".depth.txt", recursive = TRUE, full.names = TRUE)
 
 ```
 
 ```{r load coverage results, eval = import_data}
 
-#this bed file can only be found in the zipped output files
-cov_files_fps <- list.files(here("data", "processed_bs", "consensus"), pattern = "consensus_coverage_from_", recursive = TRUE, full.names = TRUE)
-
-coverage <- cov_files_fps %>%
+coverage <- depth_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
   do(read_delim(.$FileName, col_names = FALSE)) %>%
   ungroup() %>%
-  filter(X1 == "NC_045512.2") %>%
-  #get column 3 if its a tsv, otherwise get column 4
-  mutate(map_per_position = ifelse(grepl("tsv$", FileName), X3, X4)) %>%
-  rename(position = "X2") %>%
+  filter(X1 == "MN908947.3") %>%
+  rename(position = "X2", map_per_position = "X3") %>%
   select(FileName, map_per_position, position) %>%
-  mutate(sample_id = gsub(".*/", "", FileName)) %>%
-  mutate(sample_id = gsub("\\.consensus.*", "", sample_id)) %>%
+  mutate(sample_id = gsub(".*/", "", FileName),
+         sample_id = gsub("\\.depth.txt", "", sample_id)) %>%
   select(-c(FileName))
 
 slide_window_coverage <- coverage %>%

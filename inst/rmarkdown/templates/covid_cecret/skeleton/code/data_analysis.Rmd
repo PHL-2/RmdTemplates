@@ -60,29 +60,35 @@ s %>%
 
 # FASTQ generation, demultiplexing, and quality control
 
-## GenerateFASTQ
+## BCLConvert
 
-The MiSeq machine uses the GenerateFASTQ workflow to demultiplex the samples and generate FASTQ files from BCL files (raw data files that contain sequence information and quality scores). `r workflow_name` version `r gen_fq_version` was used to generate the FASTQ files
+`r samp_sh_header$Workflow` version `r demux_software_v["bclconvert"]` was used to generate and demultiplex sample FASTQ files from the sequencing run BCL files (raw data files that contain sequence information and quality scores). This program was initiated with the nf-core/demultiplex pipeline version `r demux_software_v["nf-core-demultuplex"]`, using Nextflow version `r demux_software_v["Nextflow"]`
 
 ## Number of read pairs per sample after demultiplexing
 
-Samples were sequenced on the `r unique(s_toPlot$instrument_type)` as a `r paste0(unlist(sample_sheet$Reads), collapse = ":")` length run and demultiplexed on BaseSpace by the GenerateFASTQ module. The demultiplexing step involves matching the IDT barcode sequence associated with each sample to the index sequence of each read
+Samples were sequenced on the `r unique(s_toPlot$instrument_type)` as a `r paste0(read_length, ":", read_length)` length run. The demultiplexing step involves matching the IDT barcode sequence associated with each sample to the index sequence of length `r index_length` in each read
 
-### Number of samples and their pass filter percentages
+### Pre-process FastQC
 
-```{r percent of reads that passed filter, echo=FALSE}
-s %>%
-  mutate(pf_percent=read_counts/total_raw_reads) %>%
-  ggplot(aes(x=pf_percent, fill = sample_type)) +
-    geom_histogram(binwidth=0.1, boundary=TRUE, color = "white") +
-    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
-    scale_x_continuous(labels = scales::percent) +
+Demultiplexed FASTQ files were processed with FALCO version `r demux_software_v["falco"]` to obtain FASTQC scores of the reads
+
+```{r fastqc, echo=FALSE}
+
+fastqc %>%
+  group_by(direction, position) %>%
+  summarize(MeanQual = mean(Mean), SdQual = sd(Mean)) %>%
+  mutate(LowQual = MeanQual - SdQual,
+         HighQual = MeanQual + SdQual) %>%
+  ungroup() %>%
+  ggplot(aes(x=position, y=MeanQual)) + 
+    geom_errorbar(aes(ymin=LowQual, ymax=HighQual)) +
+    facet_wrap( ~ direction) +
+    #facet_wrap(sample_type ~ direction) +
+    geom_line() +
+    geom_point() +
     theme_bw() + 
-    theme(panel.grid = element_blank()) +
-    labs(
-      x="Percent of reads that passed filter",
-      y="Number of samples", fill = "Sample Type"
-    )
+    labs(x='Position in sequence read', y='Average quality score per sample type')
+
 ```
 
 ### Distributions of reads across all samples
@@ -185,11 +191,35 @@ s %>%
 
 ```
 
-## Top 10 unassigned indices
+## Unassigned indices
 
-```{r unassigned indices}
+### Unassigned index Hamming distances to sample barcodes
+
+```{r unassigned hist}
 
 top_unkwn_indices %>%
+  {
+  ggplot(., aes(x=min_dist)) +
+    geom_histogram(binwidth = 1, center = 0) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    scale_x_continuous(limits = c(0, max(.$min_dist) + 1),
+                       breaks = scales::breaks_pretty(max(.$min_dist))) +
+    labs(
+      x="Hamming distance",
+      y="Counts"
+    )
+  }
+
+```
+
+### Top 10 sequences
+
+```{r top unassigned indices}
+
+top_unkwn_indices %>%
+  slice(1:10) %>%
+  droplevels() %>%
   ggplot(aes(y=fct_rev(index_sequence), x=number_of_reads)) +
   geom_col() +
   theme_bw() +
