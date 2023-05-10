@@ -55,9 +55,8 @@ if (sum(d_pre$Droplet_count<10000) > 0) {
   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
   }
 
-if (sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1, na.rm = T) > 0 & sum(d_sd$outlier_median > 5, na.rm = T) > 0) {
+if ((sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1, na.rm = T) > 0) | sum(d_sd$outlier_median > 5, na.rm = T) > 0) {
   print("Detected high variation; please check samples")
-
   }
 
 ```
@@ -116,11 +115,11 @@ if (sum(d_pre$Droplet_count<10000) > 0) {
 
 ```{r variance check}
 
-if (sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1.00, na.rm = T) > 0 & sum(d_sd$outlier_median > 5, na.rm = T) > 0) {
+if ((sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1.00, na.rm = T) > 0) | sum(d_sd$outlier_median > 5, na.rm = T) > 0) {
   print("Detected high variation; please check samples")
   var_pander <- d_sd %>%
-    select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, quant25, quant75, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median) %>%
-    filter(cv_conc>30 & sd_from_mean > 1 & MAD_from_med > 5) %>%
+    select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median) %>%
+    filter(cv_conc>30 & sd_from_mean > 1 | MAD_from_med > 5) %>%
     arrange(Type, Target) %>%
     distinct()
 
@@ -147,6 +146,7 @@ d %>%
   #filter(Spiked == "Spiked") %>%
   ggplot(aes(x=Well, y=percentage_positive, fill = Process)) +
   geom_col(position = "dodge") +
+  scale_fill_manual(values = c("orange", "purple", "dodgerblue2")) +
   facet_wrap(Sample_date ~ Type, scales = "free_x") +
   theme_light() +
   theme(
@@ -179,6 +179,7 @@ d %>%
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
   theme_light() +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme(
     axis.text.x = element_text(angle = 45,
                                vjust = 0.95,
@@ -201,6 +202,7 @@ d %>%
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(. ~ Process, scales = "free_x") +
   theme_light() +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme(
     axis.text.x = element_text(angle = 45,
                                vjust = 0.95,
@@ -234,6 +236,7 @@ dControls %>%
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
   theme_light() +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   labs(
     title = "Number of droplets positive in positive and negative controls",
     y = "Number of Positive droplets",
@@ -251,6 +254,7 @@ dControls %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
     title = "Percentage of droplets positive in positive and negative controls",
@@ -274,6 +278,7 @@ dControls %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
     title = "Number of droplets positive in ddPCR controls",
@@ -291,6 +296,7 @@ dControls %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
     title = "Percentage of droplets positive in ddPCR controls",
@@ -322,19 +328,6 @@ extraction output volume = 500 uL
 
 extraction input volume = 9600 uL
 
-```{r Detection threshold based on negative controls}
-
-
-
-
-# threshold %>%
-#   ungroup() %>%
-#   select(-Process) %>%
-#   pander(digits = 10, round = 2, split.table = 500)
-
-```
-
-
 # Results
 
 ## Natural MHV in wastewater
@@ -350,6 +343,7 @@ dUnspiked %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Type, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
     title = "Number of positive droplets in unspiked wastewater samples",
@@ -366,6 +360,7 @@ dUnspiked %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Type, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
     title = "Percent of positive droplets in unspiked wastewater samples",
@@ -391,6 +386,7 @@ d %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   theme(
     axis.text.x = element_text(angle = 45,
@@ -414,6 +410,7 @@ d %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   theme(
     axis.text.x = element_text(angle = 45,
@@ -425,6 +422,7 @@ d %>%
     y = "Percentage of Positive droplets",
     x = "Samples"
   )
+
 ```
 
 ### Without MHV signal
@@ -443,6 +441,7 @@ d %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "dodgerblue2")) +
   theme_light() +
   theme(
     axis.text.x = element_text(angle = 45,
@@ -468,6 +467,7 @@ d %>%
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
   theme_light() +
+  scale_fill_manual(values = c("firebrick1", "dodgerblue2")) +
   theme(
     axis.text.x = element_text(angle = 45,
                                vjust = 0.95,
@@ -478,60 +478,6 @@ d %>%
     y = "Percentage of Positive droplets",
     x = "Samples"
   )
-
-# dSamples %>%
-# filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-#        grepl(pattern = "concentrated", x = Process, ignore.case = T),
-#        Spiked == "Spiked") %>%
-#   ggplot(aes(x=Process, y=avg_pos_droplets, fill = Target)) +
-#   geom_col(position = "dodge") +
-#   facet_grid(Type ~ Sample_date, scales = "free_x") +
-#   theme_light() +
-#   labs(
-#     title = "Average number of droplets positive in wastewater samples",
-#     y = "Number of Positive droplets",
-#     x = "Samples"
-#   )
-
-
-# dSamples %>%
-#   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-#          grepl(pattern = "concentrated", x = Process, ignore.case = T),
-#          Spiked == "Spiked") %>%
-#   ggplot(aes(x=Process, y=avg_conc, fill = Target)) +
-#   geom_col(position = "dodge") +
-#   facet_grid(Type ~ Sample_date, scales = "free_x") +
-#   theme_light() +
-#   labs(
-#     title = "Average concentration of virus in ddPCR reaction",
-#     y = "Average concentration\n(Genome copies / uL)",
-#     x = "Samples"
-#   )
-
-# ymax_droplets <- dSamples %>%
-#   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-#          Spiked == "Spiked",
-#          grepl(pattern = "concentrated", x = Process, ignore.case = T)) %>%
-#   filter(Target == "N2" | Target == "E") %>%
-#   pull(avg_pos_droplets) %>%
-#   max()
-# 
-# dSamples %>%
-#   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-#          Spiked == "Spiked",
-#          grepl(pattern = "concentrated", x = Process, ignore.case = T)) %>%
-#   mutate(avg_pos_droplets = ifelse(avg_pos_droplets>ymax_droplets, ymax_droplets*1.5, avg_pos_droplets)) %>%
-#   ggplot(aes(x=Process, y=avg_pos_droplets, fill = Target)) +
-#   geom_col(position = "dodge") +
-#   scale_y_continuous(limits = c(0, ymax_droplets*1.5)) +
-#   facet_grid(Type ~ Sample_date, scales = "free_x") +
-#   theme_light() +
-#   labs(
-#     title = "Average number of droplets positive in wastewater samples",
-#     subtitle = paste0("Y axis maxed to ", ymax_droplets*1.5, " based on sample E and N2 genes"),
-#     y = "Number of Positive droplets",
-#     x = "Samples"
-#   )
 
 
 
