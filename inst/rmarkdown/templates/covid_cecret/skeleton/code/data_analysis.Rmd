@@ -1,0 +1,918 @@
+
+<!-- QC section -->
+
+```{r primer check}
+
+#check primer input
+
+if (is.na(primer_select) | is.na(artic_primer_scheme)) {
+  stop (simpleError("Please set the [primer_select] variable in the preamble as an integer from 1 to 4 according to the ARTIC primer scheme used for the library generation\n1: V3\n2: V4\n3: V4.1\n4:V5.3.2 (Experimental)"))
+}
+
+```
+
+```{r samples check}
+
+### possible issue 1: Samples found in the sample sheet but not in the results csv
+
+s_missing <- s %>%
+  filter(!sample_id %in% unique(bs_results$sample_id)) %>%
+  select(sample_id, sample_type, isControl) %>%
+  filter(sample_id != "None")
+
+if (any(!s_missing$isControl)) {
+  pander(filter(s_missing, !isControl), caption="These samples were in the sample sheet but had no results.")
+  #stop (simpleError("Please fix"))
+}
+
+```
+
+```{r Samples error check 2}
+
+### possible issue 2: Samples found in the results csv but not in the sample sheet. There must be an error!
+
+in_results_not_in_s <- setdiff(unique(bs_results$sample_id), s$sample_id)
+if (length(in_results_not_in_s) > 0) {
+  stop (simpleError("These SampleID(s) are in the results csv, but not found in the sample sheet.", paste(in_results_not_in_s, collapse=" ")))
+}
+```
+
+# Introduction
+
+This report summarizes the results of `r nrow(s)-1` COVID samples sequenced on `r samp_sh_header$Date` and analyzed with BaseSpace DRAGEN Lineage App version `r dragen_covid_lineage_version` on `r date_pipeline_was_run`. The results section contains lineage information using the pangolin software version `r pangolin_software_version` (https://cov-lineages.org/resources/pangolin.html) and Nextclade version `r nextclade_version` (https://clades.nextstrain.org/). Samples were amplified with the `r artic_primer_scheme` primer scheme 
+
+# Number of samples sequenced
+
+```{r samples sequenced}
+
+s %>%
+  filter(sample_type != "Unassigned reads") %>%
+  droplevels() %>%
+  group_by(sample_type) %>%
+  summarize(num = n()) %>%
+  ungroup() %>%
+  rename(`Sample Type` = "sample_type", n = "num") %>%
+  {if(use_kable) kable_style(.) else pander(.)}
+
+```
+
+\newpage
+
+# FASTQ generation, demultiplexing, and quality control
+
+## BCLConvert
+
+`r samp_sh_header$Workflow` version `r demux_software_v["bclconvert"]` was used to generate and demultiplex sample FASTQ files from the sequencing run BCL files (raw data files that contain sequence information and quality scores). This program was initiated with the nf-core/demultiplex pipeline version `r demux_software_v["nf-core-demultuplex"]`, using Nextflow version `r demux_software_v["Nextflow"]`
+
+## Number of read pairs per sample after demultiplexing
+
+Samples were sequenced on the `r unique(s_toPlot$instrument_type)` as a `r paste0(read_length, ":", read_length)` length run. The demultiplexing step involves matching the IDT barcode sequence associated with each sample to the index sequence of length `r index_length` in each read
+
+### Pre-process FastQC
+
+Demultiplexed FASTQ files were processed with FALCO version `r demux_software_v["falco"]` to obtain FASTQC scores of the reads
+
+```{r fastqc, echo=FALSE}
+
+fastqc %>%
+  group_by(direction, position) %>%
+  summarize(MeanQual = mean(Mean), SdQual = sd(Mean)) %>%
+  mutate(LowQual = MeanQual - SdQual,
+         HighQual = MeanQual + SdQual) %>%
+  ungroup() %>%
+  ggplot(aes(x=position, y=MeanQual)) + 
+    geom_errorbar(aes(ymin=LowQual, ymax=HighQual)) +
+    facet_wrap( ~ direction) +
+    #facet_wrap(sample_type ~ direction) +
+    geom_line() +
+    geom_point() +
+    theme_bw() + 
+    labs(x='Position in sequence read', y='Average quality score per sample type')
+
+```
+
+### Distributions of reads across all samples
+
+```{r reads_histogram, echo=FALSE}
+s %>%
+  mutate(num_seq=read_counts/1000000) %>%
+  # remove reads that did not get assigned
+  ggplot(aes(x=num_seq, fill = sample_type)) +
+    geom_histogram(binwidth=0.1, boundary=TRUE, color = "white") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    theme(panel.grid = element_blank()) +
+    labs(
+      x="Number of read pairs in sample (millions, M)",
+      y="Number of samples",
+      fill = "Sample Type",
+      title = paste0("Total number of reads from run: ", round(sum(s$read_counts)/1000000, digits = 2), "M")
+    )
+```
+
+### Number of reads per sample type
+
+```{r reads per sample type}
+
+s %>%
+  ggplot(aes(y=read_counts, x=sample_type, fill = sample_type)) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_point(aes(size = sample_type), shape = 21, position = position_jitter(width = 0.2)) +
+    scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_size_manual(values = ann_geom_values$sample_type_sizes[match(levels(s$sample_type), names(ann_geom_values$sample_type_sizes))]) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(),
+          axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)) +
+    labs(
+      y="Read counts",
+      x="", fill = "Sample Type", size = "Sample Type"
+    )
+
+```
+
+\blandscape
+
+### Number of reads per control
+
+```{r reads per control, fig.height=6, fig.width=10}
+
+s %>%
+  filter(isControl) %>%
+  mutate(environmental_site = ifelse(is.na(environmental_site), "", environmental_site)) %>%
+  order_on_other_col(environmental_site, read_counts) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=read_counts, y=environmental_site, fill = sample_type)) +
+    geom_col() +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    facet_grid(sample_type~., scales = "free", space = "free") +
+    scale_x_continuous(labels = scales::label_comma()) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(),
+          axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5),
+          strip.background = element_blank(),
+          strip.text = element_blank()) +
+    labs(
+      x="Read counts",
+      y="", fill = "Sample Type"
+    )
+  }
+
+```
+
+\elandscape
+
+### Percentage of reads that make up the lane
+
+```{r percent reads of lane, echo=FALSE}
+s %>%
+  mutate(percent_of_lane = read_counts/sum(read_counts)) %>%
+  group_by(sample_type) %>%
+  mutate(tot_percent = sum(percent_of_lane)) %>%
+  ungroup() %>%
+  order_on_other_col(sample_type, tot_percent, decreasing = FALSE) %>%
+  order_on_other_col(sample_id, percent_of_lane) %>%
+  arrange(sample_id) %>%
+  {
+  ggplot(., aes(x = "", y = percent_of_lane, fill=sample_type)) +
+    geom_col(color = "white") +
+    scale_y_continuous(labels = scales::percent) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          axis.ticks.x.bottom = element_blank()) +
+    labs(
+      x="",
+      y="Percent of assigned reads by sample type",
+      fill = "Sample Type"
+    )
+  }
+
+```
+
+## Unassigned indices
+
+### Unassigned index Hamming distances to sample barcodes
+
+```{r unassigned hist}
+
+top_unkwn_indices %>%
+  {
+  ggplot(., aes(x=min_dist)) +
+    geom_histogram(binwidth = 1, center = 0) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    scale_x_continuous(limits = c(0, max(.$min_dist) + 1),
+                       breaks = scales::breaks_pretty(max(.$min_dist))) +
+    labs(
+      x="Hamming distance",
+      y="Counts"
+    )
+  }
+
+```
+
+### Top 10 sequences
+
+```{r top unassigned indices}
+
+top_unkwn_indices %>%
+  slice(1:10) %>%
+  droplevels() %>%
+  ggplot(aes(y=fct_rev(index_sequence), x=number_of_reads)) +
+  geom_col() +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  labs(
+      x="Number of reads",
+      y="Unassigned index sequences"
+  )
+
+```
+
+These are the adapters: \newline
+`r paste0(gsub(",", ": ", unlist(sample_sheet$Settings)), collapse = "\n")`
+
+\blandscape
+
+## Read counts and the DNA concentration/viral values of each sample
+
+```{r reads and CT, fig.width=10, fig.height=5, eval = has_CT}
+
+s %>%
+  filter(!is.na(CT)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = CT, y = read_counts, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    scale_y_continuous(trans = "log10") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(y = "Read Counts", x = "CT value", fill = "Sample type")
+  }
+
+```
+
+```{r reads and RLU, fig.width=10, fig.height=5, eval = has_RLU}
+
+s %>%
+  filter(!is.na(RLU)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = RLU, y = read_counts, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    scale_y_continuous(trans = "log10") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(y = "Read Counts", x = "RLU value", fill = "Sample type")
+  }
+
+```
+
+```{r reads and DNA, fig.width=10, fig.height=5}
+
+s %>%
+  filter(!is.na(qubit_conc_ng_ul)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = qubit_conc_ng_ul, y = read_counts, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    scale_y_continuous(trans = "log10") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(y = "Read Counts", x = "DNA conc (ng/uL)", fill = "Sample type")
+  }
+
+```
+
+```{r CT and DNA, fig.width=10, fig.height=5, eval = has_CT}
+
+s %>%
+  filter(!is.na(CT)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = CT, y = qubit_conc_ng_ul, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(x = "CT value", y = "DNA conc (ng/uL)", fill = "Sample type")
+  }
+
+```
+
+```{r RLU and DNA, fig.width=10, fig.height=5, eval = has_RLU}
+
+s %>%
+  filter(!is.na(RLU)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = RLU, y = qubit_conc_ng_ul, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(x = "RLU value", y = "DNA conc (ng/uL)", fill = "Sample type")
+  }
+
+```
+
+\newpage
+
+## DNA concentration and read counts values per plate
+
+The samples are processed on a 96-well plate. These figures illustrate the viral values, DNA concentration, and read counts of each sample on a well. Wells without any samples are white while samples with low values begin with dark blue. 
+
+```{r CT on plate, eval = has_CT}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  droplevels() %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = CT)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 10) +
+    facet_wrap(~plate, ncol = 1) +
+    #if there is no covid quantity values, use the discrete fill
+    {
+      if(all(is.na(s$CT))) scale_fill_viridis_d(na.value = "white")
+      else scale_fill_viridis_c(na.value = "white")
+    } +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill="CT values"
+    )
+
+```
+
+```{r RLU on plate, eval = has_RLU}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  droplevels() %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = RLU)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 10) +
+    facet_wrap(~plate, ncol = 1) +
+    #if there is no covid quantity values, use the discrete fill
+    {
+      if(all(is.na(s$RLU))) scale_fill_viridis_d(na.value = "white")
+      else scale_fill_viridis_c(na.value = "white")
+    } +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill="RLU values"
+    )
+
+```
+
+```{r DNA on plate}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  droplevels() %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = qubit_conc_ng_ul)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 10) +
+    facet_wrap(~plate, ncol = 1) +
+    #if there is no DNA concentration, use the discrete fill
+    {
+      if(all(is.na(s$qubit_conc_ng_ul))) scale_fill_viridis_d(na.value = "white")
+      else scale_fill_viridis_c(na.value = "white")
+    } +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill="DNA\nconcentration\n(ng/ul)"
+    )
+```
+
+```{r reads on plate}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  droplevels() %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  ggplot(aes(x=plate_col, y=fct_rev(plate_row), fill = read_counts)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 10) +
+    facet_wrap(~plate, ncol = 1) +
+    scale_fill_viridis_c(na.value = "white") +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill="Raw\nread\ncounts"
+    )
+```
+
+\elandscape
+
+# Results section
+
+DRAGEN COVID Lineage App (on BaseSpace cloud) version `r dragen_covid_lineage_version` \newline
+Lineage assignment software and version `r lineage_assignment_software_version` \newline
+Scorpio software version `r scorpio_software_version` \newline
+Constellation database version `r constellation_version`
+
+## Coverage
+
+### Median coverage
+
+```{r coverage results}
+
+s %>%
+  filter(!is.na(median_coverage)) %>%
+  droplevels() %>%
+  select(sample_type, median_coverage, pct_genome_coverage_over_30x) %>%
+  {
+  ggplot(., aes(x = median_coverage, y = pct_genome_coverage_over_30x, fill = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    scale_y_continuous(labels=scales:::percent) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+      theme_classic() +
+      theme(
+        strip.background = element_rect(color = "white", size = 50)
+        ) +
+      labs(x="Median coverage", y="Percentage of genome\nwith >= 30X coverage", fill="Sample Type")
+  }
+
+```
+
+\blandscape
+
+### SARS-CoV-2 genome coverage
+
+```{r lower coverage results, fig.width=11}
+
+s %>%
+  select(sample_id, sample_type, matches("pct_genome_coverage_over")) %>%
+  pivot_longer(cols = matches("pct_genome_coverage_over"), names_to = "depth", values_to = "pct_coverage") %>%
+  filter(!is.na(pct_coverage)) %>%
+  mutate(depth = as.numeric(gsub(".*_|.$", "", depth))) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = depth, y = pct_coverage, fill = sample_type, group = sample_id)) +
+    geom_line(aes(color = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    scale_y_continuous(labels=scales:::percent) +
+    facet_wrap(~sample_type, nrow = 1) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      legend.position = "none",
+      aspect.ratio = 1
+      ) +
+    labs(x="Coverage depth (X)", y="Percentage genome coverage", fill="Sample Type", color = "Sample Type")
+  }
+
+```
+
+### Sliding window coverage (100 bp)
+
+```{r slide window results, fig.width=11, fig.height=8}
+
+knitr::include_graphics(here("data", paste0(sequencing_date, "_sliding_coverage_100_bp.png")))
+
+```
+
+\elandscape
+
+<!-- Analysis section -->
+
+### Kmer results (number of unique SARS-CoV-2 fragments detected)
+
+```{r kmer numbers}
+
+s %>%
+  ggplot(aes(x=`SARS-CoV-2`, y = `SARS-CoV-2 Unique kmers detected`, fill = sample_type)) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_point(aes(size = sample_type), position = position_jitterdodge(), shape = 21) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_size_manual(values = ann_geom_values$sample_type_sizes[match(levels(s$sample_type), names(ann_geom_values$sample_type_sizes))]) +
+    theme_bw() + 
+    theme(panel.grid = element_blank()) +
+    labs(
+      x="COVID detection",
+      y="SARS-CoV-2\nkmer counts", fill = "Sample Type", size = "Sample Type"
+    )
+
+```
+
+### Kmer results (percentage of reference SARS-CoV-2 fragments detected)
+
+```{r COVID detection}
+
+s %>%
+  ggplot(aes(x=`SARS-CoV-2 Fraction kmers detected`, fill = sample_type)) +
+    geom_histogram(binwidth=0.1, boundary=TRUE, color = "white") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_x_continuous(labels=scales:::percent) +
+    theme_bw() + 
+    theme(panel.grid = element_blank()) +
+    labs(
+      x="Percent of SARS-CoV-2\nfragments detected",
+      y="Number of samples", fill = "Sample Type"
+    )
+
+```
+
+
+## Pangolin Lineage Results
+
+### Variant assignments from pangolin
+
+```{r variant assignments, fig.height=9, fig.width=7}
+
+s_toPlot %>%
+  select(sample_id, lineage, sample_type) %>%
+  group_by(sample_type) %>%
+  mutate(fraction = 1/n()) %>%
+  ungroup() %>%
+  mutate(variants = fct_lump(lineage, 20, w = fraction)) %>% 
+  select(-lineage) %>%
+  group_by(sample_type, variants) %>%
+  summarize(props = sum(fraction)) %>%
+  ungroup() %>%
+  mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=sample_type, y=props, fill=variants)) +
+    geom_bar(stat="identity", position = position_fill(reverse = FALSE)) +
+    facet_grid(.~sample_type, space="free", scales="free",
+               labeller = labeller(.default = function(x) {gsub(" ", "\n", x)}, .multi_line = FALSE)) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))]) +
+    scale_y_continuous(limits = c(0,1), expand=c(0,0), labels=scales:::percent) +
+    theme_classic() +
+    theme(
+      strip.background = element_rect(color = "white", size = 50),
+      strip.text = element_text(size = 12),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.title = element_text(hjust = 0.5)
+      ) +
+    labs(x="", y="Relative abundance", title = "Sample type", fill="Variants") +
+  who_legend
+  }
+
+```
+
+\newpage
+
+### Figure showing different pUSHER placements
+
+```{r multiple variant assignments, fig.height=9, fig.width=8}
+
+s_toPlot %>%
+  select(sample_id, note, sample_type, nc_qc_status) %>%
+  #remove "Usher placements" text in the front of note and scorpio notes
+  mutate(note = gsub("^.*: |; scorpio.*", "", note)) %>%
+  filter(note != "Assigned from designation hash.") %>%
+  #split note into two variant columns by the space
+  separate(note, into = c("variant1", "variant2"), sep = " ", extra = "merge") %>%
+  mutate(variant1_prop = gsub(".*\\(|\\)", "", variant1)) %>%
+  #if the notes say assigned, it means that PANGO software was used and found an exact match of the sequence to a representative lineage
+  mutate(variant1_prop = gsub("Assigned from designation hash.", "1", variant1_prop)) %>%
+  mutate(variant1_prop = unlist(lapply(variant1_prop, function(x) eval(parse(text=x))))) %>%
+  mutate(variant2_prop = gsub(".*\\(|\\)", "", variant2)) %>%
+  mutate(variant2_prop = unlist(lapply(variant2_prop, function(x) eval(parse(text=x))))) %>%
+  pivot_longer(cols = c("variant1_prop", "variant2_prop"), names_to = "variant_num", values_to = "props") %>%
+  mutate(variants = case_when(variant_num == "variant1_prop" ~ gsub("\\(.*", "", variant1),
+                             variant_num == "variant2_prop" ~ gsub("\\(.*", "", variant2),
+                             TRUE ~ NA_character_)) %>%
+  filter(!is.na(props)) %>%
+  mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
+  mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
+  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=props, y=sample_id, fill=variants)) +
+    geom_bar(stat="identity", position = position_fill(reverse = TRUE)) +
+    facet_grid(nc_qc_status+sample_type~., space="free", scales="free",
+               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))]) +
+    scale_x_continuous(limits = c(0,1), expand=c(0,0), labels=scales:::percent) +
+    theme_classic() +
+    theme(
+      strip.background = element_blank(),
+      strip.text.y = element_text(angle = 0, size = 6)
+      ) +
+    labs(y="", x="Relative abundance", fill="Variants") +
+  who_legend
+  }
+
+```
+
+\newpage
+
+### Figure showing conflicting variant assignments from pangolin and nextclade
+Stars in boxes mean that the variants/sub-variants from different software agree
+
+```{r conflicting assignments, fig.height=9, fig.width=8}
+
+s_toPlot %>%
+  select(sample_id, lineage, Nextclade_pango, sample_type, nc_qc_status) %>%
+  rename(Pangolin = "lineage", NextClade = "Nextclade_pango") %>%
+  rowwise() %>%
+  mutate(pn = grepl(Pangolin, NextClade) | grepl(NextClade, Pangolin)) %>%
+  mutate(pn = ifelse(is.na(pn), FALSE, pn)) %>%
+  pivot_longer(cols = c("Pangolin", "NextClade"), names_to = "software", values_to = "variants") %>%
+  mutate(uniq = case_when(pn & grepl("Pangolin|NextClade", software) ~ "*",
+                          TRUE ~ "")) %>%
+  mutate(software = factor(software, levels = c("Pangolin", "NextClade"))) %>%
+  mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
+  mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
+  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=software, y=sample_id, fill=variants, label=uniq)) +
+    geom_tile(stat="identity") +
+    geom_text() +
+    facet_grid(nc_qc_status+sample_type~., space="free", scales="free",
+               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))]) +
+    theme_classic() +
+    theme(
+      strip.background = element_blank(),
+      strip.text.y = element_text(angle = 0, size = 6),
+      axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)
+      ) +
+    labs(y="", x="Software used to determine variants", fill="Variants") +
+  who_legend
+  }
+
+```
+
+\blandscape
+
+### Plateview of results
+
+```{r pangolin plate, fig.width=11, fig.height=7}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  mutate(lineage = factor(lineage, levels = names(ann_geom_values$variants))) %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = lineage, label = lineage)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 16) +
+    geom_text(check_overlap = TRUE, size = 3, color = "white") +
+    facet_wrap(~plate, ncol = 1) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$lineage), names(ann_geom_values$variants))]) +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill = "Variants"
+    ) +
+    guides(fill = guide_legend(override.aes = list(size = 8)))  
+  }
+
+```
+
+```{r nc plate, fig.width=11, fig.height=7}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  mutate(sample_type = gsub(" - No Variant.*|Mock DNA ", "", sample_type)) %>%
+  mutate(sample_type = gsub(" ", "\n", sample_type)) %>%
+  mutate(sample_type = gsub("Environmental", "Environ", sample_type)) %>%
+  filter(!is.na(plate_coord)) %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  droplevels() %>%
+  mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
+  {
+  ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = nc_qc_status, label = sample_type)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 16) +
+    geom_text(check_overlap = TRUE, size = 3, color = "black") +
+    scale_fill_manual(values = ann_geom_values$nc_qc) +
+    #facet_wrap(~plate, ncol = 1) + names(ann_geom_values$sample_type_colors))]) +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill = "NextClade status",
+    ) +
+    guides(fill = guide_legend(override.aes = list(size = 8)))  
+  }
+
+```
+
+\elandscape
+
+```{r lineage and VOC checks}
+
+has_pos_ctrl <- s %>%
+  filter(grepl("Mock DNA", sample_type)) %>%
+  mutate(is_pos = lineage == "B") %>%
+  select(is_pos) %>%
+  pull()
+
+if(length(has_pos_ctrl) == 0) {
+  has_pos_ctrl <- FALSE
+}
+
+
+```
+
+`r if(!has_pos_ctrl | is.na(has_pos_ctrl)){paste0("\\textcolor{red}{\\huge Positive control is not correct lineage}")}`
+
+## Nextclade
+
+### Coverage and QC scores
+
+```{r nextclade coverage, fig.height=9, fig.width=7}
+
+s_toPlot %>%
+  select(sample_type, median_coverage, pct_genome_coverage_over_30x, nc_qc_status) %>%
+  filter(!is.na(median_coverage)) %>%
+  mutate(nc_qc_status = factor(nc_qc_status, levels = c("good", "mediocre", "bad"))) %>%
+  {
+  ggplot(., aes(x = nc_qc_status, y = pct_genome_coverage_over_30x)) +
+    geom_hline(slope = 0, yintercept = 0.8, color = "grey", linetype = "dotted", lwd=0.75) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_point(aes(fill = median_coverage, shape = sample_type), position = position_jitterdodge(), size = 3) +
+    scale_shape_manual(values = ann_geom_values$sample_type_shapes[match(levels(.$sample_type), names(ann_geom_values$sample_type_shapes))]) +
+    scale_fill_viridis_c() +
+    scale_y_continuous(labels=scales:::percent) +
+    theme_classic() +
+    theme(
+      strip.background = element_rect(color = "white", size = 50)
+    ) +
+    labs(x="NextClade QC Status", y="Percentage of genome\nwith >= 30X coverage", fill = "Median\nCoverage (X)", shape = "Sample Type")
+  }
+
+```
+
+## Summary of variants
+Percentages of variants only in samples that meet criteria (Pangolin results)
+
+```{r percent table}
+
+s_toPlot %>%
+  filter4report() %>%
+  group_by(PHL_sample_received_date) %>%
+  mutate(all_samples_n = n()) %>%
+  ungroup() %>%
+  select(PHL_sample_received_date, lineage, clade_who, sample_type, all_samples_n) %>%
+  group_by(PHL_sample_received_date, sample_type, clade_who, lineage) %>%
+  summarise(variant_percentages = n()/all_samples_n*100) %>%
+  mutate(variant_percentages_text = paste0(round(variant_percentages, digits = 2), "\\%")) %>%
+  ungroup() %>%
+  arrange(PHL_sample_received_date, -variant_percentages) %>%
+  select(-variant_percentages) %>%
+  unique() %>%
+  rename(`Received date` = "PHL_sample_received_date", `Sample Type` = "sample_type", `WHO` = "clade_who", `Variant` = "lineage", `Variant percentage` = "variant_percentages_text") %>%
+  { if(use_kable)
+      kable(., "latex", longtable = F, digits=2, booktabs=T, escape=F,
+            col.names = linebreak(c("Sample\nreceived", "Sample Type", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
+      kable_styling(latex_options = c("scale_down", "repeat_header", "HOLD_position")) %>%
+      row_spec(0, bold = T, color="#7C0A02") %>%
+      collapse_rows(columns = 1:2, valign = "top")
+    else
+      pander(.)
+  }
+
+```
+
+\newpage
+
+# Appendix
+
+## Number of reads before and after filtering
+Red samples refer to results that will not be reported (controls or no lineage results) \newline
+Orange samples also refer to results that will not be reported (bad or mediocre NextClade QC with <80% 30X coverage) \newline
+The total number of samples with acceptable results for reporting is `r n_samples_report` out of `r nrow(s[grepl("Nasal swab", s$sample_type), ])` nasal samples sequenced. \newline
+Number of samples to send to epidemiologists: `r nrow(epi_report)` \newline
+Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "gisaid_name", "sample_id"])` \newline
+Number of samples to upload to SRA: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])` \newline
+Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])`\newline
+
+`r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge There are samples that didn't go through the pipeline correctly!! Just delete the project on BaseSpace and rerun. Or create a new RStudio project with a different name}")}`
+
+```{r trimmed reads, echo=FALSE}
+
+s %>%
+  arrange(-read_counts) %>%
+  { if(use_kable) 
+    mutate(., sample_id = cell_spec(sample_id, "latex",
+                               color = case_when((grepl(paste0(rerun_samples, collapse = "|"), sample_id) & length(rerun_samples) > 0) ~ "yellow",
+                                                 ((grepl("control|Unassigned reads", sample_type)) | (!(sample_id %in% s_toPlot$sample_id))) ~ "red",
+                                                 ((grepl("bad", nc_qc_status)) | (grepl("mediocre", nc_qc_status) & pct_genome_coverage_over_30x < .8) | (grepl("fail", pango_qc_status))) ~ "orange",
+                                                 TRUE ~ "black"))) %>%
+      select(sample_id,
+             sample_type,
+             total_raw_reads,
+             read_counts) %>%
+      kable_style()
+    else
+      select(., sample_id,
+             sample_type,
+             read_counts) %>%
+      pander()
+  }
+
+```
+
+\blandscape
+
+## Individual sample sliding window coverage (100 bp)
+
+```{r slide window results per sample, fig.width=11, fig.height=8, fig.align='center'}
+
+knitr::include_graphics(
+  path = list.files(here("data"), pattern = paste0(sequencing_date, "_sample_sliding_coverage_100_bp_col"), full.names = TRUE)
+)
+
+```
+
+# Review and Approval
+
+```{r sign off}
+
+data.frame(`Role and Name` = linebreak(c("Bioinformatician:\nVincent Tu, PhD",
+                                         "Sequencing Manager:\nMazen Sid Ahmed, PhD",
+                                         "Laboratory Directory:\nBernadette Matthis, MSBA"), align = "l"),
+           Signature = c("", "", ""),
+           Date = c(as.character(Sys.Date()), "", ""), check.names = FALSE) %>%
+  kable_style() %>%
+  #add signatures in the second column
+  column_spec(2, image = spec_image(c(tag, blank, blank), width = 500, height = 180))
+
+```
+
+\elandscape

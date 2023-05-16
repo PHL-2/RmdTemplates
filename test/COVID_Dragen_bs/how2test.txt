@@ -1,8 +1,23 @@
 To test the COVIDSeq template in this package:
-1. Create an RStudio project with the name 2022-08-01_COVIDSeq_test
-2. Initialize a COVIDSeq template
-	- rmarkdown::draft(file = "2022-08-01_COVIDSeq_test_QC_Report.Rmd", template = "covid_dragen_bs", package = "RmdTemplates", create_dir = FALSE)
-3. Copy the metadata folder from RmdTemplates and replace the metadata folder in the initialized project
-4. In the preamble.Rmd file, change the sequencing_folder_fp to where the test run folder is located (should be same file location as this text file)
-5. Generate the metadata sheet and knit the QC_Report.Rmd
-6. Compare lineage results in the epi csv file with the test_RLU csv file
+
+1. Create a folder to hold the sequencing RStudio projects. This folder will be referred to as the parent folder
+
+2. Copy the aux_files folder under RmdTemplates into the parent folder
+
+3. Edit the config_variables.R file in 'parent folder'/aux_files/config by replacing the sh_exe_fp variable to the full path of where the shell executable is located on your system
+
+4. Create an RStudio project (with a new project folder) with the name 2022-08-01_COVIDSeq_test in the parent folder
+
+5. Initialize a COVIDSeq template in the R console
+  5.1 rmarkdown::draft(file = "2022-08-01_COVIDSeq_test_QC_Report.Rmd", template = "covid_dragen_bs", package = "RmdTemplates", create_dir = FALSE)
+
+6. Copy the metadata folder under RmdTemplates/test/COVID_Dragen_bs and replace the metadata folder in the initialized project
+
+7. In the '2022-08-01_COVIDSeq_test_QC_Report.Rmd', run the 2nd chunk called 'generate SampleSheet and metadata' to get the metadata sheet for analysis
+
+8. In the '2022-08-01_COVIDSeq_test_QC_Report.Rmd', run the chunk called 'generate time stamped report' to generate the pdf file
+  9.1. Running this chunk may take >40 minutes. This chunk uploads the fastq files to BaseSpace, runs the DRAGEN Lineage App, downloads the processed data files, and creates figures
+  9.2. If there are any errors, following the warning prompts from the console
+
+9. Once the lineage results have been generated in the upload/epi/...results.csv file, compared the results with the test_EpiSheet_filtered.csv file in metadata/extra_metadata
+  9.1. The Test-Positive sample should be the B lineage
