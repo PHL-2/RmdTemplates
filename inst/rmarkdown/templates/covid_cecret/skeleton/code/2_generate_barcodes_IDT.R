@@ -59,6 +59,20 @@ tryCatch(
   }
 )
 
+###################################################
+# Load config
+###################################################
+
+#this file needs to sit in a [aux_files/config] directory path above this project directory
+tryCatch(
+  {
+    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+  },
+  error = function(e) {
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+  }
+)
+
 ########################
 # Load barcode sequences
 ########################
@@ -279,8 +293,8 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   mutate(instrument_type = instrument_type) %>%
   mutate(read_length = read_length) %>%
   mutate(index_length = index_length) %>%
-  mutate(environmental_material = ifelse(grepl("swab|control", sample_type), NA, environmental_material)) %>%
-  mutate(collection_device = ifelse(grepl("waste water|control", sample_type), NA, collection_device)) %>%
+  mutate(environmental_material = ifelse(grepl("swab|control", sample_type, ignore.case = TRUE), NA, environmental_material)) %>%
+  mutate(collection_device = ifelse(grepl("waste water|control", sample_type, ignore.case = TRUE), NA, collection_device)) %>%
   mutate(environmental_site = case_when(grepl("Water control|Reagent control", sample_type) ~ paste0(plate_row, plate_col),
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
                                         TRUE ~ environmental_site))
@@ -347,16 +361,17 @@ for(x in c(cols2merge, "sample_id",
 }
 
 #make these columns NA if missing
-for(x in c("qubit_conc_ng_ul",
-           "lane", "run_number")) {
+for(x in c("qubit_conc_ng_ul", "lane", "run_number")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     metadata_sheet[[x]] <- NA
   }
 }
 
-#check lowest date of sample collection
-if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
-  stop(simpleError(paste0("Some samples have collection dates more than 2 months ago. Investigate!!")))
+#if these columns are missing because all samples are wastewater, make them unknown
+for(x in c("sample_collection_date", "host_age_bin", "gender")) {
+  if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
+    metadata_sheet[[x]] <- "Unknown"
+  }
 }
 
 print('What do the sample_id look like?')
@@ -507,16 +522,16 @@ nf_demux_samplesheet %>%
   write.csv(file = nf_demux_samplesheet_fp,
             row.names = FALSE, quote = FALSE)
 
-aws_cli_cp_fp <- file.path(dirname(here()), "aux_files", "aws_cli_commands", "aws_cli_1_cp.sh")
-
-aws_cp_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
-                                 c(shQuote(sample_sheet_fp, type = "sh"),
-                                   shQuote(s3_samplesheet_fp, type = "sh")))
-
-aws_cp_nf_demux_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
-                                          c(shQuote(nf_demux_samplesheet_fp, type = "sh"),
-                                            shQuote(s3_nf_demux_samplesheet_fp, type = "sh")))
-
-if(!all(grepl("Completed", c(aws_cp_samplesheet, aws_cp_nf_demux_samplesheet), ignore.case = TRUE))) {
-  stop(simpleError("Samplesheet upload to s3 bucket failed"))
-}
+# aws_cli_cp_fp <- file.path(dirname(here()), "aux_files", "aws_cli_commands", "aws_cli_1_cp.sh")
+#
+# aws_cp_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
+#                                  c(shQuote(sample_sheet_fp, type = "sh"),
+#                                    shQuote(s3_samplesheet_fp, type = "sh")))
+#
+# aws_cp_nf_demux_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
+#                                           c(shQuote(nf_demux_samplesheet_fp, type = "sh"),
+#                                             shQuote(s3_nf_demux_samplesheet_fp, type = "sh")))
+#
+# if(!all(grepl("Completed", c(aws_cp_samplesheet, aws_cp_nf_demux_samplesheet), ignore.case = TRUE))) {
+#   stop(simpleError("Samplesheet upload to s3 bucket failed"))
+# }
