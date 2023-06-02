@@ -1,0 +1,1063 @@
+
+```{r only run this chunk once to install packages, include=FALSE, eval=FALSE}
+
+install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx", "ggsci", "reticulate"))
+
+```
+
+```{r manual input ARTIC primer bed file to use, echo=FALSE}
+
+primer_select <- 1 # set variable as 1 for V3, 2 for V4, or 3 for V4.1
+
+artic_primer_scheme <- c("ncov_V3", "ncov_V4", "ncov_V4.1")[primer_select]
+
+# minimum acceptable number of reads per sample
+min_reads <- 1000000
+
+```
+
+```{r setup for the pdf, echo=FALSE}
+
+library(knitr)
+opts_chunk$set(
+  tidy=FALSE,
+  cache=FALSE,
+  cache.lazy = FALSE,
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE, #Set message to NA in chunks where message should be sent to stderr
+  dpi=100,
+  fig.width=6,
+  fig.height=6,
+  dev.args = list(pdf = list(useDingbats = FALSE))
+)
+
+#this lets you loop through variables and produce multiple pander tables and ggplots in a single code block!
+#this also means that you have to put results='asis' in any block that has pander output
+pander::panderOptions("knitr.auto.asis", FALSE)
+
+```
+
+```{r load libraries}
+
+library(here)
+library(tidyverse)
+library(rvest)
+library(pander)
+library(kableExtra)
+library(ggsci)
+library(ggthemes)
+library(RColorBrewer)
+library(patchwork)
+library(zoo)
+library(stringdist)
+library(scales)
+
+```
+
+```{r load variables, functions, and signature from common files}
+
+#this file needs to sit in a [aux_files/config] directory path above this project directory
+tryCatch(
+  {
+    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+  },
+  error = function(e) {
+  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+  }
+)
+
+#this file needs to sit in a [aux_files/functions] directory path above this project directory
+tryCatch(
+  {
+    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+  },
+  error = function(e) {
+  stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+  }
+)
+
+#this file needs to sit in a [aux_files/signature] directory path above this project directory
+tryCatch(
+  {
+    signature_fp <- list.files(file.path(dirname(here()), "aux_files", "signature"), pattern = ".png|.jpeg|.tif*|.gif", full.names = TRUE)
+    tag <- signature_fp[!grepl("blank.png", signature_fp)]
+    blank <- signature_fp[grepl("blank.png", signature_fp)]
+  },
+  error = function(e) {
+  stop (simpleError("The signature image file needs to sit in a [aux_files/signature] directory path above this project directory"))
+  }
+)
+
+```
+
+```{r find newest run folder}
+
+project_name <- basename(here())
+sequencing_date <- as.Date(gsub("_.*", "", project_name))
+
+#get the sequencing run folder
+run_folder <- sequencing_folder_fp %>%
+  list.files(full.names = T) %>%
+  file.info() %>%
+  filter(grepl(format(sequencing_date, "%y%m%d"), rownames(.))) %>%
+  rownames()
+
+run_folder_name <- gsub(".*/", "", run_folder) #real run folder name
+
+folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
+  as.Date(format = "%Y%m%d")
+
+if (is.na(run_folder)) {
+  stop(simpleError(paste0("Could not connect to path: ", sequencing_folder_fp,
+                          "\nCheck your network connection and make sure you're connected to the city's network")))
+}
+
+if (folder_date != gsub("_.*", "", basename(here()))) {
+  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+}
+
+```
+
+```{r file paths for metadata and results}
+
+### mapping file paths
+mapping_file_fp <- list.files(here("metadata"), pattern = "_metadata.csv", full.names = TRUE)
+PHI_file_fp <- list.files(here("metadata"), pattern = "_PHI.csv", full.names = TRUE)
+
+### file paths to save results to
+unkwn_barcodes_fp <- here("data", paste0(sequencing_date, "_unknown_barcodes.csv"))
+fastqc_mean_fp <- here("data", paste0(sequencing_date, "_fastqc.csv"))
+
+kraken_props_fp <- here("data", paste0(sequencing_date, "_kraken_props.csv"))
+software_version_fp <- here("data", paste0(sequencing_date, "_software_version.csv"))
+cecret_results_fp <- here("data", paste0(sequencing_date, "_cecret_results.csv"))
+
+```
+
+```{r load metadata, echo=FALSE}
+
+ctrl_fct_lvl <- c("Unassigned reads", "Water control", "Reagent control", "Environmental control", "Mock DNA positive control")
+
+s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
+  mutate(isControl = sample_type %in% ctrl_fct_lvl[-1]) %>%
+  mutate(barcode_sequence = paste0(index, "+", index2))
+
+read_length <- unique(s_meta$read_length)
+index_length <- unique(s_meta$index_length)
+
+```
+
+```{r aws cli demux and cecret commands}
+
+# tar.gz the run folder
+# 
+# upload to s3 bucket with the date
+# 
+# run the nf-core demux pipeline 
+# 
+# run the Cecret pipeline
+# 
+# download the results
+
+# aws s3 cp s3://COVIDSeq-output/[sequencing_date]_COVIDSeq/ . \
+#   --recursive \
+#   --exclude "*" \
+#   --include "*software_versions.yml" \
+#   --include "*Demultiplex_Stats.csv" \
+#   --include "*Quality_Metrics.csv" \
+#   --include "*Top_Unknown_Barcodes.csv" \
+#   --include "*.fastq.gz_fastqc_data.txt"
+#   --include "*.consensus.fa" \
+#   --include "*_filtered_R[12].fastq.gz" \
+#   --include "*aggregated-freyja.tsv" \
+#   --include "*_kraken2_report.txt" \
+#   --include "*.multicov.txt" \
+#   --include "*nextclade.tsv" \
+#   --include "*nextclade.json" \
+#   --include "*.cov.txt" \
+#   --include "*.depth.txt" \
+#   --include "*cecret_results.csv"
+
+```
+
+<!-- Load QC data -->
+
+```{r file paths for qc data, eval = import_data}
+
+### demultiplexing results from nfcore
+demux_software_fp <- here("data", "processed_demux", "pipeline_info", "software_versions.yml")
+demuxsum_fp <- here("data", "processed_demux", run_folder_name, "Reports", "Demultiplex_Stats.csv")
+quality_metrics_fp <- here("data", "processed_demux", run_folder_name, "Reports", "Quality_Metrics.csv")
+top_unkwn_fp <- here("data", "processed_demux", run_folder_name, "Reports", "Top_Unknown_Barcodes.csv")
+
+```
+
+```{r save demux software versions, eval = import_data}
+
+read_delim(demux_software_fp, delim = " ", col_names = FALSE) %>%
+  filter(grepl("Nextflow: |nf-core/demultiplex: |bclconvert: |untar: |falco: ", X1)) %>%
+  separate(col = "X1", into = c("software", "version"), sep = ": ") %>%
+  mutate(software = gsub("^ *", "", software),
+         software = gsub("/", "-", software)) %>%
+  mutate(version = gsub("'", "", version)) %>%
+  mutate(pipeline = "nf-core-demultiplex") %>%
+  select(pipeline, software, version) %>%
+  write_csv(file = software_version_fp)
+
+```
+
+```{r load read numbers and save qc figures, eval = import_data}
+
+quality_metrics <- read_delim(quality_metrics_fp) %>%
+  rename(lane = "Lane", sample_id = "SampleID", Q30 = "% Q30") %>%
+  select(lane, sample_id, index, index2, ReadNumber, Q30) %>%
+  filter(!grepl("^I", ReadNumber)) %>%
+  mutate(ReadNumber = paste0("R", ReadNumber, "_Q30")) %>%
+  pivot_wider(names_from = "ReadNumber", values_from = "Q30")
+
+#read counts by sample number
+samp_reads <- read_delim(demuxsum_fp) %>%
+  rename_all(.funs = tolower) %>%
+  rename_all(.funs = function(x) gsub("# ", "", x)) %>%
+  rename_all(.funs = function(x) gsub("% ", "percent_", x)) %>%
+  rename_all(.funs = function(x) gsub(" ", "_", x)) %>%
+  rename(sample_id = "sampleid", barcode_sequence = "index", read_pairs = "reads", percent_of_lane = "percent_reads") %>%
+  mutate(sample_id = gsub("_", "-", sample_id),
+         barcode_sequence = gsub("-", "+", barcode_sequence),
+         read_counts = read_pairs*2) %>%
+  merge(quality_metrics, by = c("lane", "sample_id"), all = TRUE)
+
+top_unkwn_indices <- read_delim(top_unkwn_fp) %>%
+  rename_all(.funs = tolower) %>%
+  rename_all(.funs = function(x) gsub("# ", "", x)) %>%
+  rename_all(.funs = function(x) gsub("% ", "percent_", x)) %>%
+  rename_all(.funs = function(x) gsub(" ", "_", x)) %>%
+  mutate(barcode_sequence = paste0(index, "+", index2)) %>%
+  #get the smallest hamming distance to the sample barcode sequences
+  #levenshtein distance is useful for accounting for insertions and deletions between strings, but not needed in this case to determine barcode distances
+  mutate(min_dist = sapply(barcode_sequence,
+                           function(x) min(stringdist(x, b = samp_reads$barcode_sequence[!is.na(samp_reads$barcode_sequence)], method = "hamming")))) %>%
+  rename(read_counts = "reads") %>%
+  select(lane, barcode_sequence, read_counts, starts_with("percent"), min_dist) %>%
+  order_on_other_col(barcode_sequence, read_counts) %>%
+  droplevels()
+
+write_csv(top_unkwn_indices, unkwn_barcodes_fp)
+
+#throw error if the top unknown index is greater than 0.5% percent of all reads
+if(max(top_unkwn_indices$percent_of_all_reads) > 0.005) {
+  stop(simpleError("Top unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode"))
+}
+
+#throw error if Undetermined sample has more reads than the median
+if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] > median(samp_reads$read_counts)) {
+  stop(simpleError("Undetermined sample has more reads than the median. Double check the sample barcodes"))
+}
+
+```
+
+```{r load fastqc files if doing fastqc from demux, eval = import_data}
+
+fastqc_fps <- list.files(here("data", "processed_demux", run_folder_name), pattern = "fastqc_data.txt", recursive = TRUE, full.names = TRUE)
+
+fastqc <- lapply(fastqc_fps, function(f) {
+  #skip the first 13 lines, assuming the fastqc_data file format does not change
+  read_qc <- read_tsv(f, skip = 12, n_max = read_length)
+  read_qc$sample_id <- gsub(".*/|_S[0-9]*_L00[0-9]*_R[12].*", "", f)
+  read_qc$direction <- gsub(".*(R[12]).*", "\\1", f)
+  return(read_qc)
+  }) %>%
+  do.call("rbind", .) %>%
+  rename(position = "#Base") %>%
+  select(sample_id, direction, position, Mean)
+
+length_check <- fastqc %>%
+  group_by(sample_id, direction) %>%
+  summarize(max_length = max(position)) %>%
+  ungroup() %>%
+  select(max_length) %>%
+  pull()
+
+#throw error if fastqc does not have the max read length
+if(!all(length_check == read_length)) {
+  stop(simpleError(paste0("Some samples did not have reads up to ", read_length, " bp")))
+}
+
+write_csv(fastqc, fastqc_mean_fp)
+
+```
+
+```{r get cecret file paths, eval = import_data}
+
+#amplicon depth files (overlapping regions separated by amplicon)
+amplicon_fps <- list.files(here("data", "processed_cecret", "multicov"), pattern = ".multicov.txt", recursive = TRUE, full.names = TRUE)
+
+#overall coverage depth files (overlapping regions included in overall coverage)
+coverage_fps <- list.files(here("data", "processed_cecret", "samtools_depth"), pattern = ".depth.txt", recursive = TRUE, full.names = TRUE)
+
+#number of reads that mapped to reference
+cov_num_fps <- list.files(here("data", "processed_cecret", "samtools_coverage"), pattern = ".cov.txt", recursive = TRUE, full.names = TRUE)
+
+```
+
+```{r load amplicon results, eval = import_data}
+
+amplicon_depth <- amplicon_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName, col_names = FALSE)) %>%
+  ungroup() %>%
+  filter(X1 == "MN908947.3") %>%
+  rename(start = "X2", end = "X3", tile = "X5", depth = "X7") %>%
+  select(FileName, start, end, tile, depth) %>%
+  mutate(sample_id = gsub(".*/", "", FileName),
+         sample_id = gsub("\\.multicov.txt", "", sample_id),
+         amp_pos = paste0(start, "-", end),
+         multicov = paste0("amp_tile", tile, "_", amp_pos)) %>%
+  select(sample_id, multicov, depth) %>%
+  pivot_wider(names_from = "multicov", values_from = "depth")
+
+```
+
+```{r load coverage results, eval = import_data}
+
+slide_window_coverage <- coverage_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName, col_names = FALSE)) %>%
+  ungroup() %>%
+  filter(X1 == "MN908947.3") %>%
+  rename(position = "X2", map_per_position = "X3") %>%
+  select(FileName, map_per_position, position) %>%
+  mutate(sample_id = gsub(".*/", "", FileName),
+         sample_id = gsub("\\.depth.txt", "", sample_id)) %>%
+  select(-c(FileName)) %>%
+  group_by(sample_id) %>%
+  mutate(slide_window_100 = rollmean(map_per_position, k=100, fill = 0, align = 'right')) %>%
+  ungroup() %>%
+  select(sample_id, position, map_per_position, slide_window_100)
+
+coverage <- slide_window_coverage %>%
+  group_by(sample_id) %>%
+  summarise(pct_genome_coverage_over_30x = sum(map_per_position >= 30)/n(),
+            pct_genome_coverage_over_25x = sum(map_per_position >= 25)/n(),
+            pct_genome_coverage_over_20x = sum(map_per_position >= 20)/n(),
+            pct_genome_coverage_over_15x = sum(map_per_position >= 15)/n(),
+            pct_genome_coverage_over_10x = sum(map_per_position >= 10)/n(),
+            pct_genome_coverage_over_5x = sum(map_per_position >= 5)/n(),
+            pct_genome_coverage_over_1x = sum(map_per_position >= 1)/n(),
+            median_coverage = median(map_per_position),
+            mean_coverage = mean(map_per_position)) %>%
+  ungroup()
+
+```
+
+```{r load samtools coverage data, eval = import_data}
+
+#the mean coverage from samtools is slightly different than by manually calculation but the 1X coverage is the same
+cov_stats <- cov_num_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName, col_names = TRUE)) %>%
+  ungroup() %>%
+  rename(sample_id = "sample", aligned_reads = "numreads") %>%
+  select(sample_id, aligned_reads)
+
+```
+
+<!-- Load analysis data -->
+
+```{r load kmer results, eval = import_data}
+
+k2_files_fps <- list.files(here("data", "processed_cecret", "kraken2"), pattern = "_kraken2_report.txt", recursive = TRUE, full.names = TRUE)
+
+k2_files_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName, col_names = FALSE)) %>%
+  ungroup() %>%
+  rename(k2_kmers = "X3", k2_rank = "X4", k2_name = "X6") %>%
+  mutate(sample_id = gsub(".*/", "", FileName),
+         sample_id = gsub("_kraken2_report.txt", "", sample_id),
+         k2_name = gsub("^ *", "", k2_name),
+         k2_rank = tolower(k2_rank)) %>%
+  select(sample_id, k2_rank, k2_name, k2_kmers) %>%
+  group_by(sample_id) %>%
+  mutate(k2_top_rank = case_when(grepl("^u$|^r$|^d$|^k$|^p$", k2_rank) ~ paste0(k2_rank, "__", k2_name),
+                                 TRUE ~ NA)) %>%
+  fill(k2_top_rank, .direction = "down") %>%
+  #filter out taxon with at least 2 kmer hits
+  filter(k2_kmers > 1) %>%
+  mutate(k2_props = k2_kmers/sum(k2_kmers)) %>%
+  ungroup() %>%
+  mutate(k2_taxon = ifelse(k2_top_rank == paste0(k2_rank, "__", k2_name),
+                           k2_top_rank,
+                           paste0(k2_top_rank, " ", gsub("*[0-9]*", "", k2_rank), "__", k2_name))) %>%
+  select(sample_id, k2_taxon, k2_props, k2_kmers) %>%
+  write_csv(kraken_props_fp)
+
+```
+
+```{r load NextClade results, eval = import_data}
+
+nc_fp <- here("data", "processed_cecret", "nextclade", "nextclade.tsv")
+
+next_clade <- nc_fp %>%
+  read_delim(col_names = TRUE,
+             col_types = cols(missing = col_character(),
+                              clade_nextstrain = col_character(),
+                              clade = col_character())) %>%
+  rename(sample_id = "seqName",
+         nextclade_clade = "clade",
+         nextclade_clade_who = "clade_who",
+         nextclade_qc_overallstatus = "qc.overallStatus",
+         nextclade_qc_overallscore = "qc.overallScore",
+         nextclade_index = "index",) %>%
+  mutate(ivar_consensus_options = gsub(".*(consensus_threshold.*)$", "\\1", sample_id),
+         sample_id = gsub("^Consensus_|\\.consensus_threshold.*$", "", sample_id))
+
+nc_v_fp <- here("data", "processed_cecret", "nextclade", "nextclade.json")
+
+nc_v_fp %>%
+  read_delim(n_max = 1, delim = ":", col_names = FALSE, skip = 2) %>%
+  rename(version = "X2") %>%
+  mutate(pipeline = "UPHL-BioNGS-Cecret",
+         software = "nextclade",
+         version = gsub("\"|,| ", "", version)) %>%
+  select(pipeline, software, version) %>%
+  write_csv(file = software_version_fp, append = TRUE)
+
+```
+
+```{r load freyja results, eval = import_data}
+
+freyja_fp <- here("data", "processed_cecret", "freyja", "aggregated-freyja.tsv")
+
+freyja <- freyja_fp %>%
+  read_delim() %>%
+  rename_all(.funs = function(x) paste0("freyja_", x)) %>%
+  rename(sample_id = 1) %>%
+  mutate(sample_id = gsub("_variants.tsv", "", sample_id))
+  
+```
+
+```{r load cecret software versions, eval = import_data}
+
+cecret_software_select <- c("ivar", "bwa", "seqyclean", "Cecret version", "pangolin_scorpio_version", "pangolin_constellation_version", "pangolin_pangolin_version", "pangolin_version")
+
+#pangolin data is included with this summary file
+cecret_aggregate <- here("data", "processed_cecret", "cecret_results.csv") %>%
+  read_csv() %>%
+  select(-c(sample, samtools_meandepth_after_trimming, samtools_per_1X_coverage_after_trimming, fasta_line, freyja_summarized)) %>%
+  rename(vadr_passfail = "vadr_p/f") %>%
+  as.data.frame()
+
+cecret_aggregate %>%
+  select(all_of(cecret_software_select)) %>%
+  unique() %>%
+  mutate_at(.cols = cecret_software_select[1:3],
+            .funs = function(x) sub(".*version.*? ", "", x, ignore.case = TRUE)) %>%
+  mutate_all(.funs = function(x) as.character(x)) %>%
+  pivot_longer(cols = everything(), names_to = "software", values_to = "version") %>%
+  mutate(software = gsub("^pangolin_|.version$", "", software),
+         software = ifelse(grepl("^PUSHER-", version), "PUSHER", software),
+         version = gsub("^PUSHER-", "", version)) %>%
+  mutate(pipeline = "UPHL-BioNGS-Cecret") %>%
+  select(pipeline, software, version) %>%
+  write_csv(file = software_version_fp, append = TRUE)
+
+cecret_aggregate <- cecret_aggregate %>%
+  select(-all_of(cecret_software_select))
+
+```
+
+```{r write cecret results, eval = import_data}
+
+list(samp_reads, cov_stats, coverage, next_clade, freyja, amplicon_depth) %>%
+  reduce(merge, by = "sample_id", all = TRUE) %>%
+  merge(cecret_aggregate,
+        by = c("sample_id", "nextclade_clade", "nextclade_clade_who", "nextclade_qc_overallstatus", "nextclade_qc_overallscore"),
+        all = TRUE,
+        sort = FALSE) %>%
+  mutate(nextclade_clade_who = ifelse(pangolin_lineage == "B" & Nextclade_pango == "B" & nextclade_clade == "19A",
+                                      "Reference", nextclade_clade_who)) %>%
+  write_csv(cecret_results_fp)
+  
+```
+
+```{r read in data}
+
+top_unkwn_indices <- read_csv(unkwn_barcodes_fp)
+
+fastqc <- read_csv(fastqc_mean_fp)
+
+cecret_results <- read_csv(cecret_results_fp)
+
+software_version <- read_csv(software_version_fp) %>%
+  select(software, version) %>%
+  deframe() %>%
+  as.list()
+
+k2 <- read_csv(kraken_props_fp)
+
+```
+
+```{r merge metadata with data and select samples with results, echo=FALSE}
+
+#df with all samples
+s <- s_meta %>%
+  merge(cecret_results, by = c("sample_id", "barcode_sequence", "index", "index2", "lane"), all = TRUE) %>%
+  mutate(sample_type = case_when(grepl("^Undetermined$", sample_id) ~ ctrl_fct_lvl[1],
+                                 ((pangolin_qc_status == "fail" | nextclade_qc_overallstatus == "bad") & !isControl) ~ paste0(sample_type, " - Poor"),
+                                 TRUE ~ sample_type)) %>%
+  #rearrange the sampletypes by ctrls first
+  mutate(sample_type = factor(sample_type, levels = c(ctrl_fct_lvl,
+                                                      sort(unique(sample_type)[!grepl(paste0(ctrl_fct_lvl, collapse = "|"), unique(sample_type))])))) %>%
+  droplevels()
+
+#df with samples that have results (including controls)
+s_toPlot <- s %>%
+  filter(!grepl("None|Undetermined", sample_id)) %>%
+  filter(!grepl(" - Poor$", sample_type)) %>%
+  filter(!(pangolin_qc_status == "fail" & nextclade_qc_overallstatus == "bad")) %>%
+  mutate(sample_id = as.character(sample_id)) %>%
+  droplevels()
+
+has_CT <- any(grepl("^CT$", colnames(s)))
+
+has_RLU <- any(grepl("^RLU$", colnames(s)))
+
+```
+
+<!-- Prepare files containing samples with good results for uploading -->
+
+```{r upload filepaths}
+
+#path of seqsender config file
+seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "seqsender_config.yaml", full.names = TRUE)
+seqsender_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "seqsender_config_test.yaml", full.names = TRUE)
+
+epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
+seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.tsv", sep = "_"))
+fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
+
+```
+
+```{r save fastq and fasta for upload, eval = import_data}
+
+#get only the good quality samples to upload
+s_upload <- s_toPlot %>%
+  filter4report() %>%
+  select(sample_id) %>%
+  pull()
+
+if(length(s_upload) > 0) {
+
+  #make folder for fastq files
+  dir.create(here("upload", "fastq"), recursive = TRUE)
+  
+  #fastq files for SRA submission
+  #these "filtered" fastq files are reads that aligned to the reference genome but they have not been primer trimmed
+  fastq_fps <- list.files(here("data", "processed_cecret", "filter"), pattern = "*_filtered_R[12].fastq.gz", recursive = TRUE, full.names = TRUE)
+  
+  fastq2upload <- fastq_fps[grepl(paste0(s_upload, collapse = "|"), fastq_fps)]
+  
+  #move files to upload folder
+  for(fastq_name_fp in fastq2upload) {
+    file.copy(fastq_name_fp, to = here("upload", "fastq", gsub(".*/", "", fastq_name_fp)))
+  }
+  
+  #make folder for fasta files
+  dir.create(here("upload", "fasta"), recursive = TRUE)
+  
+  #find all fasta files
+  fasta_fps <- list.files(here("data", "processed_cecret", "consensus"), pattern = ".consensus.fa", recursive = TRUE, full.names = TRUE)
+  
+  #vadr is the software that can test for success or fail of GenBank submission
+  #test to see if the FASTA file for vadr failed samples
+  #If using this filter, the Seqsender metadata will still contain the failed samples; can non-matching metadata and fasta file be submitted to GenBank?
+  fasta_upload_vadr_filter <- s_toPlot %>%
+    filter(sample_id %in% s_upload) %>%
+    filter(vadr_passfail == "PASS") %>%
+    select(sample_id) %>%
+    pull()
+  
+  fasta2upload <- fasta_fps[grepl(paste0(fasta_upload_vadr_filter, collapse = "|"), fasta_fps)]
+
+  fasta2upload %>%
+    data_frame(FileName = .) %>%
+    group_by(FileName) %>%
+    do(read.delim(.$FileName, header = FALSE)) %>%
+    ungroup() %>%
+    select(-c(FileName)) %>%
+    #rename the header of the fasta file
+    mutate(V1 = gsub("Consensus_|.consensus.*", "", V1)) %>%
+    #this na argument needs to be blank, otherwise it will put strings beginning with the first two letters in quotes
+    write_delim(file = fasta_fp, delim = "", col_names = FALSE, na = "")
+  
+}
+
+```
+
+```{r export data to epi, eval = have_phi}
+
+dir.create(here("upload", "epi"), recursive = TRUE)
+
+if(length(PHI_file_fp) == 0) {
+  stop(simpleError("You are missing the PHI file. Check the Admin fileshare for this file or generate it with the 2_generate_barcodes_IDT.R script"))
+}
+
+s_phi <- read_csv(PHI_file_fp)
+
+# Export the data for EPI's
+epi_report <- s_toPlot %>%
+  merge(s_phi, by = "sample_id", all.x = TRUE) %>%
+  filter4report() %>%
+  select(sample_name, sample_collected_by, sequencing_date, pangolin_lineage, nextclade_clade_who) %>%
+  arrange(sample_collected_by, sample_name) %>%
+  rename(accession_number = "sample_name", who_label = "nextclade_clade_who", lineage = "pangolin_lineage")
+
+epi_report %>%
+  write_csv(epi_report_fp)
+
+```
+
+```{r export data to upload to NCBI}
+
+dir.create(here("upload", "seqsender"), recursive = TRUE)
+
+# Export the data for seqsender upload to sra, genbank, and gisaid
+seqsender <- s_toPlot %>%
+  filter4report() %>%
+  mutate(collection_date = case_when(!(is.na(sample_collection_date) |
+                                         as.character(sample_collection_date) == "Unknown") ~ as.character(sample_collection_date),
+                                     !is.na(PHL_sample_received_date) ~ as.character(PHL_sample_received_date),
+                                     TRUE ~ as.character(sequencing_date))) %>%
+  #the number at the end of the name for these samples must be the collection year, or the databases will complain
+  mutate(collection_date = as.Date(collection_date, tryFormats = c("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y"))) %>%
+  mutate(collection_year = format(collection_date, format = "%Y")) %>%
+  #make genbank name blank if it didn't pass vadr
+  mutate(genbank_name = ifelse(vadr_passfail == "PASS",
+                               paste0("SARS-CoV-2/Human/USA/", sample_id, "/", collection_year),
+                               "")) %>%
+  mutate(sra_name = paste0("SARS-CoV-2/Human/USA/", sample_id)) %>%
+  #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/collection year. This name may conflict with samples collected/sequenced in different years
+  mutate(gisaid_name = paste0("hCoV-19/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sample_id), "/", collection_year)) %>%
+  mutate(gisaid_accession = "",
+         location = "USA: Pennsylvania",
+         gisaid_location = "North America/USA/Pennsylvania",
+         zip = "19146",
+         type = "betacoronavirus",
+         passage = "Original") %>%
+  #make gender and age for Temple samples as Unknown for now until they confirm its okay to submit these fields on their behalf
+  mutate(host_age_bin = ifelse(is.na(host_age_bin)|sample_collected_by == "Temple University", "Unknown", host_age_bin),
+         gender = ifelse(is.na(gender)|sample_collected_by == "Temple University", "Unknown", gender),
+         collected_by = sample_collected_by) %>%
+  select(-c(isolation_source)) %>%
+  rename(isolation_source = "sample_type",
+         host = "host_scientific_name",
+         sex = "gender",
+         orig_lab = "sample_collected_by") %>%
+  mutate(patient_status = "Unknown",
+         instrument = paste0("Illumina ", instrument_type),
+         library = "ARTIC Network Protocol V3",
+         assembly_method = paste0("iVar v", software_version$ivar),
+         library_strategy = "AMPLICON",
+         library_source = "VIRAL RNA",
+         library_selection = "RT-PCR",
+         library_layout = "PAIRED",
+         structured_comment = "Assembly-Data",
+         genbank_note = "") %>%
+  mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "500 South Broad Street, Philadelphia, PA 19146 USA",
+                                      orig_lab == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122 USA",
+                                      TRUE ~ "Unknown")) %>%
+  mutate(sra_file_path_1 = here("upload", "fastq", paste0(sample_id, "_filtered_R1_001.fastq.gz")),
+         sra_file_path_2 = here("upload", "fastq", paste0(sample_id, "_filtered_R2_001.fastq.gz"))) %>%
+  mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC V3 primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
+  select(sample_id, genbank_name, sra_name, gisaid_name, gisaid_accession, collection_date, location, gisaid_location, zip, type, passage, organism,
+         isolation_source, host, host_disease, host_age_bin, sex, patient_status, 
+         instrument, library, assembly_method, library_strategy, library_source, library_selection, library_layout, structured_comment, median_coverage, genbank_note, design_description,
+         collected_by, orig_lab, orig_lab_address, sra_file_path_1, sra_file_path_2)
+
+seqsender %>%
+  write_tsv(seqsender_meta_fp)
+
+#double checking to see if number of samples match
+n_samples_report <- s %>%
+  filter(!grepl("None|Undetermined", sample_id)) %>%
+  filter(!grepl("control", sample_type, ignore.case = TRUE)) %>%
+  filter(!is.na(pangolin_lineage)) %>%
+  filter(!is.na(nextclade_qc_overallstatus)) %>%
+  filter(nextclade_qc_overallstatus != "bad") %>%
+  filter(!(nextclade_qc_overallstatus == "mediocre" & pct_genome_coverage_over_30x < .8)) %>%
+  filter(pangolin_qc_status != "fail") %>%
+  nrow()
+
+```
+
+```{r check all files generated}
+
+#check the csv file for the epi's
+if(have_phi) {
+
+  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
+  
+  epi_report <- epi_2_upload_fp %>%
+    read_csv() %>%
+    select(accession_number) %>%
+    merge(select(s_phi, sample_id, sample_name), by.x = "accession_number", by.y = "sample_name", all.x = TRUE) %>%
+    mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
+    mutate(file = "epi") %>%
+    select(file, sample_id)
+
+}
+
+#check the seqsender file to upload to ncbi
+seqsender_2_upload_fp <- list.files(here("upload", "seqsender"), pattern = ".tsv", recursive = TRUE, full.names = TRUE)
+
+all_sample_ids_from_seqsender <- seqsender_2_upload_fp %>%
+  read_tsv()%>%
+  select(sample_id, genbank_name, sra_name, gisaid_name) %>%
+  mutate(gisaid_name = gsub(".*PA-", "", gisaid_name)) %>%
+  #changing the year at the end of the gisaid name back to the sequencing year
+  mutate(gisaid_name = gsub("/.*$", paste0("/", str_sub(project_name, 1, 4)), gisaid_name)) %>%
+  mutate(gisaid_name = gsub(format(sequencing_date, "%m%d/%Y"), format(sequencing_date, "%Y%m%d"), gisaid_name)) %>%
+  pivot_longer(cols = c("genbank_name", "sra_name", "gisaid_name"), names_to = "file", values_to = "upload_id") %>%
+  mutate(upload_id = gsub(".*/USA/|/.*", "", upload_id)) %>%
+  mutate(all_sample_same = upload_id == sample_id)
+
+if (!all(all_sample_ids_from_seqsender$all_sample_same)) {
+  stop (simpleError("Some of the database names don't match the sample_id names! The GenBank name may also be missing because it didn't pass vadr check. Try submitting the GenBank files anyway through seqsender to see if it passes"))
+}
+
+all_sample_ids_from_seqsender %<>% select(file, upload_id) %>%
+  rename(sample_id = "upload_id")
+
+#check the fastq files to upload; should be 1 set here
+fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
+  data.frame(FileName = .) %>%
+  mutate(sample_id = gsub(".*upload/fastq/|_filtered_R[12].fastq.gz$", "", FileName)) %>%
+  mutate(file = gsub(".*/", "", FileName)) %>%
+  select(-FileName)
+
+fastq2_compare <- fastq_2_upload %>%
+  filter(grepl("_filtered_R1.fastq.gz", file))
+
+if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
+  stop (simpleError("Missing some fastq files!"))
+}
+
+#check the fasta files to upload; should be 1 set here
+fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
+  filter(grepl("^>", X1)) %>%
+  mutate(sample_id = gsub("^>", "", X1)) %>%
+  mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
+  select(-X1)
+
+check_all <- all_sample_ids_from_seqsender %>%
+  rbind(fastq2_compare) %>%
+  rbind(fasta_samples)
+
+if (have_phi) {
+  check_all <- check_all %>%
+    rbind(epi_report)
+  
+  total_file_sets_2_count <- 6
+  
+} else {
+  total_file_sets_2_count <- 5
+  
+}
+
+check_all %<>%
+  group_by(sample_id) %>%
+  mutate(count_all_samples = n()) %>%
+  ungroup()
+
+if (!all(check_all$count_all_samples == total_file_sets_2_count)) {
+  stop (simpleError("Some files are missing samples to upload!"))
+}
+
+#these are samples that failed in the pipeline for whatever reason. Can rerun pipeline to generate results for these samples
+rerun_samples <- s %>%
+  filter(is.na(nextclade_qc_overallstatus)) %>%
+  select(sample_id) %>%
+  pull()
+
+```
+
+<!-- Assign colors to sample attributes and create some ggplot legends and figures -->
+
+```{r sample type attributes}
+
+actual_sample_type <- c(levels(s$sample_type), NA)
+
+lvls <- c("Unassigned reads", "Water control", "Reagent control", "Environmental control", "Mock DNA positive control",
+          "Nasal swab", "Nasal swab - Poor", "Wastewater", "Wastewater - Poor", NA)
+
+if(!all(actual_sample_type %in% lvls)) {
+  stop(simpleError(paste0("These sample types were found in the metadata sheet but not accounted for in the code: ", actual_sample_type[!actual_sample_type %in% lvls])))
+}
+
+ann_geom_values <- list()
+
+#leave Unassigned reads as purple
+ann_geom_values[["sample_type_colors"]] <- setNames(pal_d3("category20")(20)[c(15, 19, 16, 13, 2, 1, 4, 10, 7, 8)], lvls)
+
+#make the controls and unassigned reads into triangle and diamond shapes
+ann_geom_values[["sample_type_shapes"]] <- setNames(c(8, 24, 13, 25, 23,
+                                                      21, 22, 21, 22,
+                                                    c(9:14)[1:(length(lvls)-9)]), lvls)
+
+#make the controls and unassigned reads samples bigger in size
+ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 2, 4, 2, 4, rep(1, length(lvls)-5)), lvls)
+
+#make alpha for nasal swabs to 0.5
+ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, 1, rep(0.2, length(lvls)-5)), lvls)
+
+ann_geom_values[["linetype"]] <- setNames(c("solid", "twodash", "dotted", "dashed"), c("good", "mediocre", "bad", "control"))
+
+ann_geom_values[["nc_qc"]] <- setNames(c(brewer.pal(6, "Set3")[c(1, 6, 4)], "#808080"), c("good", "mediocre", "bad", NA))
+
+sample_type_legend <- s %>%
+  select(sample_id, sample_type) %>%
+  order_on_other_col(sample_id, sample_type, decreasing = FALSE) %>%
+  {
+  ggplot(., aes(y = 1, x = sample_id, fill = sample_type)) +
+    geom_tile(color = "black") +
+    coord_fixed() +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() +
+    theme(
+      strip.text = element_text(size = 12),
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.line = element_blank(),
+      plot.margin= margin(0, 0, 0, 0, "pt"),
+      legend.position = "bottom"
+    ) +
+    labs(y = "", x = "", fill = "Sample Type") + 
+    guides(fill = guide_legend(override.aes = list(size = 2)))
+  }
+
+#show_col(ann_geom_values[["sample_type_colors"]])
+
+```
+
+```{r variant colors}
+
+i <- 1
+ann_geom_values[["variants"]] <- c()
+ann_geom_values[["who_label"]] <- c()
+
+#loop over the VOCs
+for(who_label in c("Reference", sort(unique(s$nextclade_clade_who)[unique(s$nextclade_clade_who) != "Reference"]))) {
+  
+  variant_list <- s %>%
+    filter(nextclade_clade_who == who_label) %>%
+    #is_designated means that the sample was assigned to a reference strain exactly using PANGO algorithm (decision tree) rather than PUSHER
+    #the pangolin_note section here for PUSHER will be 'Assigned from designation hash.' so its useless
+    select(pangolin_lineage, pangolin_note, Nextclade_pango) %>%
+    mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
+    mutate(pangolin_note = ifelse(pangolin_note == "Assigned from designation hash.", NA, pangolin_note)) %>%
+    unique() %>%
+    separate_rows(pangolin_note, sep=" ") %>%
+    pivot_longer(cols = c("pangolin_lineage", "pangolin_note", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
+    mutate(variants = gsub("\\(.*", "", variants)) %>%
+    select(variants) %>%
+    filter(!is.na(variants)) %>%
+    filter(variants!="Unassigned") %>%
+    unique() %>%
+    pull() %>%
+    str_sort(numeric = TRUE, decreasing = FALSE)
+  
+  #get the letters, period, and first number of each variant
+  combined_list <- unique(gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", variant_list))
+  
+  for(combined_variant in combined_list) {
+    
+    #if a pangolin_lineage ends with a number, get the sub-lineages with that number
+    if(grepl("[0-9]$", combined_variant)) {
+      sublineage <- variant_list[grepl(paste0("^", combined_variant), variant_list)]
+    }
+    else{
+      sublineage <- combined_variant
+    }
+    
+    variant_color <- calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)][i]
+    variant_gradient <- colorRampPalette(c(variant_color, adjustcolor(variant_color, alpha.f = 0.1)), alpha = TRUE)(length(sublineage))
+    names(variant_gradient) <- sublineage
+    
+    who_color <- variant_color
+    names(who_color) <- paste0(who_label, " - ", combined_variant)
+  
+    ann_geom_values[["variants"]] <- c(ann_geom_values[["variants"]], variant_gradient)
+    ann_geom_values[["who_label"]] <- c(ann_geom_values[["who_label"]], who_color)
+  
+  i <- i + 1
+    
+  }
+  
+}
+
+ann_geom_values[["variants"]] <- c("#80808080", "#80808080", ann_geom_values[["variants"]])
+names(ann_geom_values[["variants"]]) <- c(NA, "Unassigned", names(ann_geom_values[["variants"]])[-(1:2)])
+
+#show_col(ann_geom_values[["variants"]])
+
+who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_geom_values[["who_label"]])) %>%
+  ggplot(aes(x = x, y = y, fill = fill_col)) +
+    geom_bar(stat="identity", alpha = 0) +
+    scale_fill_manual(values = ann_geom_values$who_label) +
+    guides(fill = guide_legend(override.aes = list(alpha=1), reverse=F, order = 1)) + 
+    theme_bw() +
+    theme(
+      strip.text = element_text(size = 12),
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.line = element_blank(),
+      legend.position = c(0, .8),
+      plot.margin= margin(0, 0, 0, 0, "pt")
+    ) +
+    labs(fill = "WHO label", y = "", x = "")
+
+```
+
+```{r save coverage png, eval=import_data}
+
+SC2_annotation <- data.frame(ORF1a = "266-13468",
+                             ORF1b = "13468-21555",
+                             S = "21563-25384",
+                             ORF3a = "25393-26220",
+                             E = "26245-26472",
+                             M = "26523-27191",
+                             ORF6 = "27202-27387",
+                             ORF7a = "27394-27759",
+                             ORF7b = "27756-27887",
+                             ORF8 = "27894-28259",
+                             N = "28274-29533",
+                             ORF10 = "29558-29674") %>%
+  pivot_longer(cols = everything(), names_to = "gene", values_to = "position") %>%
+  mutate(annotation = "SARS-CoV-2")
+
+ddPCR_annotation <- data.frame(N1 = "28287-28358",
+                               N2 = "29164-29230") %>%
+  pivot_longer(cols = everything(), names_to = "gene", values_to = "position") %>%
+  mutate(annotation = "ddPCR")
+
+annotation_legend <- rbind(SC2_annotation, ddPCR_annotation) %>%
+  mutate(start = as.numeric(gsub("-.*$", "", position)),
+         end = as.numeric(gsub("^.*-", "", position)),
+         gene = factor(gene, levels = unique(gene)[order(start, decreasing = FALSE)])) %>%
+  ggplot() +
+    geom_rect(aes(xmin = start, xmax = end, ymin = 1, ymax = 2, fill = gene), position = position_dodge(width = 0.5)) +
+    scale_fill_manual(values = tableau_color_pal(palette = "Tableau 20")(20)) +
+    scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.text.x = element_text(size = 8),
+      legend.position = "bottom"
+    ) +
+    labs(x="Position (bp)", y="", fill = "") +
+    guides(fill=guide_legend(nrow=1, bycol=TRUE, override.aes = list(size = 0.5)))
+
+slide_window_coverage %>%
+  merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
+  {
+  ggplot(., aes(x = position, y = slide_window_100, color = sample_type, group = sample_id, alpha = sample_type)) +
+    geom_line() +
+    facet_wrap(~sample_type, ncol = 1, scales = "free_y") +
+    scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_alpha_manual(values = ann_geom_values$alpha[match(levels(.$sample_type), names(ann_geom_values$alpha))]) + 
+    scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      legend.position = "none",
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      ) +
+    labs(x="", y="Sliding window average (X)") +
+  annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
+  } %>%
+  ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
+
+col2show <- s %>%
+  filter(sample_id != "Undetermined") %>%
+  filter(!is.na(median_coverage)) %>%
+  select(plate_col) %>%
+  unique() %>%
+  pull()
+
+for(col_num in col2show) {
+  
+  filtered_samp_name <- s %>%
+    mutate(nextclade_qc_overallstatus = ifelse(is.na(nextclade_qc_overallstatus), "control", nextclade_qc_overallstatus)) %>%
+    mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = names(ann_geom_values$linetype))) %>%
+    mutate(who_label = ifelse(is.na(pangolin_lineage), "control",
+                              paste0(nextclade_clade_who, " - ", gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", pangolin_lineage)))) %>%
+    mutate(who_label = factor(who_label, levels = c(names(ann_geom_values$who_label), "control"))) %>%
+    filter(sample_id != "Undetermined") %>%
+    filter(plate_col == col_num) %>%
+    droplevels() %>%
+    select(sample_id, who_label, nextclade_qc_overallstatus, sample_type)
+  
+  sample_type_label <- setNames(as.character(filtered_samp_name$sample_type), filtered_samp_name$sample_id)
+
+  slide_window_coverage %>%
+    filter(sample_id %in% filtered_samp_name$sample_id) %>%
+    merge(filtered_samp_name, by = "sample_id", all = TRUE) %>%
+    droplevels() %>%
+    {
+    ggplot(., aes(x = position, y = slide_window_100, group = sample_id, linetype = nextclade_qc_overallstatus, color = who_label)) +
+      geom_line() +
+      facet_wrap(~sample_id, ncol = 1, scales = "free_y", labeller = labeller(sample_id = sample_type_label)) +
+      scale_linetype_manual(values = ann_geom_values$linetype[match(levels(.$nextclade_qc_overallstatus), names(ann_geom_values$linetype))]) +
+      scale_color_manual(values = c(ann_geom_values$who_label, setNames("#000000", "control"))[match(levels(.$who_label),
+                                                                                                  c(names(ann_geom_values$who_label), "control"))]) +
+      scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
+      theme_bw() +
+      theme(
+        strip.background = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA, size = 1),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        ) +
+      labs(x=paste0("Column ", col_num, " samples"),
+           y="Sliding window average (X)",
+           color = "WHO",
+           linetype = "Nextclade Quality") +
+      guides(linetype = guide_legend(order = 1), color = guide_legend(order = 2)) +
+    annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
+    } %>%
+    ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sample_sliding_coverage_100_bp_col", col_num, ".png")), plot = ., width = 11, height = 8)
+}
+
+```
+
+```{r empty plate to plot}
+
+empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_col = sprintf("%02d", rep(1:12, 8)), plate = 1) %>%
+  mutate(plate_coord = paste0(plate, "_", plate_row, plate_col))
+
+```
+
+```{r}
+```

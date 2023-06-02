@@ -2,7 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
-processed_bs/
+processed_*/
 **/metadata/*
 !**/metadata/*_COVIDSeq_metadata.csv
 epi/

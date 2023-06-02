@@ -43,37 +43,30 @@ library(pander)
 ```{r child = 'code/preamble.Rmd', include = FALSE}
 ```
 
+\newpage
 
-# Summary results
+# Summary checks and results
+
+## Flags
+
+```{r summary droplet counts check}
+
+if (sum(d_pre$Droplet_count<10000) > 0) {
+  print("Detected wells with <10000 droplets; wells will be excluded from analysis")
+  }
+
+if ((sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1, na.rm = T) > 0) | sum(d_sd$outlier_median > 5, na.rm = T) > 0) {
+  print("Detected high variation; please check samples")
+  }
+
+```
+
+## Results
 
 ```{r summary results}
 
-pander(ww_SC2_conc_result,
+pander(ww_SC2_conc_result_summarised,
        digits = 10, round = 2)
-
-d %>% 
-  filter(Sample_date == as.Date("2/21/2023", format = "%m/%d/%Y") | Sample_date == as.Date("2/20/2023", format = "%m/%d/%Y"),
-         grepl("South", Sample),
-         Process == "Concentrated",
-         Spiked == "Spiked"
-         ) %>%
-  select(Well, Type, Process, Target, Positives, Droplet_count) %>%
-  mutate(pct_pos = Positives / Droplet_count * 100) %>%
-  pander()
-
-
-d %>% 
-  filter(Sample_date == as.Date("2/21/2023", format = "%m/%d/%Y") | Sample_date == as.Date("2/20/2023", format = "%m/%d/%Y"),
-         grepl("South", Sample),
-         Process == "Concentrated",
-         Spiked == "Spiked"
-         ) %>%
-  select(Well, Type, Process, Target, Positives, Droplet_count) %>%
-  mutate(pct_pos = Positives / Droplet_count * 100) %>%
-  group_by(Type, Target) %>%
-  summarise(avg_pos_drop = mean(Positives),
-            avg_pct_pos = mean(pct_pos)) %>%
-  pander()
 
 ```
 
@@ -97,7 +90,7 @@ d_pre %>%
 
 
 \newpage
-
+\blandscape
 
 # Quality control
 
@@ -109,13 +102,36 @@ if (sum(d_pre$Droplet_count<10000) > 0) {
   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
   pander(
     d_pre %>%
-      filter(Droplet_count< 10000)
+      filter(Droplet_count< 10000),
+      split.table = 500
     ) 
   } else {
     print("No detected wells with <10000 droplets")
   }
 
 ```
+
+## Variance check
+
+```{r variance check}
+
+if ((sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1.00, na.rm = T) > 0) | sum(d_sd$outlier_median > 5, na.rm = T) > 0) {
+  print("Detected high variation; please check samples")
+  var_pander <- d_sd %>%
+    select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median) %>%
+    filter(cv_conc>30 & sd_from_mean > 1 | MAD_from_med > 5) %>%
+    arrange(Type, Target) %>%
+    distinct()
+
+  pander(var_pander,
+      split.table = 500
+  )
+}
+
+
+```
+
+\elandscape
 
 ## Number of overall positive droplets per sample
 
@@ -130,6 +146,7 @@ d %>%
   #filter(Spiked == "Spiked") %>%
   ggplot(aes(x=Well, y=percentage_positive, fill = Process)) +
   geom_col(position = "dodge") +
+  scale_fill_manual(values = c("orange", "purple", "dodgerblue2")) +
   facet_wrap(Sample_date ~ Type, scales = "free_x") +
   theme_light() +
   theme(
@@ -162,6 +179,7 @@ d %>%
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
   theme_light() +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme(
     axis.text.x = element_text(angle = 45,
                                vjust = 0.95,
@@ -184,6 +202,7 @@ d %>%
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(. ~ Process, scales = "free_x") +
   theme_light() +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme(
     axis.text.x = element_text(angle = 45,
                                vjust = 0.95,
@@ -200,6 +219,8 @@ d %>%
 
 ## Positive and negative controls
 
+### Experiment controls
+
 ```{r Positive and negative control figures}
 
 #Negative controls
@@ -215,11 +236,13 @@ dControls %>%
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
   theme_light() +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   labs(
     title = "Number of droplets positive in positive and negative controls",
     y = "Number of Positive droplets",
     x = "Samples"
   )
+
 
 dControls %>%
   filter(exp_con == "Extraction control") %>%
@@ -231,13 +254,18 @@ dControls %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
     title = "Percentage of droplets positive in positive and negative controls",
     y = "Percentage of Positive droplets (%)",
     x = "Samples"
   )
+```
 
+### ddPCR controls
+
+```{r}
 
 ##ddPCR
 dControls %>%
@@ -250,6 +278,7 @@ dControls %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
     title = "Number of droplets positive in ddPCR controls",
@@ -267,6 +296,7 @@ dControls %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
     title = "Percentage of droplets positive in ddPCR controls",
@@ -278,13 +308,25 @@ dControls %>%
 
 ## Limit of detection based on negative controls
 
-```{r Detection threshold based on negative controls}
+Limit of detection is based on a positive signal being >3 positive droplets in a reaction well. >3 positive droplets roughly equates to ~0.5 genome copies per uL depending on total number of droplets.
 
-threshold %>%
-  pander(digits = 10, round = 2)
+Thus our limit of detection based on our concentration (Ceres NanoTrap) and extraction (MagMax wastewater ultra nucleic acid isolation kit) methods can be found with this formula:
 
-```
+LOD = 0.5 * (ddPCR reaction volume) / (template input volume) * (concentration output volume) / (concentration input volume) * (extraction output volume) / (extraction input volume)
 
+where:
+
+ddPCR reaction volume = 20 uL
+
+template input volume = 9 uL
+
+concentration output volume = 100 uL
+
+concentration output volume = 400 uL
+
+extraction output volume = 500 uL
+
+extraction input volume = 9600 uL
 
 # Results
 
@@ -301,6 +343,7 @@ dUnspiked %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Type, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
     title = "Number of positive droplets in unspiked wastewater samples",
@@ -317,6 +360,7 @@ dUnspiked %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Type, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
     title = "Percent of positive droplets in unspiked wastewater samples",
@@ -328,7 +372,8 @@ dUnspiked %>%
 
 ## Wastewater signal
 
-```{r waste water signal}
+### With MHV signal
+```{r waste water signal with MHV}
 
 d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
@@ -341,6 +386,7 @@ d %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   theme(
     axis.text.x = element_text(angle = 45,
@@ -364,6 +410,7 @@ d %>%
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
   facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   theme(
     axis.text.x = element_text(angle = 45,
@@ -376,57 +423,59 @@ d %>%
     x = "Samples"
   )
 
-dSamples %>%
-filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-       grepl(pattern = "concentrated", x = Process, ignore.case = T),
-       Spiked == "Spiked") %>%
-  ggplot(aes(x=Process, y=avg_pos_droplets, fill = Target)) +
-  geom_col(position = "dodge") +
-  facet_grid(Type ~ Sample_date, scales = "free_x") +
-  theme_light() +
-  labs(
-    title = "Average number of droplets positive in wastewater samples",
-    y = "Number of Positive droplets",
-    x = "Samples"
-  )
+```
 
+### Without MHV signal
 
-dSamples %>%
+```{r WW signal without MHV}
+
+d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
          grepl(pattern = "concentrated", x = Process, ignore.case = T),
-         Spiked == "Spiked") %>%
-  ggplot(aes(x=Process, y=avg_conc, fill = Target)) +
-  geom_col(position = "dodge") +
-  facet_grid(Type ~ Sample_date, scales = "free_x") +
+         Target != "MHV") %>%
+  ggplot(aes(x = Type, y = Positives, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "dodgerblue2")) +
   theme_light() +
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  ) +
   labs(
-    title = "Average concentration of virus in ddPCR reaction",
-    y = "Average concentration\n(Genome copies / uL)",
+    title = "Number of droplets positive in wastewater samples without MHV signal",
+    y = "Number of Positive droplets",
     x = "Samples"
   )
 
-ymax_droplets <- dSamples %>%
+d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-         Spiked == "Spiked",
-         grepl(pattern = "concentrated", x = Process, ignore.case = T)) %>%
-  filter(Target == "N2" | Target == "E") %>%
-  pull(avg_pos_droplets) %>%
-  max()
-
-dSamples %>%
-  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-         Spiked == "Spiked",
-         grepl(pattern = "concentrated", x = Process, ignore.case = T)) %>%
-  mutate(avg_pos_droplets = ifelse(avg_pos_droplets>ymax_droplets, ymax_droplets*1.5, avg_pos_droplets)) %>%
-  ggplot(aes(x=Process, y=avg_pos_droplets, fill = Target)) +
-  geom_col(position = "dodge") +
-  scale_y_continuous(limits = c(0, ymax_droplets*1.5)) +
-  facet_grid(Type ~ Sample_date, scales = "free_x") +
+         grepl(pattern = "concentrated", x = Process, ignore.case = T),
+         Target != "MHV") %>%
+  ggplot(aes(x = Type, y = percentage_positive, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ Process, scales = "free_x") +
   theme_light() +
+  scale_fill_manual(values = c("firebrick1", "dodgerblue2")) +
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  ) +
   labs(
-    title = "Average number of droplets positive in wastewater samples",
-    subtitle = paste0("Y axis maxed to ", ymax_droplets*1.5, " based on sample E and N2 genes"),
-    y = "Number of Positive droplets",
+    title = "Percentage of droplets positive in wastewater samples without MHV signal",
+    y = "Percentage of Positive droplets",
     x = "Samples"
   )
 
@@ -436,6 +485,7 @@ dSamples %>%
 ```
 
 \newpage
+\blandscape
 
 ## Efficiency
 
@@ -467,88 +517,51 @@ Efficiency equation:
 
 
 
-### Controls
+### SC2 efficiency
 ```{r calculating efficiency from MHV}
 
+# pander(MHV_efficiency_controls, split.table = 500)
 
-pander(MHV_efficiency_controls)
+pander(SC2_efficiency, split.table = 500)
 
+```
 
-pander(SC2_efficiency)
+### SC2 efficiency in oldWW - baseline corrected
+
+```{r }
+
+pander(sc2_n2, split.table = 500)
 
 ```
 
 ### Samples
 
-
 ```{r}
 
 pander(sample_stock %>% ungroup() %>% arrange() %>%
-         select(-Spiked), digits = 10, round = 2)
+         select(-Spiked), digits = 10, round = 2, split.table = 500)
 
 ```
 
 
 ## Wastewater original concentration
 
-Take average efficiency of N and E genes from control, concentrated ZeptoSC2, for our efficiency variable in our equation. 
+Based on conversations with other public health departments, we are no longer account for efficiency in final calculations for SC2 concentration in wastewater.
 
 ```{r wastewater stock concentration calculations}
 
-pander(MHV_efficiency)
-
 pander(ww_SC2_conc_result,
-       digits = 10, round = 2)
+       digits = 10, round = 2, split.table = 500)
 
 ```
 
-
-## QuickExtract
-```{r calc quickextract MHV}
-
-#MHV quick extract
-d %>%
-  filter(Process == "QuickExtract",
-         Target == "MHV") %>%
-  select(Sample, `Conc(copies/uL)`) %>%
-  mutate(input = as.numeric(str_extract(Sample, pattern = "[\\d]?[\\d]$")),
-    stock_conc_GC = stock_concentration_calc(concentration = `Conc(copies/uL)`, 
-                                               rxn_vol = rxn_vol_uL, 
-                                               input_vol = input_vol_uL, 
-                                               extraction_vol = 1,
-                                               elution_vol = 1, 
-                                               efficiency = 1, 
-                                               end_concentration_vol = 1,
-                                               initial_concentration_vol = 1)
-  ) %>%
-  mutate(fin_conc = ifelse(Sample == "MHV_QuickExtract_2", stock_conc_GC*(50/2), 
-                           ifelse(grepl(x=Sample, pattern = "oldWW-MHV"),stock_conc_GC * (10^input) * 25 / 2, stock_conc_GC))) %>%
-  pander()
-  
-
-#SC2 quick extract
-d %>%
-  filter(Process == "QuickExtract",
-         Target != "MHV",
-         grepl(x = Sample, pattern = "SC2")) %>%
-  select(Sample, `Conc(copies/uL)`) %>%
-  mutate(input = as.numeric(str_extract(Sample, pattern = "[\\d]?[\\d]$")),
-    stock_conc_GC = stock_concentration_calc(concentration = `Conc(copies/uL)`, 
-                                               rxn_vol = rxn_vol_uL, 
-                                               input_vol = input_vol_uL, 
-                                               extraction_vol = 1,
-                                               elution_vol = 1, 
-                                               efficiency = 1, 
-                                               end_concentration_vol = 1,
-                                               initial_concentration_vol = 1)
-  ) %>%
-  mutate(fin_conc = stock_conc_GC * 2 * 25) %>%
-  pander()
-
-```
+\elandscape
 
 
 ```{r child = "code/dilutions.Rmd", eval = has_dilutions}
 ```
 
+
+```{r child = "code/quickextract.Rmd", eval = has_QE}
+```
 
