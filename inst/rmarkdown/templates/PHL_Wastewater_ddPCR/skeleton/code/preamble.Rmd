@@ -149,7 +149,7 @@ d_sd <- d %>%
 ```{r data manip}
 
 dControls <- d %>%
-  filter(!grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type)) %>%
+  filter(!grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type) | (grepl(pattern = "SouthWest", x = Type) & Sample_date == as.Date("2023-05-01"))) %>%
   mutate(exp_con = ifelse(grepl(pattern = "PCR", x = Type ,ignore.case = T), "ddPCR control", "Extraction control"))
 
 dNeg <- dControls %>%

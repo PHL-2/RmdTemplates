@@ -870,7 +870,7 @@ knitr::include_graphics(
 
 ```{r sign off}
 
-data.frame(`Role and Name` = linebreak(c("Bioinformatician:\nVincent Tu, PhD",
+data.frame(`Role and Name` = linebreak(c(paste0("Bioinformatician:\n", bioinformatician_name),
                                          "Sequencing Manager:\nMazen Sid Ahmed, PhD",
                                          "Laboratory Directory:\nBernadette Matthis, MSBA"), align = "l"),
            Signature = c("", "", ""),

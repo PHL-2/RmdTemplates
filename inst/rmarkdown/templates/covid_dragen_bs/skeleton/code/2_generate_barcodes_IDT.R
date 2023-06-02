@@ -292,11 +292,15 @@ message("\nThese samples were found in the epidemiologists metadata sheet but no
 message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check")
 
 epi_sample_not_found <- PHL_data %>%
-  select(sample_name) %>%
-  rbind(select(TU_data, sample_name)) %>%
-  filter(!sample_name %in% metadata_sheet$sample_name) %>%
-  pull() %>%
-  str_sort()
+  select(any_of("sample_name")) %>%
+  rbind(select(TU_data, any_of("sample_name")))
+
+if(ncol(epi_sample_not_found > 0)) {
+  epi_sample_not_found <- epi_sample_not_found %>%
+    filter(!sample_name %in% metadata_sheet$sample_name) %>%
+    pull() %>%
+    str_sort()
+}
 
 message(paste0(epi_sample_not_found, collapse = ", "))
 
@@ -320,7 +324,8 @@ missing_sample_CT <- missing_metadata_non_ctrl_samples %>%
 missing_metadata_samples <- rbind(missing_sample_date, missing_sample_RLU, missing_sample_CT)
 
 if(nrow(missing_metadata_samples) > 0){
-  stop(simpleError(paste0("These non-control samples are in the sample sheet but are missing collection date or CT from the epidemiologists! They may also be GeneXpert samples\n",
+  stop(simpleError(paste0("These non-control samples are in the sample sheet but are missing RLU values, CT values, or collection date from the epidemiologists!\n",
+                          "They may also be GeneXpert samples\n",
                           paste0(pull(missing_metadata_samples), collapse = ", "))))
 }
 
@@ -335,15 +340,18 @@ for(x in c(cols2merge, "sample_id",
            "organism", "host_scientific_name", "host_disease", "isolation_source",
            "index", "index2", "UDI_Index_ID", "I7_Index_ID", "I5_Index_ID",
            "sequencing_date", "prj_descrip", "instrument_type", "read_length",
-           "sample_collection_date", "host_age_bin", "gender", "zip_char", "priority")) {
+           "environmental_site", "sample_collection_date", "host_age_bin", "gender", "zip_char", "priority")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     stop(simpleError(paste0("Missing column [", x, "] in the metadata sheet template!!!")))
   }
 }
 
-#make these columns NA if missing
-for(x in c("qubit_conc_ng_ul",
-           "lane", "run_number")) {
+#remove empty columns
+metadata_sheet <- metadata_sheet %>%
+  select(where(function(x) any(!is.na(x))))
+
+#add back these columns as NA if missing
+for(x in c("qubit_conc_ng_ul")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     metadata_sheet[[x]] <- NA
   }
@@ -404,10 +412,6 @@ if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
 ####################
 # Write sample sheet
 ####################
-
-#remove empty columns again
-metadata_sheet <- metadata_sheet %>%
-  select(where(function(x) any(!is.na(x))))
 
 samp_sheet_2_write <- metadata_sheet %>%
   # do not include lane in the sample sheet otherwise it will only demultiplex that sample in that specified lane, not in all lanes
