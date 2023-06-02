@@ -95,22 +95,22 @@ filter4report <- function(data) {
     filter(!grepl("None|Undetermined", sample_id)) %>%
 
     #filter out samples with any pangolin data; this should be the same as filtering out is.na(lineage)
-    filter(!grepl(" - No Variant Calls$", sample_type)) %>%
+    filter(!grepl(" - No Variant Calls$| - Poor$", sample_type)) %>%
 
     #filter out controls
     filter(!isControl) %>%
 
-    #filter out bad results
-    filter(nc_qc_status != "bad") %>%
-
     #filter if no coverage
     filter(!is.na(median_coverage)) %>%
 
-    #filter out mediocre results with lower coverages
-    filter(!(nc_qc_status == "mediocre" & pct_genome_coverage_over_30x < .8)) %>%
+    #filter out bad results
+    filter(if_any(contains(c("nc_qc_status", "nextclade_qc_overallstatus")), ~ .x != "bad")) %>%
+
+    #filter out samples with less than 80% coverage
+    filter(pct_genome_coverage_over_30x >= .80) %>%
 
     #filter out samples that didn't have a pangolin report
-    filter(pango_qc_status != "fail")
+    filter(if_any(contains(c("pango_qc_status", "pangolin_qc_status")), ~ .x != "fail"))
 
 }
 
@@ -161,4 +161,3 @@ read_excel_safely <- function(file, sheet) {
   try_read_excel(file, sheet = sheet)$result
 
 }
-
