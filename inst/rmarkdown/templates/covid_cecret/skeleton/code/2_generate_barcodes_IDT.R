@@ -313,8 +313,8 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   mutate(read_length = read_length) %>%
   mutate(index_length = index_length) %>%
   mutate(environmental_material = ifelse(grepl("swab|control", sample_type, ignore.case = TRUE), NA, environmental_material)) %>%
-  mutate(collection_device = ifelse(grepl("waste water|control", sample_type, ignore.case = TRUE), NA, collection_device)) %>%
-  mutate(environmental_site = case_when(grepl("Water control|Reagent control", sample_type) ~ paste0(plate_row, plate_col),
+  mutate(collection_device = ifelse(grepl("wastewater|control", sample_type, ignore.case = TRUE), NA, collection_device)) %>%
+  mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(plate_row, plate_col),
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
                                         TRUE ~ environmental_site))
 
