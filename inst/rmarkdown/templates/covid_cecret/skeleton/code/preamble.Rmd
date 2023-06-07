@@ -138,10 +138,14 @@ cecret_results_fp <- here("data", paste0(sequencing_date, "_cecret_results.csv")
 
 ```{r load metadata, echo=FALSE}
 
-ctrl_fct_lvl <- c("Unassigned reads", "Water control", "Reagent control", "Environmental control", "Mock DNA positive control")
+ctrl_fct_lvls <- c("Water control", "Reagent control", "Environmental control", "Mock DNA positive control")
+
+sample_type_lvls <- c("Reference", "Unassigned reads",
+                      ctrl_fct_lvls,
+                      "Nasal swab", "Nasal swab - Poor", "Wastewater", "Wastewater - Poor", NA)
 
 s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
-  mutate(isControl = sample_type %in% ctrl_fct_lvl[-1]) %>%
+  mutate(isControl = sample_type %in% ctrl_fct_lvls) %>%
   mutate(barcode_sequence = paste0(index, "+", index2))
 
 read_length <- unique(s_meta$read_length)
@@ -257,7 +261,7 @@ if(max(top_unkwn_indices$percent_of_all_reads) > 0.005) {
 }
 
 non_ctrl_samples <- s_meta %>%
-  filter(!sample_type %in% ctrl_fct_lvl) %>%
+  filter(!sample_type %in% ctrl_fct_lvls) %>%
   select(sample_id) %>%
   pull()
 
@@ -477,7 +481,7 @@ snpdist_check <- snpdists %>%
   filter(sample_id == compared_to)
 
 if(!all(snpdist_check$snps == 0)) {
-  stop("Something wrong with the snp-dist process")
+  stop(simpleError("Something wrong with the snp-dist process"))
 }
   
 snpdists %>%
@@ -553,12 +557,11 @@ snpdists <- read_csv(snpdists_fp)
 #df with all samples
 s <- s_meta %>%
   merge(cecret_results, by = c("sample_id", "barcode_sequence", "index", "index2", "lane"), all = TRUE) %>%
-  mutate(sample_type = case_when(grepl("^Undetermined$", sample_id) ~ ctrl_fct_lvl[1],
+  mutate(sample_type = case_when(grepl("^Undetermined$", sample_id) ~ sample_type_lvls[2],
                                  ((pangolin_qc_status == "fail" | nextclade_qc_overallstatus == "bad") & !isControl) ~ paste0(sample_type, " - Poor"),
                                  TRUE ~ sample_type)) %>%
   #rearrange the sampletypes by ctrls first
-  mutate(sample_type = factor(sample_type, levels = c(ctrl_fct_lvl,
-                                                      sort(unique(sample_type)[!grepl(paste0(ctrl_fct_lvl, collapse = "|"), unique(sample_type))])))) %>%
+  mutate(sample_type = factor(sample_type, levels = sample_type_lvls)) %>%
   droplevels()
 
 #df with samples that have results (including controls)
@@ -572,6 +575,10 @@ s_toPlot <- s %>%
 has_CT <- any(grepl("^CT$", colnames(s)))
 
 has_RLU <- any(grepl("^RLU$", colnames(s)))
+
+if(any(is.na(s$sample_type))) {
+  stop(simpleError("A sample type is unaccounted for in sample_type_lvls"))
+}
 
 ```
 
@@ -836,30 +843,21 @@ rerun_samples <- s %>%
 
 ```{r sample type attributes}
 
-actual_sample_type <- c(levels(s$sample_type), NA)
-
-lvls <- c("Reference", "Unassigned reads", "Water control", "Reagent control", "Environmental control", "Mock DNA positive control",
-          "Nasal swab", "Nasal swab - Poor", "Wastewater", "Wastewater - Poor", NA)
-
-if(!all(actual_sample_type %in% lvls)) {
-  stop(simpleError(paste0("These sample types were found in the metadata sheet but not accounted for in the code: ", actual_sample_type[!actual_sample_type %in% lvls])))
-}
-
 ann_geom_values <- list()
 
 #leave Unassigned reads as purple
-ann_geom_values[["sample_type_colors"]] <- setNames(c("#000000", pal_d3("category20")(20)[c(15, 19, 16, 13, 2, 1, 4, 10, 7, 8)]), lvls)
+ann_geom_values[["sample_type_colors"]] <- setNames(c("#000000", pal_d3("category20")(20)[c(15, 19, 16, 13, 2, 1, 4, 10, 7, 8)]), sample_type_lvls)
 
 #make the controls and unassigned reads into triangle and diamond shapes
 ann_geom_values[["sample_type_shapes"]] <- setNames(c(4, 8, 24, 13, 25, 23,
                                                       21, 22, 21, 22,
-                                                    c(9:14)[1:(length(lvls)-10)]), lvls)
+                                                    c(9:14)[1:(length(sample_type_lvls)-10)]), sample_type_lvls)
 
 #make the controls and unassigned reads samples bigger in size
-ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 4, 2, 4, 2, 4, rep(1, length(lvls)-6)), lvls)
+ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 4, 2, 4, 2, 4, rep(2, length(sample_type_lvls)-6)), sample_type_lvls)
 
 #make alpha for nasal swabs to 0.5
-ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, 1, 1, rep(0.2, length(lvls)-6)), lvls)
+ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, 1, 1, rep(0.2, length(sample_type_lvls)-6)), sample_type_lvls)
 
 ann_geom_values[["linetype"]] <- setNames(c("solid", "twodash", "dotted", "dashed"), c("good", "mediocre", "bad", "control"))
 

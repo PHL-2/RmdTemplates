@@ -115,7 +115,7 @@ s %>%
   mutate(num_seq=read_counts/1000000) %>%
   # remove reads that did not get assigned
   ggplot(aes(x=num_seq, fill = sample_type)) +
-    geom_histogram(binwidth=0.1, boundary=TRUE, color = "white") +
+    geom_histogram(boundary=TRUE, color = "white") +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     theme(panel.grid = element_blank()) +
