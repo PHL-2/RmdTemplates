@@ -124,7 +124,12 @@ run_folder <- sequencing_folder_fp %>%
 folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
   as.Date(format = "%Y%m%d")
 
-if(folder_date != gsub("_.*", "", basename(here()))) {
+if (is.na(run_folder)) {
+  stop(simpleError(paste0("Could not connect to path: ", sequencing_folder_fp,
+                          "\nCheck your network connection and make sure you're connected to the city's network")))
+}
+
+if (folder_date != gsub("_.*", "", basename(here()))) {
  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
 }
 

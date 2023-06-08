@@ -8,3 +8,5 @@ sh_exe_fp <- "path/to/Git/bin/sh.exe"
 
 #full path of where the seqsender repo was cloned
 seqsender_fp <- "path/to/seqsender"
+
+bioinformatician_name <- "First Last, Degree"

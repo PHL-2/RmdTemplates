@@ -44,10 +44,7 @@ RLU_data <- read_csv(RLU_fp) %>%
   select(SPECIMEN_NUMBER, SPECIMEN_DATE, BIRTH_DATE, RLU) %>%
   mutate(BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y"), SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y")) %>%
   #filter rows where sample_id is NA
-  filter(!is.na(SPECIMEN_NUMBER)) %>%
-  #filter empty columns
-  select(where(function(x) any(!is.na(x)))) %>%
-  select(!matches("^\\.\\.\\."))
+  filter(!is.na(SPECIMEN_NUMBER))
 
 ###################################################
 # Get HC1 samples
@@ -127,7 +124,7 @@ if(length(missing_sample_with_RLU) > 0) {
 message("\nThese are low RLU samples less than 1000: ")
 message(paste0(PHL_data[PHL_data$RLU < 1000 & !is.na(PHL_data$RLU), "SPECIMEN_NUMBER"], collapse = ", "))
 
-message("\nThese are HC1 samples with missing RLU values: ")
+message("\nThese are Health Center samples with missing RLU values: ")
 message(paste0(HC1_samples[HC1_samples %in% PHL_data$SPECIMEN_NUMBER], collapse = ", "))
 
 message("\nThese are GeneXpert samples with missing RLU values: ")
@@ -229,7 +226,11 @@ TU_samples <- TU_data %>%
   rename(sample_name = "SPECIMEN_NUMBER") %>%
   arrange(`ct value`)
 
-environmental_samples_fp <- list.files(here("metadata", "extra_metadata"), pattern = "enviro.*.xlsx", full.names = TRUE, ignore.case = TRUE)
+shared_environ_fp <- max(list.files("//city.phila.local/shares/Health/PHL/Admin/Sequencing Action plan updated/Enviromental_samples", pattern = "^[0-9]*-[0-9]*-[0-9]*", full.names = TRUE))
+
+file.copy(shared_environ_fp, here("metadata", "extra_metadata"))
+
+environmental_samples_fp <- list.files(here("metadata", "extra_metadata"), pattern = "^[0-9]*-[0-9]*-[0-9]*_Environmental_Swab.xlsx", full.names = TRUE)
 
 if(length(environmental_samples_fp) > 0) {
   enviro_samples <- environmental_samples_fp %>%
