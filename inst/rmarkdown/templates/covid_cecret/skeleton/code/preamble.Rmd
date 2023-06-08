@@ -130,6 +130,7 @@ unkwn_barcodes_fp <- here("data", paste0(sequencing_date, "_unknown_barcodes.csv
 fastqc_mean_fp <- here("data", paste0(sequencing_date, "_fastqc.csv"))
 
 kraken_props_fp <- here("data", paste0(sequencing_date, "_kraken_props.csv"))
+snpdists_fp <- here("data", paste0(sequencing_date, "_snpdists.csv"))
 software_version_fp <- here("data", paste0(sequencing_date, "_software_version.csv"))
 cecret_results_fp <- here("data", paste0(sequencing_date, "_cecret_results.csv"))
 
@@ -137,10 +138,14 @@ cecret_results_fp <- here("data", paste0(sequencing_date, "_cecret_results.csv")
 
 ```{r load metadata, echo=FALSE}
 
-ctrl_fct_lvl <- c("Unassigned reads", "Water control", "Reagent control", "Environmental control", "Mock DNA positive control")
+ctrl_fct_lvls <- c("Water control", "Reagent control", "Environmental control", "Mock DNA positive control")
+
+sample_type_lvls <- c("Reference", "Unassigned reads",
+                      ctrl_fct_lvls,
+                      "Nasal swab", "Nasal swab - Poor", "Wastewater", "Wastewater - Poor", NA)
 
 s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
-  mutate(isControl = sample_type %in% ctrl_fct_lvl[-1]) %>%
+  mutate(isControl = sample_type %in% ctrl_fct_lvls) %>%
   mutate(barcode_sequence = paste0(index, "+", index2))
 
 read_length <- unique(s_meta$read_length)
@@ -150,28 +155,33 @@ index_length <- unique(s_meta$index_length)
 
 ```{r aws cli demux and cecret commands}
 
-# tar.gz the run folder
+# tar.gz the run folder:
+# tar -czvf [sequencing run name].tar.gz -C /path/to/[sequencing run folder]/ .
+# (if you are taring from the parent directory of the sequencing runs, don't include a period in front of the sequencing run folder)
+#
+# upload the tar run folder to s3 bucket (there is no way to get the SHA256 of object upload with 'aws s3 cp' at the moment)
 # 
-# upload to s3 bucket with the date
+# run the nf-core demux pipeline (running this with AWS Batch takes 33 minutes with 18 samples)
 # 
-# run the nf-core demux pipeline 
-# 
+# check that all the sample fastq files are available
+#
 # run the Cecret pipeline
 # 
 # download the results
 
-# aws s3 cp s3://COVIDSeq-output/[sequencing_date]_COVIDSeq/ . \
+# aws s3 cp s3://nextflow-output/COVIDSeq/[sequencing_date]_COVIDSeq/ . \
 #   --recursive \
 #   --exclude "*" \
 #   --include "*software_versions.yml" \
 #   --include "*Demultiplex_Stats.csv" \
 #   --include "*Quality_Metrics.csv" \
 #   --include "*Top_Unknown_Barcodes.csv" \
-#   --include "*.fastq.gz_fastqc_data.txt"
+#   --include "*.fastq.gz_fastqc_data.txt" \
 #   --include "*.consensus.fa" \
 #   --include "*_filtered_R[12].fastq.gz" \
 #   --include "*aggregated-freyja.tsv" \
 #   --include "*_kraken2_report.txt" \
+#   --include "*snp-dists.txt" \
 #   --include "*.multicov.txt" \
 #   --include "*nextclade.tsv" \
 #   --include "*nextclade.json" \
@@ -250,8 +260,14 @@ if(max(top_unkwn_indices$percent_of_all_reads) > 0.005) {
   stop(simpleError("Top unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode"))
 }
 
-#throw error if Undetermined sample has more reads than the median
-if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] > median(samp_reads$read_counts)) {
+non_ctrl_samples <- s_meta %>%
+  filter(!sample_type %in% ctrl_fct_lvls) %>%
+  select(sample_id) %>%
+  pull()
+
+#throw error if Undetermined sample has more reads than non-control samples
+if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] >
+   sum(samp_reads[samp_reads$sample_id %in% non_ctrl_samples, "read_counts"])) {
   stop(simpleError("Undetermined sample has more reads than the median. Double check the sample barcodes"))
 }
 
@@ -442,6 +458,37 @@ freyja <- freyja_fp %>%
   
 ```
 
+```{r load snp dists results, eval = import_data}
+
+snpdists_raw_fp <- here("data", "processed_cecret", "snp-dists", "snp-dists.txt")
+
+snpdists <- snpdists_raw_fp %>%
+  read_csv()
+
+colnames(snpdists)[1] %>%
+  gsub(" ", ",", .) %>%
+  paste0("UPHL-BioNGS-Cecret,", .) %>%
+  as.data.frame() %>%
+  write_csv(file = software_version_fp, append = TRUE, quote = "none")
+
+snpdists <- snpdists %>%
+  rename(sample_id = 1) %>%
+  mutate(sample_id = gsub("Consensus_|.consensus.*", "", sample_id)) %>%
+  rename_all(.funs = function(x) gsub("Consensus_|.consensus.*", "", x)) %>%
+  pivot_longer(cols = -sample_id, names_to = "compared_to", values_to = "snps")
+
+snpdist_check <- snpdists %>%
+  filter(sample_id == compared_to)
+
+if(!all(snpdist_check$snps == 0)) {
+  stop(simpleError("Something wrong with the snp-dist process"))
+}
+  
+snpdists %>%
+  write_csv(snpdists_fp)
+  
+```
+
 ```{r load cecret software versions, eval = import_data}
 
 cecret_software_select <- c("ivar", "bwa", "seqyclean", "Cecret version", "pangolin_scorpio_version", "pangolin_constellation_version", "pangolin_pangolin_version", "pangolin_version")
@@ -501,6 +548,8 @@ software_version <- read_csv(software_version_fp) %>%
 
 k2 <- read_csv(kraken_props_fp)
 
+snpdists <- read_csv(snpdists_fp)
+
 ```
 
 ```{r merge metadata with data and select samples with results, echo=FALSE}
@@ -508,12 +557,11 @@ k2 <- read_csv(kraken_props_fp)
 #df with all samples
 s <- s_meta %>%
   merge(cecret_results, by = c("sample_id", "barcode_sequence", "index", "index2", "lane"), all = TRUE) %>%
-  mutate(sample_type = case_when(grepl("^Undetermined$", sample_id) ~ ctrl_fct_lvl[1],
+  mutate(sample_type = case_when(grepl("^Undetermined$", sample_id) ~ sample_type_lvls[2],
                                  ((pangolin_qc_status == "fail" | nextclade_qc_overallstatus == "bad") & !isControl) ~ paste0(sample_type, " - Poor"),
                                  TRUE ~ sample_type)) %>%
   #rearrange the sampletypes by ctrls first
-  mutate(sample_type = factor(sample_type, levels = c(ctrl_fct_lvl,
-                                                      sort(unique(sample_type)[!grepl(paste0(ctrl_fct_lvl, collapse = "|"), unique(sample_type))])))) %>%
+  mutate(sample_type = factor(sample_type, levels = sample_type_lvls)) %>%
   droplevels()
 
 #df with samples that have results (including controls)
@@ -527,6 +575,10 @@ s_toPlot <- s %>%
 has_CT <- any(grepl("^CT$", colnames(s)))
 
 has_RLU <- any(grepl("^RLU$", colnames(s)))
+
+if(any(is.na(s$sample_type))) {
+  stop(simpleError("A sample type is unaccounted for either in the metadata sheet or in sample_type_lvls"))
+}
 
 ```
 
@@ -630,6 +682,8 @@ dir.create(here("upload", "seqsender"), recursive = TRUE)
 # Export the data for seqsender upload to sra, genbank, and gisaid
 seqsender <- s_toPlot %>%
   filter4report() %>%
+  #submit only nasal swabs for now. WW data needs additional metadata
+  filter(sample_type == "Nasal swab") %>%
   mutate(collection_date = case_when(!(is.na(sample_collection_date) |
                                          as.character(sample_collection_date) == "Unknown") ~ as.character(sample_collection_date),
                                      !is.na(PHL_sample_received_date) ~ as.character(PHL_sample_received_date),
@@ -781,7 +835,7 @@ if (!all(check_all$count_all_samples == total_file_sets_2_count)) {
 
 #these are samples that failed in the pipeline for whatever reason. Can rerun pipeline to generate results for these samples
 rerun_samples <- s %>%
-  filter(is.na(nextclade_qc_overallstatus)) %>%
+  filter(is.na(pangolin_qc_status)) %>%
   select(sample_id) %>%
   pull()
 
@@ -791,30 +845,21 @@ rerun_samples <- s %>%
 
 ```{r sample type attributes}
 
-actual_sample_type <- c(levels(s$sample_type), NA)
-
-lvls <- c("Unassigned reads", "Water control", "Reagent control", "Environmental control", "Mock DNA positive control",
-          "Nasal swab", "Nasal swab - Poor", "Wastewater", "Wastewater - Poor", NA)
-
-if(!all(actual_sample_type %in% lvls)) {
-  stop(simpleError(paste0("These sample types were found in the metadata sheet but not accounted for in the code: ", actual_sample_type[!actual_sample_type %in% lvls])))
-}
-
 ann_geom_values <- list()
 
 #leave Unassigned reads as purple
-ann_geom_values[["sample_type_colors"]] <- setNames(pal_d3("category20")(20)[c(15, 19, 16, 13, 2, 1, 4, 10, 7, 8)], lvls)
+ann_geom_values[["sample_type_colors"]] <- setNames(c("#000000", pal_d3("category20")(20)[c(15, 19, 16, 13, 2, 1, 4, 10, 7, 8)]), sample_type_lvls)
 
 #make the controls and unassigned reads into triangle and diamond shapes
-ann_geom_values[["sample_type_shapes"]] <- setNames(c(8, 24, 13, 25, 23,
+ann_geom_values[["sample_type_shapes"]] <- setNames(c(4, 8, 24, 13, 25, 23,
                                                       21, 22, 21, 22,
-                                                    c(9:14)[1:(length(lvls)-9)]), lvls)
+                                                    c(9:14)[1:(length(sample_type_lvls)-10)]), sample_type_lvls)
 
 #make the controls and unassigned reads samples bigger in size
-ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 2, 4, 2, 4, rep(1, length(lvls)-5)), lvls)
+ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 4, 2, 4, 2, 4, rep(2, length(sample_type_lvls)-6)), sample_type_lvls)
 
 #make alpha for nasal swabs to 0.5
-ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, 1, rep(0.2, length(lvls)-5)), lvls)
+ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, 1, 1, rep(0.2, length(sample_type_lvls)-6)), sample_type_lvls)
 
 ann_geom_values[["linetype"]] <- setNames(c("solid", "twodash", "dotted", "dashed"), c("good", "mediocre", "bad", "control"))
 
@@ -827,7 +872,8 @@ sample_type_legend <- s %>%
   ggplot(., aes(y = 1, x = sample_id, fill = sample_type)) +
     geom_tile(color = "black") +
     coord_fixed() +
-    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type),
+                                                                        names(ann_geom_values$sample_type_colors))]) +
     theme_bw() +
     theme(
       strip.text = element_text(size = 12),

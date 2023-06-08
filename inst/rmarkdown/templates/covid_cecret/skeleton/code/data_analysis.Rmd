@@ -115,7 +115,7 @@ s %>%
   mutate(num_seq=read_counts/1000000) %>%
   # remove reads that did not get assigned
   ggplot(aes(x=num_seq, fill = sample_type)) +
-    geom_histogram(binwidth=0.1, boundary=TRUE, color = "white") +
+    geom_histogram(boundary=TRUE, color = "white") +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     theme(panel.grid = element_blank()) +
@@ -525,7 +525,7 @@ k2 %>%
           axis.title.x.bottom = element_blank(),
           plot.margin= margin(0, 0, 0, 0, "pt"),
           ) +
-    labs(x = "", y = "", fill = "Proportion", title = "Top 5 most abundant taxa within each sample are shown")
+    labs(x = "", y = "", fill = "Relative\nProportion", title = "Top 5 most abundant taxa within each sample are shown")
     } /
   sample_type_legend
 
@@ -569,6 +569,98 @@ k2 %>%
       x="SARS-CoV-2 kmer\nproportions",
       y="Number of samples", fill = "Sample Type"
     )
+
+```
+
+## SNPs compared to reference strain
+
+```{r snpdists, fig.height=8, fig.width=8}
+
+snp_dist_reorder <- snpdists %>%
+  rename(subject = "sample_id", query = "compared_to") %>%
+  merge(select(s, sample_id, sample_type), by.x = "subject", by.y = "sample_id", all.x = TRUE) %>%
+  rename(subject_sample_type = "sample_type") %>%
+  merge(select(s, sample_id, sample_type), by.x = "query", by.y = "sample_id", all.x = TRUE) %>%
+  rename(query_sample_type = "sample_type") %>%
+  mutate(subject_sample_type = ifelse(is.na(subject_sample_type), "Reference", as.character(subject_sample_type)),
+         subject_sample_type = factor(subject_sample_type, levels = c("Reference", levels(s$sample_type))),
+         query_sample_type = ifelse(is.na(query_sample_type), "Reference", as.character(query_sample_type)),
+         query_sample_type = factor(query_sample_type, levels = c("Reference", levels(s$sample_type)))) %>%
+  order_on_other_col(subject, subject_sample_type) %>%
+  order_on_other_col(query, query_sample_type, decreasing = FALSE)
+
+snp_dists_y_legend <- snp_dist_reorder %>%
+  select(subject, subject_sample_type) %>%
+  unique() %>%
+  {
+  ggplot(., aes(x = 1, y = subject, fill = subject_sample_type)) +
+    geom_tile(color = "black") +
+    coord_fixed() +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$subject_sample_type),
+                                                                        names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() +
+    theme(
+      strip.text = element_text(size = 12),
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.line = element_blank(),
+      plot.margin= margin(0, 0, 0, 0, "pt"),
+      legend.position = "bottom"
+    ) +
+    labs(y = "", x = "", fill = "") + 
+    guides(fill = FALSE)
+  }
+
+snp_dists_x_legend <- snp_dist_reorder %>%
+  select(query, query_sample_type) %>%
+  unique() %>%
+  {
+  ggplot(., aes(y = 1, x = query, fill = query_sample_type)) +
+    geom_tile(color = "black") +
+    coord_fixed() +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$query_sample_type),
+                                                                        names(ann_geom_values$sample_type_colors))],
+                      ) +
+    theme_bw() +
+    theme(
+      strip.text = element_text(size = 12),
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.line = element_blank(),
+      plot.margin= margin(0, 0, 0, 0, "pt"),
+      legend.position = "top"
+    ) +
+    labs(y = "", x = "", fill = "") + 
+    guides(fill = guide_legend(override.aes = list(size = 2)))
+  }
+
+snp_dist_reorder %>%
+  {
+  plot_spacer() +
+  snp_dists_x_legend +
+  snp_dists_y_legend +
+  ggplot(., aes(x=query, y=subject)) +
+    geom_tile(aes(fill = snps), color = "black") +
+    coord_equal() +
+    scale_fill_gradientn(colors = rev(brewer.pal(11, "Spectral")[1:6])) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.ticks = element_blank(),
+          axis.text = element_blank(),
+          axis.title = element_blank(),
+          plot.margin= margin(0, 0, 0, 0, "pt")) +
+    labs(fill = "SNPs", x = "", y = "")
+  }
+  
 
 ```
 
@@ -1044,7 +1136,7 @@ knitr::include_graphics(
 ```{r sign off}
 
 data.frame(`Role and Name` = linebreak(c(paste0("Bioinformatician:\n", bioinformatician_name),
-                                         "Sequencing Manager:\nMazen Sid Ahmed, PhD",
+                                         "Sequencing Lab Manager:\nMazen Sid Ahmed, PhD",
                                          "Laboratory Directory:\nBernadette Matthis, MSBA"), align = "l"),
            Signature = c("", "", ""),
            Date = c(as.character(Sys.Date()), "", ""), check.names = FALSE) %>%

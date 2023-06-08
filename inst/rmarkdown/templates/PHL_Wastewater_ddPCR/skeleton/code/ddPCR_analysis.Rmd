@@ -115,11 +115,11 @@ if (sum(d_pre$Droplet_count<10000) > 0) {
 
 ```{r variance check}
 
-if ((sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1.00, na.rm = T) > 0) | sum(d_sd$outlier_median > 5, na.rm = T) > 0) {
+if ((sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1.00, na.rm = T) > 0) | sum(d_sd$outlier_median > 5, na.rm = T) > 0 | any(d_sd$GESD_q < 0.05)) {
   print("Detected high variation; please check samples")
   var_pander <- d_sd %>%
     select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median) %>%
-    filter(cv_conc>30 & sd_from_mean > 1 | MAD_from_med > 5) %>%
+    filter(cv_conc>30 & sd_from_mean > 1 | MAD_from_med > 5 | GESD_q < 0.05) %>%
     arrange(Type, Target) %>%
     distinct()
 
@@ -127,7 +127,6 @@ if ((sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1.00, na.rm =
       split.table = 500
   )
 }
-
 
 ```
 
