@@ -577,7 +577,7 @@ has_CT <- any(grepl("^CT$", colnames(s)))
 has_RLU <- any(grepl("^RLU$", colnames(s)))
 
 if(any(is.na(s$sample_type))) {
-  stop(simpleError("A sample type is unaccounted for in sample_type_lvls"))
+  stop(simpleError("A sample type is unaccounted for either in the metadata sheet or in sample_type_lvls"))
 }
 
 ```
@@ -682,6 +682,8 @@ dir.create(here("upload", "seqsender"), recursive = TRUE)
 # Export the data for seqsender upload to sra, genbank, and gisaid
 seqsender <- s_toPlot %>%
   filter4report() %>%
+  #submit only nasal swabs for now. WW data needs additional metadata
+  filter(sample_type == "Nasal swab") %>%
   mutate(collection_date = case_when(!(is.na(sample_collection_date) |
                                          as.character(sample_collection_date) == "Unknown") ~ as.character(sample_collection_date),
                                      !is.na(PHL_sample_received_date) ~ as.character(PHL_sample_received_date),

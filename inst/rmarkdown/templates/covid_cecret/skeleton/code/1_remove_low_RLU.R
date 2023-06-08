@@ -162,7 +162,7 @@ filtered_PHL_data <- PHL_data %>%
   filter(RLU >= 1000 | is.na(RLU)) %>%
   filter(!SPECIMEN_NUMBER %in% HC1_samples)
 
-potential_ct_col_names <- c("CT value", "CT values", "CTvalue", "CTvalues",
+potential_ct_col_names <- c("ct value", "CT value", "CT values", "CTvalue", "CTvalues",
                             "ct values", "ctvalue", "ctvalues")
 
 TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
@@ -234,7 +234,7 @@ environmental_samples_fp <- list.files(here("metadata", "extra_metadata"), patte
 
 if(length(environmental_samples_fp) > 0) {
   enviro_samples <- environmental_samples_fp %>%
-    data_frame(FileName = .) %>%
+    data.frame(FileName = .) %>%
     group_by(FileName) %>%
     do(read_excel(.$FileName, col_names = TRUE)) %>%
     ungroup() %>%
@@ -242,7 +242,7 @@ if(length(environmental_samples_fp) > 0) {
     rename(sample_name = 1, environmental_site = 2) %>%
     select(sample_name, environmental_site)
 } else {
-  enviro_samples <- data.frame(sample_name = paste0("ENV", 1:8), environmental_site = paste0("ENV", 1:8))
+  enviro_samples <- data.frame(sample_name = paste0("ENV", 1:11), environmental_site = paste0("ENV", 1:8))
 }
 
 older_samples_fp <- list.files(here("metadata", "extra_metadata", "prev_run"), pattern = "_filtered.xlsx", full.names = TRUE)
