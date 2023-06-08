@@ -40,11 +40,11 @@ source("code/2_generate_barcodes_IDT.R")
 ```
 
 ```{r load data, child = 'code/preamble.Rmd', eval = load_preamble}
-#load the data
+
 ```
 
 ```{r make figures, child = 'code/data_analysis.Rmd'}
-#make the figures for the report
+
 ```
 
 ```{r generate time stamped report, message=TRUE, include=FALSE, eval=FALSE}

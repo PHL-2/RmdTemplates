@@ -9,10 +9,6 @@ library(stringr)
 #BCL Convert may require a different SampleSheet format
 #https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/bcl_convert/bcl-convert-v3-7-5-software-guide-1000000163594-00.pdf
 
-#TODO: detect any samples in the previous_run folder and change its run number to 2
-#can also have an option here to add the run number to each sample
-#TODO: try removing manual inputs into the sample metadata sheet
-
 munging_fp <- here("metadata", "munge")
 
 ##############
@@ -273,16 +269,106 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   mutate(sequencing_date = sequencing_date) %>%
   mutate(prj_descrip = prj_description) %>%
   mutate(instrument_type = instrument_type) %>%
-  mutate(read_length = read_length) %>%
-  mutate(environmental_material = ifelse(grepl("swab|control", sample_type), NA, environmental_material)) %>%
-  mutate(collection_device = ifelse(grepl("waste water|control", sample_type), NA, collection_device)) %>%
-  mutate(environmental_site = case_when(grepl("Water control|Reagent control", sample_type) ~ paste0(plate_row, plate_col),
-                                        grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
-                                        TRUE ~ environmental_site))
+  mutate(read_length = read_length)
 
 if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
   stop(simpleError(paste0("Some samples have collection dates more than 2 months ago. Investigate!!")))
 }
+
+#####################################################################
+# Fill in these columns in the metadata sheet if they were left blank
+#####################################################################
+
+fill_in_columns <- c("sample_type", "sample_collected_by", "PHL_sample_received_date",
+                     "organism", "host_scientific_name", "host_disease", "isolation_source",
+                     "requester", "requester_email")
+
+#add these columns as NA if missing in metadata sheet
+for(x in fill_in_columns) {
+  if(!grepl(paste0("^", paste0(colnames(metadata_sheet), collapse = "$|^"), "$"), x)) {
+    metadata_sheet[[x]] <- NA
+  }
+}
+
+#named_vector is the below character vectors containing a grepl pattern as the name and the value as characters
+#col_name is the dataframe column to match against the named_vector
+multi_grep <- function(named_vector, col_name) {
+
+  ret_vector <- names(named_vector) %>%
+
+    #loop through the names of the named vectors, use that as the grepl pattern
+    sapply(., function(x)
+      grepl(x, col_name)) %>%
+
+    #if a pattern is found in the pattern, return the column name and use that to select the value
+    apply(1, function(y)
+      named_vector[names(y)[which(y)]]) %>%
+
+    as.character() %>%
+
+    gsub("character\\(0\\)", NA, .)
+
+  ret_vector
+}
+
+named_sample_type <- c("^NC[0-9]*$" = "Water control",
+                       "^BLANK[0-9]*$" = "Reagent control",
+                       "^PC[0-9]*$" = "Mock DNA positive control",
+                       "^H[0-9]*$|^8[0-9]*$" = "Nasal swab",
+                       "^WW" = "Wastewater")
+
+metadata_sheet <- metadata_sheet %>%
+  mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
+                                 sample_name %in% ENV_data$sample_name ~ "Environmental control",
+                                 (is.na(sample_type) | sample_type == "") ~ multi_grep(named_sample_type, sample_name),
+                                 TRUE ~ NA)) %>%
+  mutate(sample_collected_by = case_when(!(is.na(sample_collected_by) | sample_collected_by == "") ~ sample_collected_by,
+                                         grepl("^8[0-9]*$", sample_name) ~ "Temple University",
+                                         TRUE ~ "Philadelphia Department of Public Health")) %>%
+  mutate(PHL_sample_received_date = case_when(!(is.na(PHL_sample_received_date) | as.character(PHL_sample_received_date) == "") ~ as.Date(PHL_sample_received_date),
+                                              #if it's a wastewater sample without a date, throw an error
+                                              sample_type == "Wastewater" ~ NA,
+                                              #use Tuesday of the current week if no date specified; older samples that are rerun should have a date manually added in on the sheet
+                                              TRUE ~ as.Date(cut(as.POSIXct(Sys.time()), "week")) + 1)) %>%
+  mutate(organism = case_when(!(is.na(organism) | organism == "") ~ organism,
+                              sample_type == "Nasal swab" ~ "Severe acute respiratory syndrome coronavirus 2",
+                              #WW sample has to be listed as metagenome even if targeted sequencing was used
+                              sample_type == "Wastewater" ~ "Wastewater metagenome",
+                              !is.na(sample_type) ~ sample_type,
+                              TRUE ~ NA)) %>%
+  mutate(host_scientific_name = case_when(!(is.na(host_scientific_name) | host_scientific_name == "") ~ host_scientific_name,
+                                          sample_type == "Nasal swab" ~ "Homo sapiens",
+                                          !is.na(sample_type) ~ "not applicable",
+                                          TRUE ~ NA)) %>%
+  mutate(host_disease = case_when(!(is.na(host_disease) | host_disease == "") ~ host_disease,
+                                  sample_type == "Nasal swab" ~ "COVID-19",
+                                  !is.na(sample_type) ~ "not applicable",
+                                  TRUE ~ NA)) %>%
+  mutate(isolation_source = case_when(!(is.na(isolation_source) | isolation_source == "") ~ isolation_source,
+                                      sample_type == "Nasal swab" ~ "Clinical",
+                                      sample_type == "Wastewater" ~ "Wastewater",
+                                      grepl("control$", sample_type) ~ "Environmental",
+                                      TRUE ~ NA)) %>%
+  mutate(requester = case_when(!(is.na(requester) | requester == "") ~ requester,
+                               sample_type == "Wastewater" ~ "Jose Lojo",
+                               !is.na(sample_type) ~ "Jasmine Schell",
+                               TRUE ~ NA)) %>%
+  mutate(requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
+                                     sample_type == "Wastewater" ~ "jose.lojo@phila.gov",
+                                     !is.na(sample_type) ~ "jasmine.schell@phila.gov",
+                                     TRUE ~ NA)) %>%
+  mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(plate_row, plate_col),
+                                        grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
+                                        TRUE ~ environmental_site))
+
+for(x in fill_in_columns) {
+  if(any(is.na(metadata_sheet[[x]]))) {
+    stop(simpleError(paste0("There shouldn't be an NA in column ", x, ".\n",
+                            "Was there a new sample included in this run?\n",
+                            "Do the wastewater samples have a collection date?")))
+  }
+}
+
 
 ######################################################################################
 # Samples in epi metadata but we don't have the samples or they could not be extracted
@@ -336,8 +422,6 @@ if(nrow(missing_metadata_samples) > 0){
 #throw error if missing these columns
 for(x in c(cols2merge, "sample_id",
            "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
-           "sample_type", "sample_collected_by", "PHL_sample_received_date",
-           "organism", "host_scientific_name", "host_disease", "isolation_source",
            "index", "index2", "UDI_Index_ID", "I7_Index_ID", "I5_Index_ID",
            "sequencing_date", "prj_descrip", "instrument_type", "read_length",
            "environmental_site", "sample_collection_date", "host_age_bin", "gender", "zip_char", "priority")) {

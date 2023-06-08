@@ -871,7 +871,7 @@ knitr::include_graphics(
 ```{r sign off}
 
 data.frame(`Role and Name` = linebreak(c(paste0("Bioinformatician:\n", bioinformatician_name),
-                                         "Sequencing Manager:\nMazen Sid Ahmed, PhD",
+                                         "Sequencing Lab Manager:\nMazen Sid Ahmed, PhD",
                                          "Laboratory Directory:\nBernadette Matthis, MSBA"), align = "l"),
            Signature = c("", "", ""),
            Date = c(as.character(Sys.Date()), "", ""), check.names = FALSE) %>%
