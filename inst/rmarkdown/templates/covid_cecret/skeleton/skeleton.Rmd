@@ -39,6 +39,28 @@ source("code/2_generate_barcodes_IDT.R")
 
 ```
 
+```{r setup for the pdf, echo=FALSE}
+
+library(knitr)
+opts_chunk$set(
+  tidy=FALSE,
+  cache=FALSE,
+  cache.lazy = FALSE,
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE, #Set message to NA in chunks where message should be sent to stderr
+  dpi=100,
+  fig.width=6,
+  fig.height=6,
+  dev.args = list(pdf = list(useDingbats = FALSE))
+)
+
+#this lets you loop through variables and produce multiple pander tables and ggplots in a single code block!
+#this also means that you have to put results='asis' in any block that has pander output
+pander::panderOptions("knitr.auto.asis", FALSE)
+
+```
+
 ```{r load data, child = 'code/preamble.Rmd', eval = load_preamble}
 
 ```

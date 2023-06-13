@@ -5,7 +5,7 @@ install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra"
 
 ```
 
-```{r manual input ARTIC primer bed file to use, echo=FALSE}
+```{r manual input ARTIC primer bed file to use}
 
 primer_select <- 1 # set variable as 1 for V3, 2 for V4, or 3 for V4.1
 
@@ -13,28 +13,6 @@ artic_primer_scheme <- c("ncov_V3", "ncov_V4", "ncov_V4.1")[primer_select]
 
 # minimum acceptable number of reads per sample
 min_reads <- 1000000
-
-```
-
-```{r setup for the pdf, echo=FALSE}
-
-library(knitr)
-opts_chunk$set(
-  tidy=FALSE,
-  cache=FALSE,
-  cache.lazy = FALSE,
-  echo=FALSE,
-  warning=FALSE,
-  message=FALSE, #Set message to NA in chunks where message should be sent to stderr
-  dpi=100,
-  fig.width=6,
-  fig.height=6,
-  dev.args = list(pdf = list(useDingbats = FALSE))
-)
-
-#this lets you loop through variables and produce multiple pander tables and ggplots in a single code block!
-#this also means that you have to put results='asis' in any block that has pander output
-pander::panderOptions("knitr.auto.asis", FALSE)
 
 ```
 
@@ -136,7 +114,7 @@ cecret_results_fp <- here("data", paste0(sequencing_date, "_cecret_results.csv")
 
 ```
 
-```{r load metadata, echo=FALSE}
+```{r load metadata}
 
 ctrl_fct_lvls <- c("Water control", "Reagent control", "Environmental control", "Mock DNA positive control")
 
@@ -552,7 +530,7 @@ snpdists <- read_csv(snpdists_fp)
 
 ```
 
-```{r merge metadata with data and select samples with results, echo=FALSE}
+```{r merge metadata with data and select samples with results}
 
 #df with all samples
 s <- s_meta %>%
