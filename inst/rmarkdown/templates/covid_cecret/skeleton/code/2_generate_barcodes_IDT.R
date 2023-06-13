@@ -346,6 +346,10 @@ multi_grep <- function(named_vector, col_name) {
 
     gsub("character\\(0\\)", NA, .)
 
+  if(length(ret_vector) == 0) {
+    stop(simpleError("Your samples' names may not match the usual naming format. Rename the sample or adjust the named sample name vector"))
+  }
+
   ret_vector
 }
 
