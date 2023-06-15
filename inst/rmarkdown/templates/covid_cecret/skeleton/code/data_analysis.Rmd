@@ -115,7 +115,7 @@ s %>%
   mutate(num_seq=read_counts/1000000) %>%
   # remove reads that did not get assigned
   ggplot(aes(x=num_seq, fill = sample_type)) +
-    geom_histogram(binwidth=0.1, boundary=TRUE, color = "white") +
+    geom_histogram(boundary=TRUE, color = "white") +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     theme(panel.grid = element_blank()) +
@@ -475,8 +475,6 @@ empty_plate %>%
     )
 ```
 
-\elandscape
-
 <!-- Analysis section -->
 
 # Results section
@@ -485,19 +483,21 @@ empty_plate %>%
 
 ### Heatmap
 
-```{r k2 heatmap, fig.height=11, fig.width=9}
+```{r k2 heatmap, fig.width=11, fig.height=9}
 
-#get the top 5 most abundant taxa in each sample
+#get the top 3 most abundant taxa in each sample
 top_taxon <- k2 %>%
   arrange(-k2_kmers) %>%
   group_by(sample_id) %>%
-  slice(1:5) %>%
+  slice(1:3) %>%
   ungroup() %>%
+  mutate(k2_taxon = gsub(" subsp\\. .*", "", k2_taxon)) %>%
   pull(k2_taxon) %>%
   as.character() %>%
   unique()
 
 k2 %>%
+  mutate(k2_taxon = gsub(" subsp\\. .*", "", k2_taxon)) %>%
   mutate(k2_taxon = fct_other(k2_taxon, keep = top_taxon)) %>%
   group_by(sample_id, k2_taxon) %>%
   summarise(k2_props = sum(k2_props)) %>%
@@ -520,16 +520,20 @@ k2 %>%
     theme_bw() +
     theme(panel.grid = element_blank(),
           panel.border = element_blank(),
+          axis.text.y.left = element_text(color = ifelse(grepl("SARS", levels(.$k2_taxon)), "red", "black"),
+                                          size = 4),
           axis.ticks.x.bottom = element_blank(),
           axis.text.x.bottom = element_blank(),
           axis.title.x.bottom = element_blank(),
-          plot.margin= margin(0, 0, 0, 0, "pt"),
+          plot.margin= margin(0, 0, 0, 0, "pt")
           ) +
-    labs(x = "", y = "", fill = "Proportion", title = "Top 5 most abundant taxa within each sample are shown")
+    labs(x = "", y = "", fill = "Relative\nProportion", title = "Top 3 most abundant taxa within each sample are shown")
     } /
   sample_type_legend
 
 ```
+
+\elandscape
 
 ### Kmer results (number of unique SARS-CoV-2 fragments detected)
 
@@ -569,6 +573,97 @@ k2 %>%
       x="SARS-CoV-2 kmer\nproportions",
       y="Number of samples", fill = "Sample Type"
     )
+
+```
+
+## SNPs compared to reference strain
+
+```{r snpdists, fig.height=8, fig.width=8}
+
+snp_dist_reorder <- snpdists %>%
+  rename(subject = "sample_id", query = "compared_to") %>%
+  merge(select(s, sample_id, sample_type), by.x = "subject", by.y = "sample_id", all.x = TRUE) %>%
+  rename(subject_sample_type = "sample_type") %>%
+  merge(select(s, sample_id, sample_type), by.x = "query", by.y = "sample_id", all.x = TRUE) %>%
+  rename(query_sample_type = "sample_type") %>%
+  mutate(subject_sample_type = ifelse(is.na(subject_sample_type), "Reference", as.character(subject_sample_type)),
+         subject_sample_type = factor(subject_sample_type, levels = c("Reference", levels(s$sample_type))),
+         query_sample_type = ifelse(is.na(query_sample_type), "Reference", as.character(query_sample_type)),
+         query_sample_type = factor(query_sample_type, levels = c("Reference", levels(s$sample_type)))) %>%
+  order_on_other_col(subject, subject_sample_type) %>%
+  mutate(query = factor(query, levels = rev(levels(subject))))
+
+snp_dists_y_legend <- snp_dist_reorder %>%
+  select(subject, subject_sample_type) %>%
+  unique() %>%
+  {
+  ggplot(., aes(x = 1, y = subject, fill = subject_sample_type)) +
+    geom_tile(color = "black") +
+    coord_fixed() +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$subject_sample_type),
+                                                                        names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() +
+    theme(
+      strip.text = element_text(size = 12),
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.line = element_blank(),
+      plot.margin= margin(0, 0, 0, 0, "pt"),
+      legend.position = "bottom"
+    ) +
+    labs(y = "", x = "", fill = "") + 
+    guides(fill = FALSE)
+  }
+
+snp_dists_x_legend <- snp_dist_reorder %>%
+  select(query, query_sample_type) %>%
+  unique() %>%
+  {
+  ggplot(., aes(y = 1, x = query, fill = query_sample_type)) +
+    geom_tile(color = "black") +
+    coord_fixed() +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$query_sample_type),
+                                                                        names(ann_geom_values$sample_type_colors))],
+                      ) +
+    theme_bw() +
+    theme(
+      strip.text = element_text(size = 12),
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.line = element_blank(),
+      plot.margin= margin(0, 0, 0, 0, "pt"),
+      legend.position = "top"
+    ) +
+    labs(y = "", x = "", fill = "") + 
+    guides(fill = guide_legend(override.aes = list(size = 2)))
+  }
+
+snp_dist_reorder %>%
+  {
+  plot_spacer() +
+  snp_dists_x_legend +
+  snp_dists_y_legend +
+  ggplot(., aes(x=query, y=subject)) +
+    geom_tile(aes(fill = snps), color = "black") +
+    coord_equal() +
+    scale_fill_gradientn(colors = rev(brewer.pal(11, "Spectral")[1:6])) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.ticks = element_blank(),
+          axis.text = element_blank(),
+          axis.title = element_blank(),
+          plot.margin= margin(0, 0, 0, 0, "pt")) +
+    labs(fill = "SNPs", x = "", y = "")
+  }
 
 ```
 
@@ -1044,7 +1139,7 @@ knitr::include_graphics(
 ```{r sign off}
 
 data.frame(`Role and Name` = linebreak(c(paste0("Bioinformatician:\n", bioinformatician_name),
-                                         "Sequencing Manager:\nMazen Sid Ahmed, PhD",
+                                         "Sequencing Lab Manager:\nMazen Sid Ahmed, PhD",
                                          "Laboratory Directory:\nBernadette Matthis, MSBA"), align = "l"),
            Signature = c("", "", ""),
            Date = c(as.character(Sys.Date()), "", ""), check.names = FALSE) %>%

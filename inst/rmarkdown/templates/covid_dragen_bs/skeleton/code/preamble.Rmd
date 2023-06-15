@@ -7,31 +7,6 @@ install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra"
 
 ```
 
-```{r setup for the pdf, echo=FALSE}
-### ================
-###   knitr setup
-### ================
-library(knitr)
-opts_chunk$set(
-  tidy=FALSE,
-  cache=FALSE,
-  cache.lazy = FALSE,
-  echo=FALSE,
-  warning=FALSE,
-  message=FALSE, #Set message to NA in chunks where message should be sent to stderr
-  dpi=100,
-  fig.width=6,
-  fig.height=6,
-  dev.args = list(pdf = list(useDingbats = FALSE))
-)
-
-pander::panderOptions("knitr.auto.asis", FALSE)
-#this also means that you have to put results='asis' in any block that has pander output
-#this lets you loop through variables and produce multiple pander tables and ggplots in a
-#single code block!
-
-```
-
 ```{r libraries}
 library(here)
 library(tidyverse)
@@ -528,7 +503,7 @@ dragen_covid_lineage_version <- unique(bs_results$dragen_covid_lineage_version)
 
 ```
 
-```{r sample_sheet_import and columns, echo=FALSE}
+```{r sample_sheet_import and columns}
 
 ctrl_regex <- "EBneg|Extract|Vibriolambda|Blank|MockDNA|DNAfreewater|Geneblock|Emptywell|Reagent|Control|POS|NEG|PC|NC"
 
@@ -925,6 +900,8 @@ dir.create(here("upload", "seqsender"), recursive = TRUE)
 # Export the data for seqsender upload to sra, genbank, and gisaid
 seqsender <- s_toPlot %>%
   filter4report() %>%
+  #submit only nasal swabs for now. WW data needs additional metadata
+  filter(sample_type == "Nasal swab") %>%
   mutate(collection_date = case_when(!is.na(sample_collection_date) ~ sample_collection_date,
                                      !is.na(PHL_sample_received_date) ~ PHL_sample_received_date,
                                      TRUE ~ sequencing_date)) %>%
