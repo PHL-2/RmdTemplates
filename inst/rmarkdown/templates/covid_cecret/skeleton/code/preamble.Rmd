@@ -174,10 +174,10 @@ index_length <- unique(s_meta$index_length)
 ```{r file paths for qc data, eval = import_data}
 
 ### demultiplexing results from nfcore
-demux_software_fp <- here("data", "processed_demux", "pipeline_info", "software_versions.yml")
-demuxsum_fp <- here("data", "processed_demux", run_folder_name, "Reports", "Demultiplex_Stats.csv")
-quality_metrics_fp <- here("data", "processed_demux", run_folder_name, "Reports", "Quality_Metrics.csv")
-top_unkwn_fp <- here("data", "processed_demux", run_folder_name, "Reports", "Top_Unknown_Barcodes.csv")
+demux_software_fp <- here("data", "processed_bclconvert", "pipeline_info", "software_versions.yml")
+demuxsum_fp <- here("data", "processed_bclconvert", run_folder_name, "Reports", "Demultiplex_Stats.csv")
+quality_metrics_fp <- here("data", "processed_bclconvert", run_folder_name, "Reports", "Quality_Metrics.csv")
+top_unkwn_fp <- here("data", "processed_bclconvert", run_folder_name, "Reports", "Top_Unknown_Barcodes.csv")
 
 ```
 
@@ -253,7 +253,7 @@ if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] >
 
 ```{r load fastqc files if doing fastqc from demux, eval = import_data}
 
-fastqc_fps <- list.files(here("data", "processed_demux", run_folder_name), pattern = "fastqc_data.txt", recursive = TRUE, full.names = TRUE)
+fastqc_fps <- list.files(here("data", "processed_bclconvert", run_folder_name), pattern = "fastqc_data.txt", recursive = TRUE, full.names = TRUE)
 
 fastqc <- lapply(fastqc_fps, function(f) {
   #skip the first 13 lines, assuming the fastqc_data file format does not change
