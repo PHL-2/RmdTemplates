@@ -308,10 +308,15 @@ multi_grep <- function(named_vector, col_name) {
 
     gsub("character\\(0\\)", NA, .)
 
+  if(length(ret_vector) == 0) {
+    stop(simpleError("Your samples' names may not match the usual format. Rename the sample or adjust the named sample name vector"))
+  }
+
   ret_vector
 }
 
-named_sample_type <- c("^NC[0-9]*$" = "Water control",
+named_sample_type <- c("^Test-" = "Testing sample type",
+                       "^NC[0-9]*$" = "Water control",
                        "^BLANK[0-9]*$" = "Reagent control",
                        "^PC[0-9]*$" = "Mock DNA positive control",
                        "^H[0-9]*$|^8[0-9]*$" = "Nasal swab",
