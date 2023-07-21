@@ -226,7 +226,12 @@ TU_samples <- TU_data %>%
 
 shared_environ_fp <- max(list.files("//city.phila.local/shares/Health/PHL/Admin/Sequencing Action plan updated/Enviromental_samples", pattern = "^[0-9]*-[0-9]*-[0-9]*", full.names = TRUE))
 
-file.copy(shared_environ_fp, here("metadata", "extra_metadata"))
+environmental_file_date <- as.Date(gsub("_.*", "", basename(shared_environ_fp)))
+
+#if the date of the latest environmental samples is within 5 days of sequencing request, use this file
+if((Sys.Date() - environmental_file_date) < 5) {
+  file.copy(shared_environ_fp, here("metadata", "extra_metadata"))
+}
 
 environmental_samples_fp <- list.files(here("metadata", "extra_metadata"), pattern = "^[0-9]*-[0-9]*-[0-9]*_Environmental_Swab.xlsx", full.names = TRUE)
 
@@ -240,7 +245,7 @@ if(length(environmental_samples_fp) > 0) {
     rename(sample_name = 1, environmental_site = 2) %>%
     select(sample_name, environmental_site)
 } else {
-  enviro_samples <- data.frame(sample_name = paste0("ENV", 1:11), environmental_site = paste0("ENV", 1:8))
+  enviro_samples <- data.frame(sample_name = paste0("ENV", 1:11), environmental_site = paste0("ENV", 1:11))
 }
 
 older_samples_fp <- list.files(here("metadata", "extra_metadata", "prev_run"), pattern = "_filtered.xlsx", full.names = TRUE)

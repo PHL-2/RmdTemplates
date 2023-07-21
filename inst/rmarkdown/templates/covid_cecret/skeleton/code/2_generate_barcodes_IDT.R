@@ -354,10 +354,10 @@ multi_grep <- function(named_vector, col_name) {
 }
 
 named_sample_type <- c("^Test-" = "Testing sample type",
-                       "^NC[0-9]*$" = "Water control",
+                       "^NC[0-9]*$|CORNER$|Corner$|corner$" = "Water control",
                        "^BLANK[0-9]*$" = "Reagent control",
                        "^PC[0-9]*$" = "Mock DNA positive control",
-                       "^H[0-9]*$|^8[0-9]*$" = "Nasal swab",
+                       "^H[0-9]*$|^8[0-9]*$|^9[0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
                        "^WW" = "Wastewater")
 
 metadata_sheet <- metadata_sheet %>%
@@ -366,7 +366,7 @@ metadata_sheet <- metadata_sheet %>%
                                  (is.na(sample_type) | sample_type == "") ~ multi_grep(named_sample_type, sample_name),
                                  TRUE ~ NA)) %>%
   mutate(sample_collected_by = case_when(!(is.na(sample_collected_by) | sample_collected_by == "") ~ sample_collected_by,
-                                         grepl("^8[0-9]*$", sample_name) ~ "Temple University",
+                                         grepl("^8[0-9]*$|^9[0-9]*$", sample_name) ~ "Temple University",
                                          TRUE ~ "Philadelphia Department of Public Health")) %>%
   mutate(PHL_sample_received_date = case_when(!(is.na(PHL_sample_received_date) | as.character(PHL_sample_received_date) == "") ~ as.Date(PHL_sample_received_date),
                                               #if it's a wastewater sample without a date, throw an error
@@ -454,7 +454,7 @@ missing_metadata_samples <- rbind(missing_sample_date, missing_sample_RLU, missi
 
 if(nrow(missing_metadata_samples) > 0){
   stop(simpleError(paste0("These non-control samples are in the sample sheet but are missing RLU values, CT values, or collection date from the epidemiologists!\n",
-                          "They may also be GeneXpert samples\n",
+                          "They may also be GeneXpert samples. If so, comment out this error\n",
                           paste0(pull(missing_metadata_samples), collapse = ", "))))
 }
 
@@ -606,44 +606,53 @@ metadata_sheet %>%
 run_folder <- sequencing_folder_fp %>%
   list.files(full.names = T) %>%
   file.info() %>%
+  #the sequencing folder should already be a tarball
   filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), rownames(.))) %>%
   rownames()
 
 folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
   as.Date(format = "%Y%m%d")
 
-if(folder_date != gsub("_.*", "", basename(here()))) {
+if(folder_date != gsub("_.*", "", basename(here())) | is.na(folder_date)) {
   stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
 }
 
-sequencing_run <- gsub(".*/", "", run_folder)
+#tar the run folder
+message("Making sequencing run tarball")
+system2("tar", c("-czf", paste0(run_folder, ".tar.gz"), "-C", run_folder, "."))
 
-s3_samplesheet_fp <- file.path(s3_bucket_incoming_fp, sequencing_date, sample_sheet_fn)
+s3_run_bucket_fp <- paste0(s3_bucket_incoming_fp, "/", sequencing_date, "/")
+
+sequencing_run <- gsub(".*/", "", run_folder)
 
 nf_demux_samplesheet <- data.frame(
   id = sequencing_run,
-  samplesheet = s3_samplesheet_fp,
+  samplesheet = paste0(s3_run_bucket_fp, sample_sheet_fn),
   lane = "",
-  flowcell = file.path(s3_bucket_incoming_fp, sequencing_date, paste0(sequencing_run, ".tar.gz"))
+  flowcell = paste0(s3_run_bucket_fp, sequencing_run, ".tar.gz")
 )
 
 nf_demux_samplesheet_fp <- here("metadata", "munge", paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
-s3_nf_demux_samplesheet_fp <- file.path(s3_bucket_incoming_fp, sequencing_date, paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
+s3_nf_demux_samplesheet_fp <- paste0(s3_run_bucket_fp, paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
 
 nf_demux_samplesheet %>%
   write.csv(file = nf_demux_samplesheet_fp,
             row.names = FALSE, quote = FALSE)
 
-# aws_cli_cp_fp <- file.path(dirname(here()), "aux_files", "aws_cli_commands", "aws_cli_1_cp.sh")
-#
-# aws_cp_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
-#                                  c(shQuote(sample_sheet_fp, type = "sh"),
-#                                    shQuote(s3_samplesheet_fp, type = "sh")))
-#
-# aws_cp_nf_demux_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
-#                                           c(shQuote(nf_demux_samplesheet_fp, type = "sh"),
-#                                             shQuote(s3_nf_demux_samplesheet_fp, type = "sh")))
-#
-# if(!all(grepl("Completed", c(aws_cp_samplesheet, aws_cp_nf_demux_samplesheet), ignore.case = TRUE))) {
-#   stop(simpleError("Samplesheet upload to s3 bucket failed"))
-# }
+aws_cli_cp_fp <- file.path(dirname(here()), "aux_files", "aws_cli_commands", "aws_cli_1_cp.sh")
+
+s3_cp_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
+                                 c(shQuote(sample_sheet_fp, type = "sh"),
+                                   shQuote(s3_run_bucket_fp, type = "sh")))
+
+s3_cp_nf_demux_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
+                                          c(shQuote(nf_demux_samplesheet_fp, type = "sh"),
+                                            shQuote(s3_run_bucket_fp, type = "sh")))
+
+s3_cp_run_tarball <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
+                                 c(shQuote(paste0(run_folder, ".tar.gz"), type = "sh"),
+                                   shQuote(s3_run_bucket_fp, type = "sh")))
+
+if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet, s3_cp_run_tarball), ignore.case = TRUE))) {
+  stop(simpleError("Samplesheet upload to s3 bucket failed"))
+}

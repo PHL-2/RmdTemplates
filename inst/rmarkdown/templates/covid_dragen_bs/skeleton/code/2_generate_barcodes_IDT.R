@@ -316,10 +316,10 @@ multi_grep <- function(named_vector, col_name) {
 }
 
 named_sample_type <- c("^Test-" = "Testing sample type",
-                       "^NC[0-9]*$" = "Water control",
+                       "^NC[0-9]*$|CORNER$|Corner$|corner$" = "Water control",
                        "^BLANK[0-9]*$" = "Reagent control",
                        "^PC[0-9]*$" = "Mock DNA positive control",
-                       "^H[0-9]*$|^8[0-9]*$" = "Nasal swab",
+                       "^H[0-9]*$|^8[0-9]*$|^9[0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
                        "^WW" = "Wastewater")
 
 metadata_sheet <- metadata_sheet %>%
@@ -328,7 +328,7 @@ metadata_sheet <- metadata_sheet %>%
                                  (is.na(sample_type) | sample_type == "") ~ multi_grep(named_sample_type, sample_name),
                                  TRUE ~ NA)) %>%
   mutate(sample_collected_by = case_when(!(is.na(sample_collected_by) | sample_collected_by == "") ~ sample_collected_by,
-                                         grepl("^8[0-9]*$", sample_name) ~ "Temple University",
+                                         grepl("^8[0-9]*$|^9[0-9]*$", sample_name) ~ "Temple University",
                                          TRUE ~ "Philadelphia Department of Public Health")) %>%
   mutate(PHL_sample_received_date = case_when(!(is.na(PHL_sample_received_date) | as.character(PHL_sample_received_date) == "") ~ as.Date(PHL_sample_received_date),
                                               #if it's a wastewater sample without a date, throw an error
@@ -416,7 +416,7 @@ missing_metadata_samples <- rbind(missing_sample_date, missing_sample_RLU, missi
 
 if(nrow(missing_metadata_samples) > 0){
   stop(simpleError(paste0("These non-control samples are in the sample sheet but are missing RLU values, CT values, or collection date from the epidemiologists!\n",
-                          "They may also be GeneXpert samples\n",
+                          "They may also be GeneXpert samples. If so, comment out this error\n",
                           paste0(pull(missing_metadata_samples), collapse = ", "))))
 }
 
