@@ -606,8 +606,8 @@ metadata_sheet %>%
 run_folder <- sequencing_folder_fp %>%
   list.files(full.names = T) %>%
   file.info() %>%
-  #the sequencing folder should already be a tarball
   filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), rownames(.))) %>%
+  filter(!grepl("\\.tar\\.gz$", rownames(.))) %>%
   rownames()
 
 folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
