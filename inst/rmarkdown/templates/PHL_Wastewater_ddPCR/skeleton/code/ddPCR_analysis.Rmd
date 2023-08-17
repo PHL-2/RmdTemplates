@@ -111,8 +111,14 @@ if (sum(d_pre$Droplet_count<10000) > 0) {
   }
 
 d_pre %>%
+  filter(Target == "N2") %>%
   ggplot(aes(x = Well, y = Droplet_count)) +
-  geom_col()
+  geom_col() + 
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  )
 
 ```
 

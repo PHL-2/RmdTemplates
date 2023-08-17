@@ -30,11 +30,12 @@ run_date <- as.Date(gsub("_.*", "", project_name))
 
 #get the newly added run folder
 run_dat_fp <- dat_fp %>%
-  list.files(full.names = T, recursive = T) %>%
-  file.info() %>%
-  filter(grepl(format(run_date, "%Y%m%d"), rownames(.)),
-         grepl(pattern = "Analyzed.csv", rownames(.))) %>%
-  rownames()
+  list.files(pattern = paste0(format(run_date, "%Y%m%d"),".*", "Analyzed.csv"), full.names = T, recursive = T)
+  # %>%
+  # file.info() %>%
+  # filter(grepl(format(run_date, "%Y%m%d"), rownames(.)),
+  #        grepl(pattern = "Analyzed.csv", rownames(.))) %>%
+  # rownames()
 
 dat_date <- run_dat_fp %>%
   str_extract(pattern = "\\d{8}") %>%
