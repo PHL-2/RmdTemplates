@@ -30,11 +30,12 @@ run_date <- as.Date(gsub("_.*", "", project_name))
 
 #get the newly added run folder
 run_dat_fp <- dat_fp %>%
-  list.files(full.names = T, recursive = T) %>%
-  file.info() %>%
-  filter(grepl(format(run_date, "%Y%m%d"), rownames(.)),
-         grepl(pattern = "Analyzed.csv", rownames(.))) %>%
-  rownames()
+  list.files(pattern = paste0(format(run_date, "%Y%m%d"),".*", "Analyzed.csv"), full.names = T, recursive = T)
+  # %>%
+  # file.info() %>%
+  # filter(grepl(format(run_date, "%Y%m%d"), rownames(.)),
+  #        grepl(pattern = "Analyzed.csv", rownames(.))) %>%
+  # rownames()
 
 dat_date <- run_dat_fp %>%
   str_extract(pattern = "\\d{8}") %>%
@@ -314,7 +315,22 @@ SC2_efficiency <- control_stock %>%
          arrange(Type, Process, Target) %>%
          filter(Type == "ZeptoSC2")
 
-ww_SC2_conc_result_summarised <- dSamples %>%
+ww_SC2_conc_result_summarised <- d %>%
+  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+         Process == "Concentrated") %>%
+  group_by(Type, Process, Spiked, Target, Sample_date) %>%
+  summarise(avg_pos_droplets = mean(Positives),
+            avg_conc = mean(`Conc(copies/uL)`),
+            sd_conc = sd(`Conc(copies/uL)`)) %>%
+  mutate(stock_conc = stock_concentration_calc(concentration = avg_conc, 
+                                               rxn_vol = rxn_vol_uL, 
+                                               input_vol = input_vol_uL, 
+                                               extraction_vol = extraction_vol_uL, 
+                                               elution_vol = elution_vol_uL,
+                                               efficiency = 1, 
+                                               end_concentration_vol = end_concentration_vol_uL,
+                                               initial_concentration_vol = (init_concentration_vol_uL))
+  ) %>%
   filter(Process == "Concentrated",
          Spiked == "Spiked",
          Target != "MHV") %>%

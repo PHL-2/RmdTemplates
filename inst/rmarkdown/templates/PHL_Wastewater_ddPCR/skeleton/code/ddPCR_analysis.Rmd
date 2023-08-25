@@ -102,12 +102,23 @@ if (sum(d_pre$Droplet_count<10000) > 0) {
   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
   pander(
     d_pre %>%
-      filter(Droplet_count< 10000),
+      filter(Droplet_count< 10000) %>%
+      select(Well, Sample, Type, Process, Spiked, Sample_date, Droplet_count),
       split.table = 500
     ) 
   } else {
     print("No detected wells with <10000 droplets")
   }
+
+d_pre %>%
+  filter(Target == "N2") %>%
+  ggplot(aes(x = Well, y = Droplet_count)) +
+  geom_col() + 
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  )
 
 ```
 
@@ -115,11 +126,11 @@ if (sum(d_pre$Droplet_count<10000) > 0) {
 
 ```{r variance check}
 
-if ((sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1.00, na.rm = T) > 0) | sum(d_sd$outlier_median > 5, na.rm = T) > 0 | any(d_sd$GESD_q < 0.05)) {
+if (any(d_sd$sd_from_mean > 1.3, na.rm = T) | any(d_sd$outlier_median > 7, na.rm = T) | any(d_sd$GESD_q < 0.01)) {
   print("Detected high variation; please check samples")
   var_pander <- d_sd %>%
-    select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median) %>%
-    filter(cv_conc>30 & sd_from_mean > 1 | MAD_from_med > 5 | GESD_q < 0.05) %>%
+    select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median, GESD_q) %>%
+    filter(sd_from_mean > 1.3 | MAD_from_med > 7 | GESD_q < 0.01) %>%
     arrange(Type, Target) %>%
     distinct()
 
@@ -333,40 +344,47 @@ extraction input volume = 9600 uL
 
 ```{r unspiked mhv figures}
 
-dUnspiked %>%
-  ggplot(aes(x=Type, y=Positives, fill = Target)) +
-  geom_boxplot(position = "dodge") +
-  geom_point(
-    aes(fill = Target),
-    shape = 21,
-    size = 1.5,
-    position = position_jitterdodge(jitter.width = 0.2)) +
-  facet_grid(Sample_date ~ Type, scales = "free_x") +
-  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
-  theme_light() +
-  labs(
-    title = "Number of positive droplets in unspiked wastewater samples",
-    y = "Number of Positive droplets",
-    x = "Samples"
-  )
+if(nrow(dUnspiked)>0) {
 
-dUnspiked %>%
-  ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
-  geom_boxplot(position = "dodge") +
-  geom_point(
-    aes(fill = Target),
-    shape = 21,
-    size = 1.5,
-    position = position_jitterdodge(jitter.width = 0.2)) +
-  facet_grid(Sample_date ~ Type, scales = "free_x") +
-  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
-  theme_light() +
-  labs(
-    title = "Percent of positive droplets in unspiked wastewater samples",
-    y = "Percent of Positive droplets",
-    x = "Samples"
-  )
+  dUnspiked %>%
+    ggplot(aes(x=Type, y=Positives, fill = Target)) +
+    geom_boxplot(position = "dodge") +
+    geom_point(
+      aes(fill = Target),
+      shape = 21,
+      size = 1.5,
+      position = position_jitterdodge(jitter.width = 0.2)) +
+    facet_grid(Sample_date ~ Type, scales = "free_x") +
+    scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
+    theme_light() +
+    labs(
+      title = "Number of positive droplets in unspiked wastewater samples",
+      y = "Number of Positive droplets",
+      x = "Samples"
+    )
+}
 
+if(nrow(dUnspiked)>0) {
+  dUnspiked %>%
+    ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
+    geom_boxplot(position = "dodge") +
+    geom_point(
+      aes(fill = Target),
+      shape = 21,
+      size = 1.5,
+      position = position_jitterdodge(jitter.width = 0.2)) +
+    facet_grid(Sample_date ~ Type, scales = "free_x") +
+    scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
+    theme_light() +
+    labs(
+      title = "Percent of positive droplets in unspiked wastewater samples",
+      y = "Percent of Positive droplets",
+      x = "Samples"
+    )
+
+} else {
+  print("No unspiked samples")
+}
 ```
 
 ## Wastewater signal
