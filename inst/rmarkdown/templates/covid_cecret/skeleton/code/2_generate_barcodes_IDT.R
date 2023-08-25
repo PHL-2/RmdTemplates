@@ -15,9 +15,6 @@ munging_fp <- here("metadata", "munge")
 # Manual input
 ##############
 
-#s3 filepath to upload compressed sequencing run folder
-s3_bucket_incoming_fp <- "s3://incoming-run"
-
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
 instrument_select <- 1 #select 1 for MiSeq or 2 for NextSeq
@@ -598,20 +595,22 @@ metadata_sheet %>%
   select(sample_id, any_of(phi_info)) %>%
   write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")), row.names = FALSE)
 
-###########################
-#Get sequencing folder path
-###########################
+############################################
+# Tar the sequencing folder and upload to S3
+############################################
 
 #get the newly added run folder
-run_folder <- sequencing_folder_fp %>%
+run_folder <- here("data", "processed_run") %>%
   list.files(full.names = T) %>%
-  file.info() %>%
-  filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), rownames(.))) %>%
-  filter(!grepl("\\.tar\\.gz$", rownames(.))) %>%
-  rownames()
+  data.frame(filenames = .) %>%
+  filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
+  filter(!grepl("\\.tar\\.gz$|\\.sha256$", filenames)) %>%
+  pull()
 
 folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
   as.Date(format = "%Y%m%d")
+
+sequencing_run <- gsub(".*/", "", run_folder)
 
 if(folder_date != gsub("_.*", "", basename(here())) | is.na(folder_date)) {
   stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
@@ -620,10 +619,10 @@ if(folder_date != gsub("_.*", "", basename(here())) | is.na(folder_date)) {
 #tar the run folder
 message("Making sequencing run tarball")
 system2("tar", c("-czf", paste0(run_folder, ".tar.gz"), "-C", run_folder, "."))
+#generate the sha256 checksum
+#https://aws.amazon.com/getting-started/hands-on/amazon-s3-with-additional-checksums/?ref=docs_gateway/amazons3/checking-object-integrity.html
 
-s3_run_bucket_fp <- paste0(s3_bucket_incoming_fp, "/", sequencing_date, "/")
-
-sequencing_run <- gsub(".*/", "", run_folder)
+s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
 nf_demux_samplesheet <- data.frame(
   id = sequencing_run,
@@ -633,26 +632,21 @@ nf_demux_samplesheet <- data.frame(
 )
 
 nf_demux_samplesheet_fp <- here("metadata", "munge", paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
-s3_nf_demux_samplesheet_fp <- paste0(s3_run_bucket_fp, paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
 
 nf_demux_samplesheet %>%
   write.csv(file = nf_demux_samplesheet_fp,
             row.names = FALSE, quote = FALSE)
 
-aws_cli_cp_fp <- file.path(dirname(here()), "aux_files", "aws_cli_commands", "aws_cli_1_cp.sh")
+md5_fp <- here("data", "processed_run", paste0(sequencing_run, ".md5"))
 
-s3_cp_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
-                                 c(shQuote(sample_sheet_fp, type = "sh"),
-                                   shQuote(s3_run_bucket_fp, type = "sh")))
+paste0(sequencing_run, ".tar.gz") %>%
+  paste0(., "\t", tools::md5sum(here("data", "processed_run", .))) %>%
+  write(file = md5_fp)
 
-s3_cp_nf_demux_samplesheet <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
-                                          c(shQuote(nf_demux_samplesheet_fp, type = "sh"),
-                                            shQuote(s3_run_bucket_fp, type = "sh")))
-
-s3_cp_run_tarball <- cli_submit(sh_exe_fp, aws_cli_cp_fp,
-                                 c(shQuote(paste0(run_folder, ".tar.gz"), type = "sh"),
-                                   shQuote(s3_run_bucket_fp, type = "sh")))
+s3_cp_samplesheet <- system2("aws", c("s3 cp", sample_sheet_fp, s3_run_bucket_fp))
+s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", nf_demux_samplesheet_fp, s3_run_bucket_fp))
+s3_cp_run_tarball <- system2("aws", c("s3 cp", paste0(run_folder, ".tar.gz"), s3_run_bucket_fp))
 
 if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet, s3_cp_run_tarball), ignore.case = TRUE))) {
-  stop(simpleError("Samplesheet upload to s3 bucket failed"))
+  stop(simpleError("Upload to s3 bucket failed"))
 }
