@@ -618,9 +618,8 @@ if(folder_date != gsub("_.*", "", basename(here())) | is.na(folder_date)) {
 
 #tar the run folder
 message("Making sequencing run tarball")
-system2("tar", c("-czf", paste0(run_folder, ".tar.gz"), "-C", run_folder, "."))
-#generate the sha256 checksum
-#https://aws.amazon.com/getting-started/hands-on/amazon-s3-with-additional-checksums/?ref=docs_gateway/amazons3/checking-object-integrity.html
+system2("tar", c("-czf", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"),
+                 "-C", shQuote(run_folder, type = "cmd"), "."))
 
 s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
@@ -643,10 +642,11 @@ paste0(sequencing_run, ".tar.gz") %>%
   paste0(., "\t", tools::md5sum(here("data", "processed_run", .))) %>%
   write(file = md5_fp)
 
-s3_cp_samplesheet <- system2("aws", c("s3 cp", sample_sheet_fp, s3_run_bucket_fp))
-s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", nf_demux_samplesheet_fp, s3_run_bucket_fp))
-s3_cp_run_tarball <- system2("aws", c("s3 cp", paste0(run_folder, ".tar.gz"), s3_run_bucket_fp))
+s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
+s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samplesheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
+s3_cp_md5 <- system2("aws", c("s3 cp", shQuote(md5_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
+s3_cp_run_tarball <- system2("aws", c("s3 cp", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 
-if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet, s3_cp_run_tarball), ignore.case = TRUE))) {
+if(!all(grepl("^Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet, s3_cp_md5, s3_cp_run_tarball), ignore.case = TRUE))) {
   stop(simpleError("Upload to s3 bucket failed"))
 }
