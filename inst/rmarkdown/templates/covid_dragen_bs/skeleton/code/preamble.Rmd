@@ -90,12 +90,12 @@ project_name <- basename(here())
 sequencing_date <- as.Date(gsub("_.*", "", project_name))
 
 #get the newly added run folder
-run_folder <- sequencing_folder_fp %>%
+run_folder <- here("data", "processed_run") %>%
   list.files(full.names = T) %>%
-  file.info() %>%
-  filter(grepl(format(sequencing_date, "%y%m%d"), rownames(.))) %>%
-  filter(!grepl("\\.tar\\.gz$", rownames(.))) %>%
-  rownames()
+  data.frame(filenames = .) %>%
+  filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
+  filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
+  pull()
 
 folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
   as.Date(format = "%Y%m%d")
