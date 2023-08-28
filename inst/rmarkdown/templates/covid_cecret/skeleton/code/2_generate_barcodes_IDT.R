@@ -639,7 +639,7 @@ nf_demux_samplesheet %>%
 md5_fp <- here("data", "processed_run", paste0(sequencing_run, ".md5"))
 
 paste0(sequencing_run, ".tar.gz") %>%
-  paste0(., "\t", tools::md5sum(here("data", "processed_run", .))) %>%
+  paste0(tools::md5sum(here("data", "processed_run", .)), "  ", .) %>%
   write(file = md5_fp)
 
 s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
@@ -647,6 +647,6 @@ s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samples
 s3_cp_md5 <- system2("aws", c("s3 cp", shQuote(md5_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 s3_cp_run_tarball <- system2("aws", c("s3 cp", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 
-if(!all(grepl("^Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet, s3_cp_md5, s3_cp_run_tarball), ignore.case = TRUE))) {
+if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet, s3_cp_md5, s3_cp_run_tarball), ignore.case = TRUE))) {
   stop(simpleError("Upload to s3 bucket failed"))
 }
