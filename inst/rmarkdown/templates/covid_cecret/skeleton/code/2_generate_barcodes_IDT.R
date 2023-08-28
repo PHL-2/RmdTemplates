@@ -604,7 +604,7 @@ run_folder <- here("data", "processed_run") %>%
   list.files(full.names = T) %>%
   data.frame(filenames = .) %>%
   filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
-  filter(!grepl("\\.tar\\.gz$|\\.sha256$", filenames)) %>%
+  filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
   pull()
 
 folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
