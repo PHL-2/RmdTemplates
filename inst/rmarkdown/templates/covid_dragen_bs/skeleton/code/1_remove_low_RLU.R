@@ -71,6 +71,15 @@ Resp_samples <- read_csv(RLU_fp) %>%
   select(`Sample ID`) %>%
   pull()
 
+###################################################
+# Get samples from Medical Examiner Office
+###################################################
+
+MEO_samples <- read_csv(RLU_fp) %>%
+  filter(Test == "MEO POC Test Result") %>%
+  select(`Sample ID`) %>%
+  pull()
+
 ########################################################################
 # Load the metadata sheet from epidemiologists and merge with RLU values
 ########################################################################
@@ -125,6 +134,9 @@ message(paste0(PHL_data[PHL_data$RLU < 1000 & !is.na(PHL_data$RLU), "SPECIMEN_NU
 message("\nThese are Health Center samples with missing RLU values: ")
 message(paste0(HC1_samples[HC1_samples %in% PHL_data$SPECIMEN_NUMBER], collapse = ", "))
 
+message("\nThese are MEO samples that we don't have: ")
+message(paste0(MEO_samples[MEO_samples %in% PHL_data$SPECIMEN_NUMBER], collapse = ", "))
+
 message("\nThese are GeneXpert samples with missing RLU values: ")
 message(paste0(GX_samples[GX_samples %in% PHL_data$SPECIMEN_NUMBER], collapse = ", "))
 
@@ -134,7 +146,7 @@ message(paste0(Resp_samples[Resp_samples %in% PHL_data$SPECIMEN_NUMBER], collaps
 epi_sample_not_found <- PHL_data %>%
   filter(is.na(RLU)) %>%
   select(SPECIMEN_NUMBER) %>%
-  filter(!SPECIMEN_NUMBER %in% c(HC1_samples, GX_samples, Resp_samples)) %>%
+  filter(!SPECIMEN_NUMBER %in% c(HC1_samples, GX_samples, Resp_samples, MEO_samples)) %>%
   pull() %>%
   str_sort()
 
@@ -146,10 +158,12 @@ if(length(epi_sample_not_found) > 0) {
 }
 
 samples_removed <- PHL_data %>%
-  filter(RLU < 1000 | SPECIMEN_NUMBER %in% HC1_samples)
+  filter(RLU < 1000 | SPECIMEN_NUMBER %in% c(HC1_samples, MEO_samples)) %>%
+  select(SPECIMEN_NUMBER) %>%
+  pull()
 
 message("\nNumber of samples removed: ")
-message(nrow(samples_removed))
+message(length(samples_removed))
 
 ##############################################################################
 # Write samples to Excel to send back to epidemiologist and wet lab scientists
@@ -158,7 +172,7 @@ message(nrow(samples_removed))
 filtered_PHL_data <- PHL_data %>%
   #remove low RLU samples
   filter(RLU >= 1000 | is.na(RLU)) %>%
-  filter(!SPECIMEN_NUMBER %in% HC1_samples)
+  filter(!SPECIMEN_NUMBER %in% samples_removed)
 
 potential_ct_col_names <- c("ct value", "CT value", "CT values", "CTvalue", "CTvalues",
                             "ct values", "ctvalue", "ctvalues")
