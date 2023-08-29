@@ -265,12 +265,12 @@ if(length(list_of_indexes) > 0) {
 }
 
 fastq_folder <- dirname(list.files(here(run_folder, latest_demux), pattern = "R[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)[1])
-if(Sys.info()['sysname'] == "Windows") {
-  #if its a windows system running this script, change slashes to back slashes
-  #also a total of 8 back slashes is needed in character vector if upload from shared drive
-  fastq_folder <- gsub("/", "\\\\", fastq_folder)
-  fastq_folder <- gsub("^", "\\\\\\\\", fastq_folder)
-}
+# if(Sys.info()['sysname'] == "Windows") {
+#   #if its a windows system running this script, change slashes to back slashes
+#   #also a total of 8 back slashes is needed in character vector if upload from shared drive
+#   fastq_folder <- gsub("/", "\\\\", fastq_folder)
+#   fastq_folder <- gsub("^", "\\\\\\\\", fastq_folder)
+# }
 
 #have to break the shell script into parts because of proxy authentication issue which can be solved by initializing a new shell script each time
 
