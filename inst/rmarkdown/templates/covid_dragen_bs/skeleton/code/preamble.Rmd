@@ -101,9 +101,8 @@ run_folder <- here("data", "processed_run") %>%
 folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
   as.Date(format = "%Y%m%d")
 
-if (is.na(run_folder)) {
-  stop(simpleError(paste0("Could not connect to path: ", sequencing_folder_fp,
-                          "\nCheck your network connection and make sure you're connected to the city's network")))
+if (is.na(folder_date)) {
+  stop(simpleError(paste0("Could not find the raw run folder in ", here("data", "processed_run"))))
 }
 
 if (folder_date != gsub("_.*", "", basename(here()))) {
