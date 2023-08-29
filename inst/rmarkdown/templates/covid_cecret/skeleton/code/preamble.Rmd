@@ -14,6 +14,10 @@ artic_primer_scheme <- c("ncov_V3", "ncov_V4", "ncov_V4.1")[primer_select]
 # minimum acceptable number of reads per sample
 min_reads <- 1000000
 
+project_name <- basename(here())
+
+sequencing_date <- as.Date(gsub("_.*", "", project_name))
+
 ```
 
 ```{r load libraries}
@@ -69,34 +73,6 @@ tryCatch(
 
 ```
 
-```{r find newest run folder}
-
-project_name <- basename(here())
-sequencing_date <- as.Date(gsub("_.*", "", project_name))
-
-#get the sequencing run folder
-run_folder <- sequencing_folder_fp %>%
-  list.files(full.names = T) %>%
-  file.info() %>%
-  filter(grepl(paste0(format(sequencing_date, "%y%m%d"), ".*\\.tar\\.gz$"), rownames(.))) %>%
-  rownames()
-
-run_folder_name <- gsub(".*/|\\..*", "", run_folder) #real run folder name
-
-folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
-  as.Date(format = "%Y%m%d")
-
-if (is.na(run_folder)) {
-  stop(simpleError(paste0("Could not connect to path: ", sequencing_folder_fp,
-                          "\nCheck your network connection and make sure you're connected to the city's network")))
-}
-
-if (folder_date != gsub("_.*", "", basename(here()))) {
-  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
-}
-
-```
-
 ```{r file paths for metadata and results}
 
 ### mapping file paths
@@ -131,45 +107,25 @@ index_length <- unique(s_meta$index_length)
 
 ```
 
-```{r aws cli demux and cecret commands}
+<!-- Load QC data -->
 
-# tar.gz the run folder:
-# tar -czvf [sequencing run name].tar.gz -C /path/to/[sequencing run folder]/ .
-# (if you are taring from the parent directory of the sequencing runs, don't include a period in front of the sequencing run folder)
-#
-# upload the tar run folder to s3 bucket (there is no way to get the SHA256 of object upload with 'aws s3 cp' at the moment)
-# 
-# run the nf-core demux pipeline (running this with AWS Batch takes 33 minutes with 18 samples)
-# 
-# check that all the sample fastq files are available
-#
-# run the Cecret pipeline
-# 
-# download the results
+```{r find run folder name, eval = import_data}
 
-# aws s3 cp s3://nextflow-output/COVIDSeq/[sequencing_date]_COVIDSeq/ . \
-#   --recursive \
-#   --exclude "*" \
-#   --include "*software_versions.yml" \
-#   --include "*Demultiplex_Stats.csv" \
-#   --include "*Quality_Metrics.csv" \
-#   --include "*Top_Unknown_Barcodes.csv" \
-#   --include "*.fastq.gz_fastqc_data.txt" \
-#   --include "*.consensus.fa" \
-#   --include "*_filtered_R[12].fastq.gz" \
-#   --include "*aggregated-freyja.tsv" \
-#   --include "*_kraken2_report.txt" \
-#   --include "*snp-dists.txt" \
-#   --include "*.multicov.txt" \
-#   --include "*nextclade.tsv" \
-#   --include "*nextclade.json" \
-#   --include "*.cov.txt" \
-#   --include "*.depth.txt" \
-#   --include "*cecret_results.csv"
+#get the sequencing run folder
+run_folder_name <- list.files(here("data", "processed_bclconvert"), pattern = "^[0-9].*[A-Z]$")
+
+folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder_name)) %>%
+  as.Date(format = "%Y%m%d")
+
+if (is.na(folder_date)) {
+  stop(simpleError(paste0("Could not find the demultiplexed report from BCL Convert. Have you tried downloading the data?")))
+}
+
+if (folder_date != gsub("_.*", "", basename(here()))) {
+  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+}
 
 ```
-
-<!-- Load QC data -->
 
 ```{r file paths for qc data, eval = import_data}
 
