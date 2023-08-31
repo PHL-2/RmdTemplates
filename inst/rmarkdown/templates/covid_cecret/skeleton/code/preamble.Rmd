@@ -600,9 +600,9 @@ s_phi <- read_csv(PHI_file_fp)
 epi_report <- s_toPlot %>%
   merge(s_phi, by = "sample_id", all.x = TRUE) %>%
   filter4report() %>%
-  select(sample_name, sample_collected_by, sequencing_date, pangolin_lineage, nextclade_clade_who) %>%
+  select(sample_name, sample_collected_by, sequencing_date, Nextclade_pango, nextclade_clade_who) %>%
   arrange(sample_collected_by, sample_name) %>%
-  rename(accession_number = "sample_name", who_label = "nextclade_clade_who", lineage = "pangolin_lineage")
+  rename(accession_number = "sample_name", who_label = "nextclade_clade_who", lineage = "Nextclade_pango")
 
 epi_report %>%
   write_csv(epi_report_fp)
@@ -676,6 +676,7 @@ n_samples_report <- s %>%
   filter(!grepl("None|Undetermined", sample_id)) %>%
   filter(!grepl("control", sample_type, ignore.case = TRUE)) %>%
   filter(!is.na(pangolin_lineage)) %>%
+  filter(!is.na(Nextclade_pango)) %>%
   filter(!is.na(nextclade_qc_overallstatus)) %>%
   filter(nextclade_qc_overallstatus != "bad") %>%
   filter(!(nextclade_qc_overallstatus == "mediocre" & pct_genome_coverage_over_30x < .8)) %>%
@@ -990,8 +991,8 @@ for(col_num in col2show) {
   filtered_samp_name <- s %>%
     mutate(nextclade_qc_overallstatus = ifelse(is.na(nextclade_qc_overallstatus), "control", nextclade_qc_overallstatus)) %>%
     mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = names(ann_geom_values$linetype))) %>%
-    mutate(who_label = ifelse(is.na(pangolin_lineage), "control",
-                              paste0(nextclade_clade_who, " - ", gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", pangolin_lineage)))) %>%
+    mutate(who_label = ifelse(is.na(Nextclade_pango), "control",
+                              paste0(nextclade_clade_who, " - ", gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", Nextclade_pango)))) %>%
     mutate(who_label = factor(who_label, levels = c(names(ann_geom_values$who_label), "control"))) %>%
     filter(sample_id != "Undetermined") %>%
     filter(plate_col == col_num) %>%

@@ -769,22 +769,19 @@ knitr::include_graphics(here("data", "figures", paste0(sequencing_date, "_slidin
 
 \elandscape
 
-## Pangolin Lineage Results
+## Nextclade Lineage Results
 
-Pangolin software version `r software_version$pangolin` \newline
-UShER database version `r software_version$PUSHER`
-
-### Variant assignments from pangolin
+### Variant assignments from Nextclade
 
 ```{r variant assignments, fig.height=9, fig.width=7}
 
 s_toPlot %>%
-  select(sample_id, pangolin_lineage, sample_type) %>%
+  select(sample_id, Nextclade_pango, sample_type) %>%
   group_by(sample_type) %>%
   mutate(fraction = 1/n()) %>%
   ungroup() %>%
-  mutate(variants = fct_lump(pangolin_lineage, 20, w = fraction)) %>% 
-  select(-pangolin_lineage) %>%
+  mutate(variants = fct_lump(Nextclade_pango, 20, w = fraction)) %>% 
+  select(-Nextclade_pango) %>%
   group_by(sample_type, variants) %>%
   summarize(props = sum(fraction)) %>%
   ungroup() %>%
@@ -815,6 +812,9 @@ s_toPlot %>%
 \newpage
 
 ### Figure showing different USHER placements
+
+Pangolin software version `r software_version$pangolin` \newline
+UShER database version `r software_version$PUSHER`
 
 ```{r multiple variant assignments, fig.height=9, fig.width=8}
 
@@ -861,7 +861,7 @@ s_toPlot %>%
 
 \newpage
 
-### Figure showing conflicting variant assignments from pangolin and nextclade
+### Figure showing conflicting variant assignments from Nextclade and pangolin
 Stars in boxes mean that the variants/sub-variants from different software agree
 
 ```{r conflicting assignments, fig.height=9, fig.width=8}
@@ -875,7 +875,7 @@ s_toPlot %>%
   pivot_longer(cols = c("Pangolin", "NextClade"), names_to = "software", values_to = "variants") %>%
   mutate(uniq = case_when(pn & grepl("Pangolin|NextClade", software) ~ "*",
                           TRUE ~ "")) %>%
-  mutate(software = factor(software, levels = c("Pangolin", "NextClade"))) %>%
+  mutate(software = factor(software, levels = c("Nextclade", "Pangolin"))) %>%
   mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
   mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = c("good", "mediocre", "bad"))) %>%
   mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
@@ -1006,17 +1006,17 @@ empty_plate %>%
 empty_plate %>%
   merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
   filter(!is.na(plate_coord)) %>%
-  mutate(pangolin_lineage = factor(pangolin_lineage, levels = names(ann_geom_values$variants))) %>%
+  mutate(Nextclade_pango = factor(Nextclade_pango, levels = names(ann_geom_values$variants))) %>%
   mutate(plate = paste("Plate", plate)) %>%
   mutate(plate_col = as.numeric(plate_col)) %>%
   droplevels() %>%
   {
-  ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = pangolin_lineage, label = pangolin_lineage)) +
+  ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = Nextclade_pango, label = Nextclade_pango)) +
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 16) +
     geom_text(check_overlap = TRUE, size = 3, color = "white") +
     facet_wrap(~plate, ncol = 1) +
-    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$pangolin_lineage), names(ann_geom_values$variants))]) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$Nextclade_pango), names(ann_geom_values$variants))]) +
     scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
     theme_bw() +
     theme(
@@ -1047,15 +1047,15 @@ s_toPlot %>%
   group_by(PHL_sample_received_date) %>%
   mutate(all_samples_n = n()) %>%
   ungroup() %>%
-  select(sample_type, PHL_sample_received_date, pangolin_lineage, nextclade_clade_who, all_samples_n) %>%
-  group_by(PHL_sample_received_date, sample_type, nextclade_clade_who, pangolin_lineage) %>%
+  select(sample_type, PHL_sample_received_date, Nextclade_pango, nextclade_clade_who, all_samples_n) %>%
+  group_by(PHL_sample_received_date, sample_type, nextclade_clade_who, Nextclade_pango) %>%
   summarise(variant_percentages = n()/all_samples_n*100) %>%
   mutate(variant_percentages_text = paste0(round(variant_percentages, digits = 2), "\\%")) %>%
   ungroup() %>%
   arrange(PHL_sample_received_date, -variant_percentages) %>%
   select(-variant_percentages) %>%
   unique() %>%
-  rename(`Received date` = "PHL_sample_received_date", `Sample Type` = "sample_type", `WHO` = "nextclade_clade_who", `Variant` = "pangolin_lineage", `Variant percentage` = "variant_percentages_text") %>%
+  rename(`Received date` = "PHL_sample_received_date", `Sample Type` = "sample_type", `WHO` = "nextclade_clade_who", `Variant` = "Nextclade_pango", `Variant percentage` = "variant_percentages_text") %>%
   { if(use_kable)
       kable(., "latex", longtable = F, digits=2, booktabs=T, escape=F,
             col.names = linebreak(c("Sample\nreceived", "Sample Type", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
@@ -1072,7 +1072,7 @@ s_toPlot %>%
 
 has_pos_ctrl <- s %>%
   filter(grepl("Mock DNA", sample_type)) %>%
-  mutate(is_pos = pangolin_lineage == "B") %>%
+  mutate(is_pos = Nextclade_pango == "B") %>%
   select(is_pos) %>%
   pull()
 
