@@ -481,7 +481,7 @@ empty_plate %>%
 
 ## Kraken2
 
-### Heatmap
+### Species Heatmap
 
 ```{r k2 heatmap, fig.width=11, fig.height=9}
 
@@ -518,24 +518,71 @@ k2 %>%
     geom_tile(color = "black") +
     coord_fixed() +
     scale_fill_gradientn(colors = rev(brewer.pal(11, "Spectral")),
-                         labels = percent) +
+                         labels = percent,
+                         limits = c(0, 1)) +
     theme_bw() +
     theme(panel.grid = element_blank(),
           panel.border = element_blank(),
-          axis.text.y.left = element_text(color = ifelse(grepl("SARS", levels(.$k2_taxon)), "red", "black"),
+          axis.text.y.left = element_text(color = ifelse(grepl("SARS", levels(.$k2_taxon)), "red",
+                                                  ifelse(grepl("^Other$|^u__unclassified$", levels(.$k2_taxon)), "blue", "black")),
                                           size = k2_axis_size),
           axis.ticks.x.bottom = element_blank(),
           axis.text.x.bottom = element_blank(),
           axis.title.x.bottom = element_blank(),
           plot.margin= margin(0, 0, 0, 0, "pt")
           ) +
-    labs(x = "", y = "", fill = "Relative\nProportion", title = "Top 3 most abundant taxa within each sample are shown")
+    labs(x = "", y = "", fill = "Relative\nProportion",
+         title = "Only the top 3 most abundant taxa within each sample are shown\n'Other' includes less abundant taxa grouped together")
     } /
   sample_type_legend
 
 ```
 
 \elandscape
+
+### Phyla Heatmap
+
+```{r k2 heatmap phyla, fig.width=9, fig.height=11}
+
+k2 %>%
+  mutate(k2_taxon = gsub("Severe acute respiratory syndrome", "SARS", k2_taxon)) %>%
+  mutate(k2_phyla = ifelse(grepl("SARS", k2_taxon), k2_taxon,
+                           gsub(" [cofgs]__.*", "", k2_taxon))) %>%
+  mutate(k2_phyla = fct_lump(k2_phyla, n = 20, w = k2_props)) %>%
+  group_by(sample_id, k2_phyla) %>%
+  summarise(k2_props = sum(k2_props)) %>%
+  ungroup() %>%
+  complete(sample_id, k2_phyla, fill = list(k2_props = 0)) %>%
+  mutate(k2_phyla = sub(" ", "\n", k2_phyla)) %>%
+  group_by(k2_phyla) %>%
+  mutate(mean_props = mean(k2_props)) %>%
+  ungroup() %>%
+  order_on_other_col(k2_phyla, mean_props, decreasing = FALSE) %>%
+  merge(select(s, sample_id, sample_type), by = "sample_id", all = TRUE) %>%
+  order_on_other_col(sample_id, sample_type, decreasing = FALSE) %>%
+  {
+    ggplot(., aes(y = k2_phyla, x = sample_id, fill = k2_props)) +
+    geom_tile(color = "black") +
+    coord_fixed() +
+    scale_fill_gradientn(colors = rev(brewer.pal(11, "Spectral")),
+                         labels = percent,
+                         limits = c(0, 1)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.text.y.left = element_text(color = ifelse(grepl("SARS", levels(.$k2_phyla)), "red",
+                                                  ifelse(grepl("^Other$|^u__unclassified$", levels(.$k2_phyla)), "blue", "black")),
+                                          size = 10),
+          axis.ticks.x.bottom = element_blank(),
+          axis.text.x.bottom = element_blank(),
+          axis.title.x.bottom = element_blank(),
+          plot.margin= margin(0, 0, 0, 0, "pt")
+          ) +
+    labs(x = "", y = "", fill = "Relative\nProportion", title = "Top 20 most abundant phyla across all samples\n'Other' includes less abundant phyla grouped")
+    } /
+  sample_type_legend
+
+```
 
 ### Kmer results (number of unique SARS-CoV-2 fragments detected)
 
