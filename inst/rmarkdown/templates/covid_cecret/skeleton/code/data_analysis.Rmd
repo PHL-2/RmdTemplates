@@ -500,7 +500,7 @@ k2_axis_size <- 11 - length(top_taxon)/10
 
 k2 %>%
   mutate(k2_taxon = gsub(" subsp\\. .*", "", k2_taxon)) %>%
-  mutate(k2_taxon = fct_other(k2_taxon, keep = top_taxon)) %>%
+  mutate(k2_taxon = fct_other(k2_taxon, keep = top_taxon, other_level = "Other taxa")) %>%
   group_by(sample_id, k2_taxon) %>%
   summarise(k2_props = sum(k2_props)) %>%
   ungroup() %>%
@@ -524,7 +524,7 @@ k2 %>%
     theme(panel.grid = element_blank(),
           panel.border = element_blank(),
           axis.text.y.left = element_text(color = ifelse(grepl("SARS", levels(.$k2_taxon)), "red",
-                                                  ifelse(grepl("^Other$|^u__unclassified$", levels(.$k2_taxon)), "blue", "black")),
+                                                  ifelse(grepl("^Other\ntaxa$|^u__unclassified$", levels(.$k2_taxon)), "blue", "black")),
                                           size = k2_axis_size),
           axis.ticks.x.bottom = element_blank(),
           axis.text.x.bottom = element_blank(),
@@ -532,7 +532,7 @@ k2 %>%
           plot.margin= margin(0, 0, 0, 0, "pt")
           ) +
     labs(x = "", y = "", fill = "Relative\nProportion",
-         title = "Only the top 3 most abundant taxa within each sample are shown\n'Other' includes less abundant taxa grouped together")
+         title = "Only the top 3 most abundant taxa within each sample are shown")
     } /
   sample_type_legend
 
@@ -548,7 +548,7 @@ k2 %>%
   mutate(k2_taxon = gsub("Severe acute respiratory syndrome", "SARS", k2_taxon)) %>%
   mutate(k2_phyla = ifelse(grepl("SARS", k2_taxon), k2_taxon,
                            gsub(" [cofgs]__.*", "", k2_taxon))) %>%
-  mutate(k2_phyla = fct_lump(k2_phyla, n = 20, w = k2_props)) %>%
+  mutate(k2_phyla = fct_lump(k2_phyla, n = 20, w = k2_props, other_level = "Other phyla")) %>%
   group_by(sample_id, k2_phyla) %>%
   summarise(k2_props = sum(k2_props)) %>%
   ungroup() %>%
@@ -571,14 +571,14 @@ k2 %>%
     theme(panel.grid = element_blank(),
           panel.border = element_blank(),
           axis.text.y.left = element_text(color = ifelse(grepl("SARS", levels(.$k2_phyla)), "red",
-                                                  ifelse(grepl("^Other$|^u__unclassified$", levels(.$k2_phyla)), "blue", "black")),
+                                                  ifelse(grepl("^Other\nphyla$|^u__unclassified$", levels(.$k2_phyla)), "blue", "black")),
                                           size = 10),
           axis.ticks.x.bottom = element_blank(),
           axis.text.x.bottom = element_blank(),
           axis.title.x.bottom = element_blank(),
           plot.margin= margin(0, 0, 0, 0, "pt")
           ) +
-    labs(x = "", y = "", fill = "Relative\nProportion", title = "Top 20 most abundant phyla across all samples\n'Other' includes less abundant phyla grouped")
+    labs(x = "", y = "", fill = "Relative\nProportion", title = "Top 20 most abundant phyla across all samples")
     } /
   sample_type_legend
 
