@@ -496,6 +496,8 @@ top_taxon <- k2 %>%
   as.character() %>%
   unique()
 
+k2_axis_size <- 11 - length(top_taxon)/10
+
 k2 %>%
   mutate(k2_taxon = gsub(" subsp\\. .*", "", k2_taxon)) %>%
   mutate(k2_taxon = fct_other(k2_taxon, keep = top_taxon)) %>%
@@ -521,7 +523,7 @@ k2 %>%
     theme(panel.grid = element_blank(),
           panel.border = element_blank(),
           axis.text.y.left = element_text(color = ifelse(grepl("SARS", levels(.$k2_taxon)), "red", "black"),
-                                          size = 4),
+                                          size = k2_axis_size),
           axis.ticks.x.bottom = element_blank(),
           axis.text.x.bottom = element_blank(),
           axis.title.x.bottom = element_blank(),
@@ -769,9 +771,11 @@ knitr::include_graphics(here("data", "figures", paste0(sequencing_date, "_slidin
 
 \elandscape
 
-## Nextclade Lineage Results
+## Lineage Results
 
 ### Variant assignments from Nextclade
+
+Nextclade version `r software_version$nextclade`
 
 ```{r variant assignments, fig.height=9, fig.width=7}
 
@@ -875,7 +879,7 @@ s_toPlot %>%
   pivot_longer(cols = c("Pangolin", "NextClade"), names_to = "software", values_to = "variants") %>%
   mutate(uniq = case_when(pn & grepl("Pangolin|NextClade", software) ~ "*",
                           TRUE ~ "")) %>%
-  mutate(software = factor(software, levels = c("Nextclade", "Pangolin"))) %>%
+  mutate(software = factor(software, levels = c("NextClade", "Pangolin"))) %>%
   mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
   mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = c("good", "mediocre", "bad"))) %>%
   mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
@@ -931,11 +935,9 @@ s %>%
 
 ```
 
-## Nextclade
+## Quality control
 
-Nextclade version `r software_version$nextclade`
-
-### Coverage and QC scores
+### Coverage and QC status
 
 ```{r nextclade coverage, fig.height=8, fig.width=7}
 
