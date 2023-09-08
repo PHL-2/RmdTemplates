@@ -23,6 +23,20 @@ tryCatch(
 )
 
 ###################################################
+# Load config
+###################################################
+
+#this file needs to sit in a [aux_files/config] directory path above this project directory
+tryCatch(
+  {
+    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+  },
+  error = function(e) {
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+  }
+)
+
+###################################################
 # Load the RLU report
 # Make sure these sheets are not uploaded to GitHub
 ###################################################
@@ -30,7 +44,7 @@ tryCatch(
 #the HARVEST report is automatically generated each Monday and deposited onto a shared drive
 RLU_file_name <- "COVID_harvest_report.csv"
 date_RLU_file_name <- paste0(format(Sys.time(), "%Y%m%d"), "_", RLU_file_name)
-shared_RLU_fp <- list.files("//city.phila.local/shares/Health/PHL/Admin/Sequencing_harvest_reports", pattern = paste0("^", RLU_file_name, "$"), full.names = TRUE)
+shared_RLU_fp <- list.files(file.path(shared_drive_fp, "Sequencing_harvest_reports"), pattern = paste0("^", RLU_file_name, "$"), full.names = TRUE)
 RLU_fp <- here("metadata", "extra_metadata", date_RLU_file_name)
 
 file.copy(shared_RLU_fp, file.path(dirname(shared_RLU_fp), date_RLU_file_name))
@@ -108,9 +122,9 @@ if(any(is.na(PHL_data[PHL_data$SPECIMEN_NUMBER %in% RLU_data$SPECIMEN_NUMBER, "R
 
 }
 
-################################
-# Remove Health Center 1 samples
-################################
+########################
+# Where samples are from
+########################
 
 missing_sample_with_RLU <- PHL_data %>%
   filter(!is.na(RLU)) %>%
@@ -158,7 +172,7 @@ if(length(epi_sample_not_found) > 0) {
 }
 
 samples_removed <- PHL_data %>%
-  filter(RLU < 1000 | SPECIMEN_NUMBER %in% c(HC1_samples, MEO_samples)) %>%
+  filter(RLU < 1000 | SPECIMEN_NUMBER %in% c(MEO_samples)) %>%
   select(SPECIMEN_NUMBER) %>%
   pull()
 
@@ -180,7 +194,7 @@ potential_ct_col_names <- c("ct value", "CT value", "CT values", "CTvalue", "CTv
 TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
   #filter rows where sample_id is NA
   filter(!is.na(SPECIMEN_NUMBER)) %>%
-  mutate(Collection_date = format(Collection_date, "%m/%d/%Y")) %>%
+  #mutate(Collection_date = format(Collection_date, "%m/%d/%Y")) %>%
   rename_with(~ "ct value", any_of(potential_ct_col_names)) %>%
   as.data.frame()
 
@@ -238,7 +252,8 @@ TU_samples <- TU_data %>%
   rename(sample_name = "SPECIMEN_NUMBER") %>%
   arrange(`ct value`)
 
-shared_environ_fp <- max(list.files("//city.phila.local/shares/Health/PHL/Admin/Sequencing Action plan updated/Enviromental_samples", pattern = "^[0-9]*-[0-9]*-[0-9]*", full.names = TRUE))
+shared_environ_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing Action plan updated", "Enviromental_samples"),
+                                    pattern = "^[0-9]*-[0-9]*-[0-9]*", full.names = TRUE))
 
 environmental_file_date <- as.Date(gsub("_.*", "", basename(shared_environ_fp)))
 
@@ -329,7 +344,7 @@ write_csv(plate_view, file = here("metadata", "for_scientists", paste0(format(Sy
 plate_map_local_fp <- here("metadata", "for_scientists", paste0(format(Sys.time(), "%Y%m%d"), "_combined_samples_plate_map.csv"))
 write_csv(real_plate_view, file = plate_map_local_fp)
 
-plate_map_cp_fp <- file.path("//city.phila.local/shares/Health/PHL/Admin/Sequencing Action plan updated/Plate Maps",
+plate_map_cp_fp <- file.path(shared_drive_fp, "Sequencing Action plan updated", "Plate Maps",
                              paste0(format(Sys.time(), "%Y-%m-%d"), "_Plate_Map.csv"))
 
 file.copy(plate_map_local_fp, plate_map_cp_fp, overwrite = TRUE)
