@@ -244,9 +244,11 @@ dragen_metadata_fp <- here("data", paste0(sequencing_date, "_bs_metadata.csv"))
 
 run_dragen_app <- !file.exists(dragen_metadata_fp)
 
+windows_OS <- Sys.info()["sysname"] == "Windows"
+
 ```
 
-```{r upload data to basespace and run the app, message = NA, eval = run_dragen_app}
+```{r upload data to basespace and run the app windows, message = NA, eval = run_dragen_app & windows_OS}
 
 dir.create(here("data", "processed_bs"), recursive = TRUE)
 
@@ -271,8 +273,6 @@ fastq_folder <- dirname(list.files(here(run_folder, latest_demux), pattern = "R[
 #   fastq_folder <- gsub("/", "\\\\", fastq_folder)
 #   fastq_folder <- gsub("^", "\\\\\\\\", fastq_folder)
 # }
-
-#have to break the shell script into parts because of proxy authentication issue which can be solved by initializing a new shell script each time
 
 ### 1 - create the basespace project
 bs_cli_create_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_1_create_project.sh")
@@ -305,6 +305,59 @@ write(paste0(c("app_session_id", app_session_id), collapse = ","), dragen_metada
 
 ```
 
+```{r upload data to basespace and run the app macOS, message = NA, eval = run_dragen_app & !windows_OS}
+
+dir.create(here("data", "processed_bs"), recursive = TRUE)
+
+list_of_indexes <- list.files(here(run_folder, latest_demux), pattern = "*I[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)
+
+#if there are index files in the run folder, move them somewhere else
+if(length(list_of_indexes) > 0) {
+  
+  #make index folder by replace the slashes
+  dir.create(file.path(dirname(dirname(list_of_indexes[1])), "indices"), recursive = TRUE)
+  
+  for(index in list_of_indexes) {
+    file.rename(index, file.path(dirname(dirname(list_of_indexes[1])), "indices", basename(index)))
+  }
+
+}
+
+### 1 - create the basespace project
+project_id <- cli_submit("bs", "projects",
+                         c("create -n", project_name, "-f csv", "| grep", project_name, "| cut -d, -f2"))
+write(paste0(c("project_id", project_id), collapse = ","), dragen_metadata_fp)
+
+### 2 - upload the fastq files
+files_upload <- cli_submit("bs", "upload",
+                           c("dataset -p", project_id, "--recursive", shQuote(fastq_folder, type = "sh")))
+
+if(any(grepl("Error|Aborted|Failed", files_upload, ignore.case = TRUE))) {
+  stop(simpleError("Sample upload to BaseSpace was aborted"))
+}
+
+### 3 - get the latest app version
+dragen_app_version <- "3.5.13"
+#dragen_app_version <- cli_submit(sh_exe_fp, bs_cli_app_ver_fp, shQuote(app2run, type = "sh")) #version 4 of the pipeline is broken
+write(paste0(c("dragen_app_version", dragen_app_version), collapse = ","), dragen_metadata_fp, append = TRUE)
+
+
+### 4 - launch the app
+app_session_id <- cli_submit("bs", "launch",
+                             c("application -n", shQuote(app2run, type = "sh"),
+                               "--app-version", dragen_app_version,
+                               "-o", paste0("project-id:", project_id),
+                               "-o input-type:project",
+                               "-o", paste0("input-project-id:", project_id),
+                               "-o",  paste0("virus-primers:", artic_primer_scheme),
+                               "-o basespace-labs-disclaimer:Accepted",
+                               "-f json |",
+                               "grep Id | cut -d'\"' -f4 | head -n1"))
+     
+write(paste0(c("app_session_id", app_session_id), collapse = ","), dragen_metadata_fp, append = TRUE)
+
+```
+
 ```{r download bs data check}
 
 bs_meta <- read_csv(dragen_metadata_fp, col_names = FALSE) %>%
@@ -318,7 +371,7 @@ dl_bs_data <- is.null(bs_meta$app_run_date)
 
 ```
 
-```{r download bs data, message = NA, eval = dl_bs_data}
+```{r download bs data windows, message = NA, eval = dl_bs_data & windows_OS}
 
 ### 5 - wait until the app finished running
 bs_cli_await_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_5_await.sh")
@@ -332,6 +385,36 @@ downloading <- cli_submit(sh_exe_fp, bs_cli_download_fp, c(bs_meta$project_id,
 ### 7 - get app date
 bs_cli_get_date_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_7_get_date.sh")
 app_run_date <- cli_submit(sh_exe_fp, bs_cli_get_date_fp, bs_meta$app_session_id) %>%
+  as.Date() %>%
+  as.character()
+write(paste0(c("app_run_date", app_run_date), collapse = ","), dragen_metadata_fp, append = TRUE)
+
+```
+
+```{r download bs data macOS, message = NA, eval = dl_bs_data & !windows_OS}
+
+### 5 - wait until the app finished running
+awaiting <- cli_submit("bs", "await",
+                       c("appsession", bs_meta$app_session_id))
+
+### 6 - download data
+downloading <- cli_submit("bs", "download",
+                          c("project -i", bs_meta$project_id,
+                            "--exclude '*'",
+                            "--include '*.zip'",
+                            "--include 'Undetermined_report_metrics.json'", 
+                            "--include '*detect.report.csv'", 
+                            "--include '*lineage_report.csv'", 
+                            "--include '*nextclade.tsv'", 
+                            "--include '*.consensus_hard_masked_sequence.fa'", 
+                            "--exclude 'Undetermined.consensus_hard_masked_sequence.fa'", 
+                            "-o", shQuote(here("data", "processed_bs"), type = "sh"),
+                            "--no-metadata --overwrite"))
+
+### 7 - get app date
+app_run_date <- cli_submit("bs", "appsession",
+                           "get --id", bs_meta$app_session_id,
+                           "-f json | grep DateCompleted | cut -d'\"' -f4") %>%
   as.Date() %>%
   as.character()
 write(paste0(c("app_run_date", app_run_date), collapse = ","), dragen_metadata_fp, append = TRUE)
