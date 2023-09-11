@@ -81,7 +81,8 @@ PHI_file_fp <- list.files(here("metadata"), pattern = "_PHI.csv", full.names = T
 
 ### file paths to save results to
 unkwn_barcodes_fp <- here("data", paste0(sequencing_date, "_unknown_barcodes.csv"))
-fastqc_mean_fp <- here("data", paste0(sequencing_date, "_fastqc.csv"))
+fastqc_qual_fp <- here("data", paste0(sequencing_date, "_fastqc_qual.csv"))
+actual_read_lengths_fp <- here("data", paste0(sequencing_date, "_read_lengths.csv"))
 
 kraken_props_fp <- here("data", paste0(sequencing_date, "_kraken_props.csv"))
 snpdists_fp <- here("data", paste0(sequencing_date, "_snpdists.csv"))
@@ -207,13 +208,24 @@ if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] >
 
 ```
 
-```{r load fastqc files if doing fastqc from demux, eval = import_data}
+```{r load fastqc files, eval = import_data}
 
 fastqc_fps <- list.files(here("data", "processed_bclconvert", run_folder_name), pattern = "fastqc_data.txt", recursive = TRUE, full.names = TRUE)
 
+#line positions to skip to
+quality_indic <- ">>Per base sequence quality"
+seq_length_indic <- ">>Sequence Length Distribution"
+
 fastqc <- lapply(fastqc_fps, function(f) {
-  #skip the first 13 lines, assuming the fastqc_data file format does not change
-  read_qc <- read_tsv(f, skip = 12, n_max = read_length)
+  
+  #find the line to start reading the file as tsv
+  read_all <- readLines(f)
+  line_start <- grep(quality_indic, read_all)
+  end_modules <- grep(">>END_MODULE", read_all) - line_start
+  line_end <- min(end_modules[which(end_modules > 0)]) - 2
+  rm(read_all)
+  
+  read_qc <- read_tsv(f, skip = line_start, n_max = line_end)
   read_qc$sample_id <- gsub(".*/|_S[0-9]*_L00[0-9]*_R[12].*", "", f)
   read_qc$direction <- gsub(".*(R[12]).*", "\\1", f)
   return(read_qc)
@@ -234,7 +246,105 @@ if(!all(length_check == read_length)) {
   stop(simpleError(paste0("Some samples did not have reads up to ", read_length, " bp")))
 }
 
-write_csv(fastqc, fastqc_mean_fp)
+actual_read_lengths <- lapply(fastqc_fps, function(f) {
+  #find the line to start reading the file as tsv
+  read_all <- readLines(f)
+  line_start <- grep(seq_length_indic, read_all)
+  end_modules <- grep(">>END_MODULE", read_all) - line_start
+  line_end <- min(end_modules[which(end_modules > 0)]) - 2
+  rm(read_all)
+  
+  read_in_lengths <- read_tsv(f, skip = line_start, n_max = line_end)
+  read_in_lengths$sample_id <- gsub(".*/|_S[0-9]*_L00[0-9]*_R[12].*", "", f)
+  read_in_lengths$direction <- gsub(".*(R[12]).*", "\\1", f)
+  return(read_in_lengths)
+  }) %>%
+  do.call("rbind", .) %>%
+  rename(read_length = "#Length", count = "Count") %>%
+  group_by(sample_id, read_length) %>%
+  summarize(count = sum(count)) %>%
+  ungroup() %>%
+  mutate(software = "fastqc") %>%
+  select(software, sample_id, read_length, count)
+
+write_csv(fastqc, fastqc_qual_fp)
+write_csv(actual_read_lengths, actual_read_lengths_fp)
+
+```
+
+```{r load samtools stats files, eval = import_data}
+
+samtools_stats_fps <- list.files(here("data", "processed_cecret", "samtools_stats"), pattern = ".stats.txt", recursive = TRUE, full.names = TRUE)
+
+#line positions to skip to
+summary_indic <- "# Summary Numbers."
+read_length_indic <- "# Read lengths\\."
+
+samtools_stat <- lapply(samtools_stats_fps, function(f) {
+  
+  #find the line to start reading the file as tsv
+  read_all <- readLines(f)
+  line_start <- grep(summary_indic, read_all)
+  line_end <- grep("# First Fragment Qualities.", read_all) - line_start - 2
+  rm(read_all)
+  
+  summary_numbers <- read_tsv(f, skip = line_start, n_max = line_end,
+                              col_names = c("SN", "samtools_stat", "samtools_stat_val", "comments"))
+  summary_numbers$sample_id <- gsub(".*/|\\.stats.txt", "", f)
+  return(summary_numbers)
+  }) %>%
+  do.call("rbind", .) %>%
+  mutate(samtools_stat = gsub(" ", "_", samtools_stat),
+         samtools_stat = gsub(":", "", samtools_stat),
+         samtools_stat = gsub("^", "samtools_", samtools_stat)) %>%
+  #select certain rows
+  filter(grepl(paste0(c("^samtools_raw_total_sequences$", 
+                        "^samtools_filtered_sequences$", 
+                        "^samtools_sequences$", 
+                        "^samtools_reads_mapped$", 
+                        "^samtools_reads_unmapped$", 
+                        "^samtools_reads_properly_paired$"), collapse = "|"), samtools_stat)) %>%
+  select(sample_id, samtools_stat, samtools_stat_val) %>%
+  pivot_wider(names_from = "samtools_stat", values_from = "samtools_stat_val")
+
+mapped_read_lengths <- lapply(samtools_stats_fps, function(f) {
+  
+  #find the line to start reading the file as tsv
+  read_all <- readLines(f)
+  line_start <- grep(read_length_indic, read_all)
+  line_end <- grep("# Read lengths - first fragments.", read_all) - line_start - 1
+  rm(read_all)
+  
+  #some samples may have 0 reads
+  if(line_end == 0) {
+    read_lengths <- data.frame(sample_id = gsub(".*/|\\.stats.txt", "", f),
+                               RL = "RL",
+                               samtools_read_length = 0,
+                               count = 0)
+  } else {
+    read_lengths <- read_tsv(f, skip = line_start, n_max = line_end,
+                              col_names = c("RL", "samtools_read_length", "count"))
+    read_lengths$sample_id <- gsub(".*/|\\.stats.txt", "", f)
+  }
+
+  return(read_lengths)
+  }) %>%
+  do.call("rbind", .) %>%
+  mutate(software = "samtools") %>%
+  select(software, sample_id, samtools_read_length, count)
+
+samtools_tot_sequences <- mapped_read_lengths %>%
+  group_by(sample_id) %>%
+  summarize(count = sum(count)) %>%
+  ungroup() %>%
+  merge(samtools_stat, by = "sample_id", all = TRUE) %>%
+  mutate(all_reads_equal = count == samtools_raw_total_sequences)
+
+if(!all(samtools_tot_sequences$all_reads_equal)) {
+  stop(simpleError("Error with parsing samtools file. Sum of read length count does not equal total number of reads from samtools"))
+}
+
+write_csv(mapped_read_lengths, actual_read_lengths_fp, append = TRUE)
 
 ```
 
@@ -455,7 +565,7 @@ cecret_aggregate <- cecret_aggregate %>%
 
 ```{r write cecret results, eval = import_data}
 
-list(samp_reads, cov_stats, coverage, next_clade, freyja, amplicon_depth) %>%
+list(samp_reads, cov_stats, coverage, next_clade, freyja, amplicon_depth, samtools_stat) %>%
   reduce(merge, by = "sample_id", all = TRUE) %>%
   merge(cecret_aggregate,
         by = c("sample_id", "nextclade_clade", "nextclade_clade_who", "nextclade_qc_overallstatus", "nextclade_qc_overallscore"),
@@ -471,7 +581,9 @@ list(samp_reads, cov_stats, coverage, next_clade, freyja, amplicon_depth) %>%
 
 top_unkwn_indices <- read_csv(unkwn_barcodes_fp)
 
-fastqc <- read_csv(fastqc_mean_fp)
+fastqc <- read_csv(fastqc_qual_fp)
+
+actual_read_lengths <- read_csv(actual_read_lengths_fp)
 
 cecret_results <- read_csv(cecret_results_fp)
 
