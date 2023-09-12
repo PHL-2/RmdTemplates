@@ -63,8 +63,6 @@ s %>%
 
 <!-- QC section -->
 
-\blandscape
-
 # FASTQ generation, demultiplexing, and quality control
 
 ## BCLConvert
@@ -74,38 +72,6 @@ BCLConvert version `r software_version$bclconvert` was used to generate and demu
 ## Number of read pairs per sample after demultiplexing
 
 Samples were sequenced on the `r unique(s_toPlot$instrument_type)` as a `r paste0(read_length, ":", read_length)` length run. The demultiplexing step involves matching the IDT barcode sequence associated with each sample to the index sequence of length `r index_length` in each read
-
-\newpage
-
-### Pre-process FastQC
-
-Demultiplexed FASTQ files were processed with FALCO version `r software_version$falco` to obtain FASTQC scores of the reads
-
-```{r fastqc, fig.width=11, fig.height=7}
-
-fastqc %>%
-  merge(select(s, sample_id, sample_type), by = "sample_id", all = TRUE) %>%
-  filter(sample_id != "Undetermined") %>%
-  droplevels() %>%
-  group_by(sample_type, direction, position) %>%
-  summarize(MeanQual = mean(Mean), SdQual = sd(Mean)) %>%
-  mutate(LowQual = MeanQual - SdQual,
-         HighQual = MeanQual + SdQual) %>%
-  ungroup() %>%
-  {
-  ggplot(., aes(x=position, y=MeanQual, color = sample_type)) + 
-    geom_errorbar(aes(ymin=LowQual, ymax=HighQual)) +
-    facet_wrap( ~ direction, ncol = 1) +
-    scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
-    geom_line() +
-    geom_point() +
-    theme_bw() + 
-    labs(x='Position in sequence read', y='Average quality score per sample type', color = 'Sample Type')
-  }
-
-```
-
-\elandscape
 
 ### Distributions of reads across all samples
 
@@ -124,27 +90,6 @@ s %>%
       y="Number of samples",
       fill = "Sample Type",
       title = paste0("Total number of reads from run: ", round(sum(s$read_counts)/1000000, digits = 2), "M")
-    )
-
-```
-
-### Number of reads per sample type
-
-```{r reads per sample type}
-
-s %>%
-  ggplot(aes(y=read_counts, x=sample_type, fill = sample_type)) +
-    geom_boxplot(outlier.alpha = 0) +
-    geom_point(aes(size = sample_type), shape = 21, position = position_jitter(width = 0.2)) +
-    scale_y_continuous(labels = number_format(accuracy = 1)) +
-    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
-    scale_size_manual(values = ann_geom_values$sample_type_sizes[match(levels(s$sample_type), names(ann_geom_values$sample_type_sizes))]) +
-    theme_bw() + 
-    theme(panel.grid = element_blank(),
-          axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)) +
-    labs(
-      y="Read counts",
-      x="", fill = "Sample Type", size = "Sample Type"
     )
 
 ```
@@ -210,9 +155,30 @@ s %>%
 
 ```
 
+### Number of reads per sample type
+
+```{r reads per sample type}
+
+s %>%
+  ggplot(aes(y=read_counts, x=sample_type, fill = sample_type)) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_point(aes(size = sample_type), shape = 21, position = position_jitter(width = 0.2)) +
+    scale_y_continuous(labels = number_format(accuracy = 1)) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_size_manual(values = ann_geom_values$sample_type_sizes[match(levels(s$sample_type), names(ann_geom_values$sample_type_sizes))]) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(),
+          axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)) +
+    labs(
+      y="Read counts",
+      x="", fill = "Sample Type", size = "Sample Type"
+    )
+
+```
+
 ## Read length
 
-### Untrimmed read lengths
+### Untrimmed read lengths (fastqc)
 
 ```{r untrimmed rl, echo=FALSE}
 
@@ -235,7 +201,39 @@ actual_read_lengths %>%
 
 ```
 
-### Read length after quality score, Illumina adapter, and ARTIC primer trimming
+\blandscape
+
+### Pre-process FastQC
+
+Demultiplexed FASTQ files were processed with FALCO version `r software_version$falco` to obtain FASTQC scores of the reads
+
+```{r fastqc, fig.width=11, fig.height=7}
+
+fastqc %>%
+  merge(select(s, sample_id, sample_type), by = "sample_id", all = TRUE) %>%
+  filter(sample_id != "Undetermined") %>%
+  droplevels() %>%
+  group_by(sample_type, direction, position) %>%
+  summarize(MeanQual = mean(Mean), SdQual = sd(Mean)) %>%
+  mutate(LowQual = MeanQual - SdQual,
+         HighQual = MeanQual + SdQual) %>%
+  ungroup() %>%
+  {
+  ggplot(., aes(x=position, y=MeanQual, color = sample_type)) + 
+    geom_errorbar(aes(ymin=LowQual, ymax=HighQual)) +
+    facet_wrap( ~ direction, ncol = 1) +
+    scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    geom_line() +
+    geom_point() +
+    theme_bw() + 
+    labs(x='Position in sequence read', y='Average quality score per sample type', color = 'Sample Type')
+  }
+
+```
+
+\elandscape
+
+### Read length after quality score, Illumina adapter, and ARTIC primer trimming (samtools)
 
 ```{r trimmed rl, echo=FALSE}
 

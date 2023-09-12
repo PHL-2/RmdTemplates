@@ -1,6 +1,9 @@
 #s3 bucket holding the sequencing runs
 s3_run_bucket <- "s3://"
 
+#location on local drive of where sequencing run folder is held
+sequencing_folder_fp <- ""
+
 #shared drive location
 shared_drive_fp <- ""
 
@@ -14,6 +17,9 @@ if(Sys.info()["sysname"] == "Windows")
 {
   #shared drive location
   shared_drive_fp <- ""
+
+  #location on local drive of where sequencing run folder is held
+  sequencing_folder_fp <- ""
 
   #full file path of the git shell executable, dependent on where git was installed
   #on a Windows OS, it may be installed at C:/Users/user.name/AppData/Local/Programs/Git/bin/sh.exe
