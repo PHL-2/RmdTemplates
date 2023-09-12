@@ -91,10 +91,11 @@ tryCatch(
 ```{r find newest run folder, eval = import_data}
 
 #get the newly added run folder
-run_folder <- here("data", "processed_run") %>%
+run_folder <- sequencing_folder_fp %>%
   list.files(full.names = T) %>%
   data.frame(filenames = .) %>%
   filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
+  filter(grepl("[0-9]*_[M|N][0-9]*_[0-9]*_[0-9]*-[A-Z]*$", filenames)) %>%
   filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
   pull()
 
@@ -102,7 +103,7 @@ folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
   as.Date(format = "%Y%m%d")
 
 if (is.na(folder_date)) {
-  stop(simpleError(paste0("Could not find the raw run folder in ", here("data", "processed_run"))))
+  stop(simpleError(paste0("Could not find the raw run folder in ", sequencing_folder_fp)))
 }
 
 if (folder_date != gsub("_.*", "", basename(here()))) {
@@ -413,8 +414,8 @@ downloading <- cli_submit("bs", "download",
 
 ### 7 - get app date
 app_run_date <- cli_submit("bs", "appsession",
-                           "get --id", bs_meta$app_session_id,
-                           "-f json | grep DateCompleted | cut -d'\"' -f4") %>%
+                           c("get --id", bs_meta$app_session_id,
+                             "-f json | grep DateCompleted | cut -d'\"' -f4")) %>%
   as.Date() %>%
   as.character()
 write(paste0(c("app_run_date", app_run_date), collapse = ","), dragen_metadata_fp, append = TRUE)

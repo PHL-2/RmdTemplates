@@ -47,8 +47,9 @@ date_RLU_file_name <- paste0(format(Sys.time(), "%Y%m%d"), "_", RLU_file_name)
 shared_RLU_fp <- list.files(file.path(shared_drive_fp, "Sequencing_harvest_reports"), pattern = paste0("^", RLU_file_name, "$"), full.names = TRUE)
 RLU_fp <- here("metadata", "extra_metadata", date_RLU_file_name)
 
-file.copy(shared_RLU_fp, file.path(dirname(shared_RLU_fp), date_RLU_file_name))
 file.copy(shared_RLU_fp, RLU_fp)
+#need to rename harvest report so the program can make a new report each time
+file.rename(shared_RLU_fp, file.path(dirname(shared_RLU_fp), date_RLU_file_name))
 
 RLU_data <- read_csv(RLU_fp) %>%
   filter(Test == "SARSCoV2-1") %>%
