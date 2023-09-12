@@ -600,10 +600,11 @@ metadata_sheet %>%
 ############################################
 
 #get the newly added run folder
-run_folder <- here("data", "processed_run") %>%
+run_folder <- sequencing_folder_fp %>%
   list.files(full.names = T) %>%
   data.frame(filenames = .) %>%
   filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
+  filter(grepl("[0-9]*_[M|N][0-9]*_[0-9]*_[0-9]*-[A-Z]*$", filenames)) %>%
   filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
   pull()
 
@@ -636,10 +637,10 @@ nf_demux_samplesheet %>%
   write.csv(file = nf_demux_samplesheet_fp,
             row.names = FALSE, quote = FALSE)
 
-md5_fp <- here("data", "processed_run", paste0(sequencing_run, ".md5"))
+md5_fp <- file.path(sequencing_folder_fp, paste0(sequencing_run, ".md5"))
 
 paste0(sequencing_run, ".tar.gz") %>%
-  paste0(tools::md5sum(here("data", "processed_run", .)), "  ", .) %>%
+  paste0(tools::md5sum(file.path(sequencing_folder_fp, .)), "  ", .) %>%
   write(file = md5_fp)
 
 s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
