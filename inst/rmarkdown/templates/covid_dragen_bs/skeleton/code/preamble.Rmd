@@ -95,7 +95,7 @@ run_folder <- sequencing_folder_fp %>%
   list.files(full.names = T) %>%
   data.frame(filenames = .) %>%
   filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
-  filter(grepl("[0-9]*_[M|N][0-9]*_[0-9]*_[0-9]*-[A-Z]*$", filenames)) %>%
+  filter(grepl("[0-9]*_[M|N][0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$", filenames)) %>%
   filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
   pull()
 
@@ -249,7 +249,7 @@ windows_OS <- Sys.info()["sysname"] == "Windows"
 
 ```
 
-```{r upload data to basespace and run the app windows, message = NA, eval = run_dragen_app & windows_OS}
+```{r prepare the run folders for upload, message = NA, eval = run_dragen_app}
 
 dir.create(here("data", "processed_bs"), recursive = TRUE)
 
@@ -268,12 +268,10 @@ if(length(list_of_indexes) > 0) {
 }
 
 fastq_folder <- dirname(list.files(here(run_folder, latest_demux), pattern = "R[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)[1])
-# if(Sys.info()['sysname'] == "Windows") {
-#   #if its a windows system running this script, change slashes to back slashes
-#   #also a total of 8 back slashes is needed in character vector if upload from shared drive
-#   fastq_folder <- gsub("/", "\\\\", fastq_folder)
-#   fastq_folder <- gsub("^", "\\\\\\\\", fastq_folder)
-# }
+
+```
+
+```{r upload data to basespace and run the app windows, message = NA, eval = run_dragen_app & windows_OS}
 
 ### 1 - create the basespace project
 bs_cli_create_fp <- file.path(dirname(here()), "aux_files", "bs_cli_commands", "bs_cli_1_create_project.sh")
@@ -307,22 +305,6 @@ write(paste0(c("app_session_id", app_session_id), collapse = ","), dragen_metada
 ```
 
 ```{r upload data to basespace and run the app macOS, message = NA, eval = run_dragen_app & !windows_OS}
-
-dir.create(here("data", "processed_bs"), recursive = TRUE)
-
-list_of_indexes <- list.files(here(run_folder, latest_demux), pattern = "*I[12]_001.fastq.gz", recursive = TRUE, full.names = TRUE)
-
-#if there are index files in the run folder, move them somewhere else
-if(length(list_of_indexes) > 0) {
-  
-  #make index folder by replace the slashes
-  dir.create(file.path(dirname(dirname(list_of_indexes[1])), "indices"), recursive = TRUE)
-  
-  for(index in list_of_indexes) {
-    file.rename(index, file.path(dirname(dirname(list_of_indexes[1])), "indices", basename(index)))
-  }
-
-}
 
 ### 1 - create the basespace project
 project_id <- cli_submit("bs", "projects",
