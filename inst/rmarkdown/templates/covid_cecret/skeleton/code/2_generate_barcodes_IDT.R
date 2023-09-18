@@ -20,7 +20,15 @@ prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 instrument_select <- 1 #select 1 for MiSeq or 2 for NextSeq
 instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
 
-read_length <- "76"
+read_length <- ""
+
+if(read_length == "") {
+  stop(simpleError(paste0('Please indicate the read length settings for the ', instrument_type, ' run in the manual input section\n',
+                          'The current options are:\n',
+                          '"76" for the MiSeq Reagent Kit V3 or\n',
+                          '"151" for the MiSeq Reagent Micro Kit V2')))
+}
+
 index_length <- "10"
 
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
@@ -604,7 +612,7 @@ run_folder <- sequencing_folder_fp %>%
   list.files(full.names = T) %>%
   data.frame(filenames = .) %>%
   filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
-  filter(grepl("[0-9]*_[M|N][0-9]*_[0-9]*_[0-9]*-[A-Z]*$", filenames)) %>%
+  filter(grepl("[0-9]*_[M|N][0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$", filenames)) %>%
   filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
   pull()
 
@@ -639,10 +647,15 @@ nf_demux_samplesheet %>%
 
 md5_fp <- file.path(sequencing_folder_fp, paste0(sequencing_run, ".md5"))
 
+message("Making md5 file")
+
 paste0(sequencing_run, ".tar.gz") %>%
   paste0(tools::md5sum(file.path(sequencing_folder_fp, .)), "  ", .) %>%
   write(file = md5_fp)
 
+system2("aws", c("sso login"))
+
+message("Uploading to AWS S3")
 s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samplesheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 s3_cp_md5 <- system2("aws", c("s3 cp", shQuote(md5_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)

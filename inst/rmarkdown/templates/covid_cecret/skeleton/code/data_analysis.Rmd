@@ -61,6 +61,8 @@ s %>%
 
 ```
 
+\newpage
+
 <!-- QC section -->
 
 # FASTQ generation, demultiplexing, and quality control
