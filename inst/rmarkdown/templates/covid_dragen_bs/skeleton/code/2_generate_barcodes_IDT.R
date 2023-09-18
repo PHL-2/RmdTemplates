@@ -21,6 +21,7 @@ instrument_select <- 1 #select 1 for MiSeq or 2 for NextSeq
 instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
 
 read_length <- "76"
+#this Rmd template only works for runs with 76 bp in length
 
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
 
