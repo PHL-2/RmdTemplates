@@ -1,15 +1,12 @@
 library(here)
 library(dplyr)
+library(tidyr)
 library(readxl)
 library(readr)
 library(stringr)
 
-#This Rscript is currently written to generating the SampleSheet for the Local Run Manager Module on the MiSeq
-#https://support.illumina.com/downloads/local-run-manager-generate-fastq-module-v3.html
-#BCL Convert may require a different SampleSheet format
+#This Rscript currently generates the SampleSheet for demultiplexing a run using the BCL Convert program
 #https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/bcl_convert/bcl-convert-v3-7-5-software-guide-1000000163594-00.pdf
-
-munging_fp <- here("metadata", "munge")
 
 ##############
 # Manual input
@@ -17,31 +14,18 @@ munging_fp <- here("metadata", "munge")
 
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
-instrument_select <- 1 #select 1 for MiSeq or 2 for NextSeq
-instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
-
-read_length <- ""
-
-if(read_length == "") {
-  stop(simpleError(paste0('Please indicate the read length settings for the ', instrument_type, ' run in the manual input section\n',
-                          'The current options are:\n',
-                          '"76" for the MiSeq Reagent Kit V3 or\n',
-                          '"151" for the MiSeq Reagent Micro Kit V2')))
-}
+#sequencing date of the run folder should match the RStudio project date
+sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
 index_length <- "10"
 
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
 
 #file location of the nextera udi indices
-#don't have to change this if the file sits in a the metadata_references directory in the parent directory of the project
 barcode_fp <- file.path(dirname(here()), "aux_files", "metadata_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
-#sequencing date will get grabbed from the R project name
-sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
-
-if(sequencing_date == "" | prj_description == "" | any(is.na(instrument_type))) {
-  stop (simpleError(paste0("Please fill in the sequencing date, short project description, or correct instrument in ", munging_fp, "/generate_barcodes_IDT.R")))
+if(sequencing_date == "" | prj_description == "") {
+  stop (simpleError(paste0("Please fill in the correct sequencing date or short project description in ", here("code"), "/2_generate_barcodes_IDT.R")))
 } else if (is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
   stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
 }
@@ -105,6 +89,40 @@ if(sequencing_date == "2022-08-01") {
                                     "ATCTCTACCA", "CCGTGGCCTT", "TACGCACGTA", "CTGGTACACG"))
 }
 
+#######################
+# Load run sample sheet
+#######################
+
+#get the newly added run folder
+run_folder <- sequencing_folder_fp %>%
+  list.files(full.names = T) %>%
+  data.frame(filenames = .) %>%
+  filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
+  filter(grepl("[0-9]*_[M|N][0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$", filenames)) %>%
+  filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
+  pull()
+
+run_samplesheet_fp <- file.path(run_folder, "SampleSheet.csv")
+run_sample_sheet <- load_sample_sheet(run_samplesheet_fp)
+
+read_length <- unique(unlist(run_sample_sheet$Reads))
+
+samp_sh_header <- data.frame(X1 = unlist(run_sample_sheet$Header)) %>%
+  mutate(col_names = gsub(",.*", "", X1)) %>%
+  mutate(col_names = gsub(" ", "_", col_names)) %>%
+  mutate(X1 = gsub(".*,", "", X1)) %>%
+  pivot_wider(names_from = "col_names", values_from = "X1")
+
+instrument_type <- samp_sh_header$instrument_type
+
+if(!instrument_type %in% c("MiSeq", "NextSeq")) {
+  stop(simpleError("Instrument type is not the MiSeq or NextSeq. Check the sample sheet from the sequencing run folder"))
+}
+
+if(!read_length %in% c(76, 151)) {
+  stop(simpleError("The read length is not 76 or 151 bp. Check the sample sheet from the sequencing run folder"))
+}
+
 #####################
 # Load metadata sheet
 #####################
@@ -144,20 +162,23 @@ PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xl
 
 PHL_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "PHL")) %>%
-  bind_rows()
+  bind_rows() %>%
+  rename(sample_name = "SPECIMEN_NUMBER") %>%
+  #filter rows where sample_id is NA
+  filter(!is.na(sample_name)) %>%
+  #make these columns character vectors
+  mutate(sample_name = as.character(sample_name))
 
 #if PHL_data exists, do the following
-if(ncol(PHL_data) > 0) {
+if(ncol(PHL_data) > 2) {
 
   PHL_data <- PHL_data %>%
     mutate(SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y"), BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y")) %>%
-    rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
+    rename(sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
     select(any_of(phi_info), sample_collection_date, DOB, age, gender, RLU) %>%
     mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
-    #filter rows where sample_id is NA
-    filter(!is.na(sample_name)) %>%
     #make these columns character vectors
-    mutate(across(c(sample_name, case_id, breakthrough_case, priority, gender), as.character))
+    mutate(across(c(case_id, breakthrough_case, priority, gender), as.character))
 }
 
 #if PHL_data is not empty, do the following
@@ -184,18 +205,20 @@ if(nrow(PHL_data) > 0) {
 
 TU_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "Temple")) %>%
-  bind_rows()
+  bind_rows() %>%
+  rename(sample_name = "SPECIMEN_NUMBER", CT = "ct value") %>%
+  #filter rows where sample_id is NA
+  filter(!is.na(sample_name)) %>%
+  mutate(sample_name = as.character(sample_name))
 
-if(ncol(TU_data) > 0) {
+if(ncol(TU_data) > 2) {
 
   TU_data <- TU_data %>%
     mutate(Collection_date = as.Date(Collection_date, format = "%m/%d/%Y")) %>%
-    rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value", gender = "GENDER") %>%
+    rename(sample_collection_date = "Collection_date", gender = "GENDER") %>%
     select(any_of(phi_info), sample_collection_date, CT, age, gender) %>%
-    #filter rows where sample_id is NA
-    filter(!is.na(sample_name)) %>%
     #make these columns character vectors
-    mutate(across(c(sample_name, case_id, breakthrough_case, priority, gender), as.character))
+    mutate(across(c(case_id, breakthrough_case, priority, gender), as.character))
 }
 
 if(nrow(TU_data) > 0) {
@@ -606,15 +629,6 @@ metadata_sheet %>%
 ############################################
 # Tar the sequencing folder and upload to S3
 ############################################
-
-#get the newly added run folder
-run_folder <- sequencing_folder_fp %>%
-  list.files(full.names = T) %>%
-  data.frame(filenames = .) %>%
-  filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
-  filter(grepl("[0-9]*_[M|N][0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$", filenames)) %>%
-  filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
-  pull()
 
 folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
   as.Date(format = "%Y%m%d")
