@@ -534,7 +534,7 @@ empty_plate %>%
 
 ### Species Heatmap
 
-```{r k2 heatmap, fig.width=11, fig.height=9}
+```{r k2 heatmap, fig.width=20, fig.height=15}
 
 #get the top 3 most abundant taxa in each sample
 top_taxon <- k2 %>%
@@ -589,17 +589,15 @@ k2 %>%
 
 ```
 
-\elandscape
-
 ### Phyla Heatmap
 
-```{r k2 heatmap phyla, fig.width=9, fig.height=11}
+```{r k2 heatmap phyla, fig.width=20, fig.height=15}
 
 k2 %>%
   mutate(k2_taxon = gsub("Severe acute respiratory syndrome", "SARS", k2_taxon)) %>%
   mutate(k2_phyla = ifelse(grepl("SARS", k2_taxon), k2_taxon,
                            gsub(" [cofgs]__.*", "", k2_taxon))) %>%
-  mutate(k2_phyla = fct_lump(k2_phyla, n = 20, w = k2_props, other_level = "Other phyla")) %>%
+  mutate(k2_phyla = fct_lump(k2_phyla, n = 10, w = k2_props, other_level = "Other phyla")) %>%
   group_by(sample_id, k2_phyla) %>%
   summarise(k2_props = sum(k2_props)) %>%
   ungroup() %>%
@@ -629,11 +627,13 @@ k2 %>%
           axis.title.x.bottom = element_blank(),
           plot.margin= margin(0, 0, 0, 0, "pt")
           ) +
-    labs(x = "", y = "", fill = "Relative\nProportion", title = "Top 20 most abundant phyla across all samples")
+    labs(x = "", y = "", fill = "Relative\nProportion", title = "Top 10 most abundant phyla across all samples")
     } /
   sample_type_legend
 
 ```
+
+\elandscape
 
 ### Kmer results (number of unique SARS-CoV-2 fragments detected)
 
@@ -774,13 +774,13 @@ snp_dist_reorder %>%
 ```{r reads mapped}
 
 read_type <- s %>%
-  select(sample_id, sample_type, read_counts, samtools_raw_total_sequences, samtools_reads_mapped, samtools_reads_unmapped) %>%
-  mutate(filtered = read_counts - samtools_raw_total_sequences) %>%
+  select(sample_id, sample_type, read_counts, samtools_reads_mapped) %>%
+  mutate(total_read_counts = read_counts - samtools_reads_mapped) %>%
   rename(mapped = "samtools_reads_mapped",
-         unmapped = "samtools_reads_unmapped") %>%
-  select(sample_id, sample_type, read_counts, filtered, mapped, unmapped) %>%
-  pivot_longer(cols = c("filtered", "unmapped", "mapped"), names_to = "read_type", values_to = "counts") %>%
-  mutate(read_type = factor(read_type, levels = c("filtered", "unmapped", "mapped"))) %>%
+         `total read counts` = "total_read_counts") %>%
+  select(sample_id, sample_type, read_counts, `total read counts`, mapped) %>%
+  pivot_longer(cols = c("total read counts", "mapped"), names_to = "read_type", values_to = "counts") %>%
+  mutate(read_type = factor(read_type, levels = c("total read counts", "mapped"))) %>%
   order_on_other_col(sample_id, read_counts)
   
 read_type_legend <- read_type %>%
@@ -814,7 +814,7 @@ read_type %>%
   {
   ggplot(., aes(x = sample_id, y = counts, fill = read_type)) +
     geom_col() +
-    scale_fill_manual(values = brewer.pal(11, "Spectral")[c(6, 1, 10)]) +
+    scale_fill_manual(values = brewer.pal(11, "Spectral")[c(6, 10)]) +
     scale_y_continuous(expand=c(0,0)) +
     theme_classic() +
     theme(panel.grid = element_blank(),
@@ -822,7 +822,7 @@ read_type %>%
           axis.ticks.x.bottom = element_blank(),
           axis.text.x.bottom = element_blank()
           ) +
-    labs(x = "", y = "Total read counts", fill = "Variants")
+    labs(x = "", y = "Number of reads", fill = "")
   } /
   read_type_legend
 
