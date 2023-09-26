@@ -199,12 +199,19 @@ filtered_PHL_data <- PHL_data %>%
 potential_ct_col_names <- c("ct value", "CT value", "CT values", "CTvalue", "CTvalues",
                             "ct values", "ctvalue", "ctvalues")
 
-TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
-  #filter rows where sample_id is NA
-  filter(!is.na(SPECIMEN_NUMBER)) %>%
-  #mutate(Collection_date = format(Collection_date, "%m/%d/%Y")) %>%
-  rename_with(~ "ct value", any_of(potential_ct_col_names)) %>%
-  as.data.frame()
+TU_data <- read_excel_safely(PHL_fp, sheet = "Temple")
+
+if(is.null(TU_data)) {
+  TU_data <- data.frame(SPECIMEN_NUMBER = "") %>%
+    mutate(`ct value` = "")
+} else {
+  TU_data <- TU_data %>%
+    #filter rows where sample_id is NA
+    filter(!is.na(SPECIMEN_NUMBER)) %>%
+    #mutate(Collection_date = format(Collection_date, "%m/%d/%Y")) %>%
+    rename_with(~ "ct value", any_of(potential_ct_col_names)) %>%
+    as.data.frame()
+}
 
 excel_data <- list(PHL = filtered_PHL_data, Temple = TU_data)
 
