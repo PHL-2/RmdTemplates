@@ -278,7 +278,6 @@ samtools_stats_fps <- list.files(here("data", "processed_cecret", "samtools_stat
 
 #line positions to skip to
 summary_indic <- "# Summary Numbers."
-read_length_indic <- "# Read lengths\\."
 
 samtools_stat <- lapply(samtools_stats_fps, function(f) {
   
@@ -306,6 +305,8 @@ samtools_stat <- lapply(samtools_stats_fps, function(f) {
                         "^samtools_reads_properly_paired$"), collapse = "|"), samtools_stat)) %>%
   select(sample_id, samtools_stat, samtools_stat_val) %>%
   pivot_wider(names_from = "samtools_stat", values_from = "samtools_stat_val")
+
+read_length_indic <- "# Read lengths\\."
 
 mapped_read_lengths <- lapply(samtools_stats_fps, function(f) {
   
@@ -795,6 +796,12 @@ n_samples_report <- s %>%
   filter(pangolin_qc_status != "fail") %>%
   nrow()
 
+#these are samples that failed in the pipeline for whatever reason. Can rerun pipeline to generate results for these samples
+rerun_samples <- s %>%
+  filter(is.na(pangolin_qc_status)) %>%
+  select(sample_id) %>%
+  pull()
+
 ```
 
 ```{r check all files generated}
@@ -879,12 +886,6 @@ check_all %<>%
 if (!all(check_all$count_all_samples == total_file_sets_2_count)) {
   stop (simpleError("Some files are missing samples to upload!"))
 }
-
-#these are samples that failed in the pipeline for whatever reason. Can rerun pipeline to generate results for these samples
-rerun_samples <- s %>%
-  filter(is.na(pangolin_qc_status)) %>%
-  select(sample_id) %>%
-  pull()
 
 ```
 
@@ -976,9 +977,15 @@ for(who_label in c("Reference", sort(unique(s$nextclade_clade_who)[unique(s$next
     
     #if a pangolin_lineage ends with a number, get the sub-lineages with that number
     if(grepl("[0-9]$", combined_variant)) {
-      sublineage <- variant_list[grepl(paste0("^", combined_variant), variant_list)]
-    }
-    else{
+      
+      #make the sublineage regex
+      combined_variant_gsub <- gsub("\\.", "\\\\.", combined_variant)
+      exact_lineage_regex <- paste0("^", combined_variant_gsub, "$")
+      sublineage_regex <- paste0("^", combined_variant_gsub, "\\.")
+      final_sublineage_regex <- paste0(exact_lineage_regex, "|", sublineage_regex)
+      
+      sublineage <- variant_list[grepl(final_sublineage_regex, variant_list)]
+    } else{
       sublineage <- combined_variant
     }
     

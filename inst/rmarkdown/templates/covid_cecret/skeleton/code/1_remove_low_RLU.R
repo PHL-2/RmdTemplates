@@ -102,14 +102,20 @@ MEO_samples <- read_csv(RLU_fp) %>%
 PHL_all_fp <- list.files(here("metadata", "extra_metadata"), pattern = "PHLspecimens.*.xlsx", full.names = TRUE)
 PHL_fp <- PHL_all_fp[!grepl("_filtered.xlsx$", PHL_all_fp)]
 
-PHL_data <- read_excel(PHL_fp, skip = 1, sheet = "PHL") %>%
-  #filter rows where sample id is NA
-  filter(!is.na(SPECIMEN_NUMBER)) %>%
-  merge(RLU_data, by = c("SPECIMEN_NUMBER", "BIRTH_DATE", "SPECIMEN_DATE"), all.x = TRUE) %>%
-  select(SPECIMEN_DATE, FacCode, agecoll, case_id, SPECIMEN_NUMBER,
-         FIRST_NAME, LAST_NAME, BIRTH_DATE, age, zip_char, GENDER,
-         breakthrough_case, death, hospitalized, outbreak, priority, RLU) %>%
-  mutate(SPECIMEN_DATE = format(SPECIMEN_DATE, "%m/%d/%Y"), BIRTH_DATE = format(BIRTH_DATE, "%m/%d/%Y"))
+PHL_data <- read_excel_safely(PHL_fp, sheet = "PHL", skip_row = 1)
+
+if(is.null(PHL_data)) {
+  PHL_data <- data.frame(SPECIMEN_NUMBER = "", RLU = "")
+} else {
+  PHL_data <- PHL_data %>%
+    #filter rows where sample id is NA
+    filter(!is.na(SPECIMEN_NUMBER)) %>%
+    merge(RLU_data, by = c("SPECIMEN_NUMBER", "BIRTH_DATE", "SPECIMEN_DATE"), all.x = TRUE) %>%
+    select(SPECIMEN_DATE, FacCode, agecoll, case_id, SPECIMEN_NUMBER,
+           FIRST_NAME, LAST_NAME, BIRTH_DATE, age, zip_char, GENDER,
+           breakthrough_case, death, hospitalized, outbreak, priority, RLU) %>%
+    mutate(SPECIMEN_DATE = format(SPECIMEN_DATE, "%m/%d/%Y"), BIRTH_DATE = format(BIRTH_DATE, "%m/%d/%Y"))
+}
 
 if(any(is.na(PHL_data[PHL_data$SPECIMEN_NUMBER %in% RLU_data$SPECIMEN_NUMBER, "RLU"]))) {
 
@@ -173,6 +179,7 @@ if(length(epi_sample_not_found) > 0) {
 }
 
 samples_removed <- PHL_data %>%
+  filter(SPECIMEN_NUMBER != "") %>%
   filter(RLU < 1000 | SPECIMEN_NUMBER %in% c(MEO_samples)) %>%
   select(SPECIMEN_NUMBER) %>%
   pull()
@@ -192,12 +199,19 @@ filtered_PHL_data <- PHL_data %>%
 potential_ct_col_names <- c("ct value", "CT value", "CT values", "CTvalue", "CTvalues",
                             "ct values", "ctvalue", "ctvalues")
 
-TU_data <- read_excel(PHL_fp, sheet = "Temple") %>%
-  #filter rows where sample_id is NA
-  filter(!is.na(SPECIMEN_NUMBER)) %>%
-  #mutate(Collection_date = format(Collection_date, "%m/%d/%Y")) %>%
-  rename_with(~ "ct value", any_of(potential_ct_col_names)) %>%
-  as.data.frame()
+TU_data <- read_excel_safely(PHL_fp, sheet = "Temple")
+
+if(is.null(TU_data)) {
+  TU_data <- data.frame(SPECIMEN_NUMBER = "") %>%
+    mutate(`ct value` = "")
+} else {
+  TU_data <- TU_data %>%
+    #filter rows where sample_id is NA
+    filter(!is.na(SPECIMEN_NUMBER)) %>%
+    #mutate(Collection_date = format(Collection_date, "%m/%d/%Y")) %>%
+    rename_with(~ "ct value", any_of(potential_ct_col_names)) %>%
+    as.data.frame()
+}
 
 excel_data <- list(PHL = filtered_PHL_data, Temple = TU_data)
 
