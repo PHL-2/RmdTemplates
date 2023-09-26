@@ -261,7 +261,7 @@ empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) re
 
 PHL_samples <- filtered_PHL_data %>%
   rename(sample_name = "SPECIMEN_NUMBER") %>%
-  arrange(-RLU)
+  arrange(desc(RLU))
 
 TU_samples <- TU_data %>%
   rename(sample_name = "SPECIMEN_NUMBER") %>%
@@ -346,7 +346,7 @@ plate_view <- combined_list_first_half %>%
   rbind(data.frame(sample_name = c("BLANK", "PC"))) %>%
   mutate(sample_order = row_number()) %>%
   merge(empty_plate, by = "sample_order", all = TRUE) %>%
-  mutate(sample_name = case_when(sample_order == 96 ~ "NC_corner",
+  mutate(sample_name = case_when(sample_order == 96 ~ "NC-corner",
                                  is.na(sample_name) ~ "",
                                  TRUE ~ sample_name))
 
