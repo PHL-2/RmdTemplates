@@ -123,15 +123,25 @@ PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xl
 PHL_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "PHL")) %>%
   bind_rows() %>%
-  mutate(SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y"), BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y")) %>%
-  rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
-  select(any_of(phi_info), sample_collection_date, DOB, age, gender, RLU) %>%
-  mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
+  rename(sample_name = "SPECIMEN_NUMBER") %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #make these columns character vectors
-  mutate(across(c(sample_name, case_id, breakthrough_case, priority, gender), as.character))
+  mutate(sample_name = as.character(sample_name))
 
+#if PHL_data exists, do the following
+if(ncol(PHL_data) > 2) {
+
+  PHL_data <- PHL_data %>%
+    mutate(SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y"), BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y")) %>%
+    rename(sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
+    select(any_of(phi_info), sample_collection_date, DOB, age, gender, RLU) %>%
+    mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
+    #make these columns character vectors
+    mutate(across(c(case_id, breakthrough_case, priority, gender), as.character))
+}
+
+#if PHL_data is not empty, do the following
 if(nrow(PHL_data) > 0) {
 
   PHL_data <- PHL_data %>%
@@ -156,13 +166,20 @@ if(nrow(PHL_data) > 0) {
 TU_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "Temple")) %>%
   bind_rows() %>%
-  mutate(Collection_date = as.Date(Collection_date, format = "%m/%d/%Y")) %>%
-  rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value", gender = "GENDER") %>%
-  select(any_of(phi_info), sample_collection_date, CT, age, gender) %>%
+  rename(sample_name = "SPECIMEN_NUMBER", CT = "ct value") %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
-  #make these columns character vectors
-  mutate(across(c(sample_name, case_id, breakthrough_case, priority, gender), as.character))
+  mutate(sample_name = as.character(sample_name))
+
+if(ncol(TU_data) > 2) {
+
+  TU_data <- TU_data %>%
+    mutate(Collection_date = as.Date(Collection_date, format = "%m/%d/%Y")) %>%
+    rename(sample_collection_date = "Collection_date", gender = "GENDER") %>%
+    select(any_of(phi_info), sample_collection_date, CT, age, gender) %>%
+    #make these columns character vectors
+    mutate(across(c(case_id, breakthrough_case, priority, gender), as.character))
+}
 
 if(nrow(TU_data) > 0) {
 
