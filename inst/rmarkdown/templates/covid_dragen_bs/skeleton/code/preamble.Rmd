@@ -769,9 +769,15 @@ for(who_label in c("Reference", sort(unique(s$clade_who)[unique(s$clade_who) != 
     
     #if a lineage ends with a number, get the sub-lineages with that number
     if(grepl("[0-9]$", combined_variant)) {
-      sublineage <- variant_list[grepl(paste0("^", combined_variant), variant_list)]
-    }
-    else{
+      
+      #make the sublineage regex
+      combined_variant <- gsub("\\.", "\\\\.", combined_variant)
+      exact_lineage_regex <- paste0("^", combined_variant, "$")
+      sublineage_regex <- paste0("^", combined_variant, "\\.")
+      final_sublineage_regex <- paste0(exact_lineage_regex, "|", sublineage_regex)
+      
+      sublineage <- variant_list[grepl(final_sublineage_regex, variant_list)]
+    } else{
       sublineage <- combined_variant
     }
     
@@ -1028,6 +1034,14 @@ n_samples_report <- s %>%
   filter(pango_qc_status != "fail") %>%
   nrow()
 
+#these are samples that failed in the pipeline for whatever reason. Can rerun pipeline to generate results for these samples
+rerun_samples <- s %>%
+  filter(is.na(`SARS-CoV-2 Fraction kmers detected`)) %>%
+  #use the below filter if using DRAGEN COVID Lineage App version 4+
+  #filter(is.na(median_coverage)) %>%
+  select(sample_id) %>%
+  pull()
+
 ```
 
 ```{r check all files generated}
@@ -1112,13 +1126,5 @@ check_all %<>%
 if (!all(check_all$count_all_samples == total_file_sets_2_count)) {
   stop (simpleError("Some files are missing samples to upload!"))
 }
-
-#these are samples that failed in the pipeline for whatever reason. Can rerun pipeline to generate results for these samples
-rerun_samples <- s %>%
-  filter(is.na(`SARS-CoV-2 Fraction kmers detected`)) %>%
-  #use the below filter if using DRAGEN COVID Lineage App version 4+
-  #filter(is.na(median_coverage)) %>%
-  select(sample_id) %>%
-  pull()
 
 ```
