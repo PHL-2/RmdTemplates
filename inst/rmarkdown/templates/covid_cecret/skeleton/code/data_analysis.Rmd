@@ -44,7 +44,7 @@ The results section contains lineage information using \newline
 pangolin (https://cov-lineages.org/resources/pangolin.html), \newline
 nextclade (https://clades.nextstrain.org/), \newline
 and freyja (https://github.com/andersen-lab/Freyja). \newline
-Tiled amplification was performed using the `r artic_primer_scheme` primer scheme 
+Tiled amplification was performed using the ARTIC `r artic_primer_scheme` primer scheme 
 
 # Number of samples sequenced
 
@@ -555,7 +555,7 @@ k2 %>%
   group_by(sample_id, k2_taxon) %>%
   summarise(k2_props = sum(k2_props)) %>%
   ungroup() %>%
-  complete(sample_id, k2_taxon, fill = list(k2_props = 0)) %>%
+  complete(sample_id, k2_taxon, fill = list(k2_props = NA)) %>%
   mutate(k2_taxon = sub(" ", "\n", k2_taxon),
          k2_taxon = sub("Severe acute respiratory syndrome", "SARS", k2_taxon)) %>%
   group_by(k2_taxon) %>%
@@ -601,7 +601,7 @@ k2 %>%
   group_by(sample_id, k2_phyla) %>%
   summarise(k2_props = sum(k2_props)) %>%
   ungroup() %>%
-  complete(sample_id, k2_phyla, fill = list(k2_props = 0)) %>%
+  complete(sample_id, k2_phyla, fill = list(k2_props = NA)) %>%
   mutate(k2_phyla = sub(" ", "\n", k2_phyla)) %>%
   group_by(k2_phyla) %>%
   mutate(mean_props = mean(k2_props)) %>%
@@ -892,7 +892,8 @@ s %>%
 s %>%
   select(sample_type, starts_with("amp_tile")) %>%
   pivot_longer(cols = starts_with("amp_tile"), names_to = "amp_pos", values_to = "depth") %>%
-  mutate(amp_pos = gsub(".*_", "", amp_pos),
+  mutate(amp_pos = gsub("_artic_.*", "", amp_pos),
+         amp_pos = gsub(".*_", "", amp_pos),
          amp_pos = factor(amp_pos, levels = unique(amp_pos))) %>%
   {
   ggplot(., aes(x = amp_pos, y = depth, fill = sample_type)) +
@@ -911,7 +912,7 @@ s %>%
       legend.position = "none",
       plot.margin= margin(0, 0, 0, 0, "pt")
       ) +
-    labs(y="Depth", x="Ampicons")
+    labs(y="Depth", x="Amplicons")
   }
 
 ```
@@ -1061,24 +1062,95 @@ s_toPlot %>%
 
 ```
 
-## Freyja
+## Freyja grouped
 
-```{r freyja results, fig.height=11, fig.width=8}
+Only top 3 lineage in each sample is shown. The rest are grouped into "Other lineages"
 
-s %>%
+```{r freyja results grouped, fig.height=11, fig.width=8}
+
+freyja_grouping <- s %>%
+  as.data.frame() %>%
   select(sample_id, sample_type, freyja_lineages, freyja_abundances) %>%
   group_by(sample_id) %>%
   mutate(lineages = list(freyja_lineages),
          relative_abundances = list(freyja_abundances)) %>%
   separate_rows(c(lineages, relative_abundances), sep=" ") %>%
   mutate(relative_abundances = as.numeric(relative_abundances)) %>%
-  ungroup() %>%
   mutate(main_lineage = gsub("\\..*", "", lineages)) %>%
+  ungroup() %>%
+  select(-c("freyja_lineages", "freyja_abundances")) %>%
+  arrange(sample_id, relative_abundances, str_rank(lineages, numeric = TRUE)) %>%
+  group_by(sample_id, main_lineage, relative_abundances) %>%
+  #add an extra period to the end to help with matching lineages correctly
+  mutate(lineages = gsub("$", ".", lineages)) %>%
+  mutate(least_common_substring = attr(adist(lineages, counts = TRUE), "trafos")[, 1]) %>%
+  mutate(end_match = do.call(rbind, stringi::stri_locate_all_regex(least_common_substring, "^M+"))[, 2]) %>%
+  mutate(has_lowest_str_length = str_length(lineages) == min(str_length(lineages))) %>%
+  mutate(substring_end = ifelse(sum(has_lowest_str_length) == 1 &
+                                grepl("^M+$", least_common_substring), end_match, NA)) %>%
+  mutate(substring_end = ifelse(all(is.na(substring_end)), min(end_match), substring_end)) %>%
+  fill(substring_end, .direction = "down") %>%
+  ungroup() %>%
+  mutate(combined_lineage = stringi::stri_sub(lineages, 1, substring_end))
+
+other_lineage_fct_lvl <- c("Other lineages", "No freyja results")
+
+freyja_grouping %>%
+  group_by(sample_id, sample_type, combined_lineage) %>%
+  summarize(relative_abundances = sum(relative_abundances)) %>%
+  mutate(combined_lineage = ifelse(is.na(combined_lineage), "No freyja results", combined_lineage)) %>%
+  mutate(combined_lineage = gsub("\\.$", "", combined_lineage)) %>%
+  mutate(relative_abundances = ifelse(combined_lineage == "No freyja results", 1, relative_abundances)) %>%
+  mutate(combined_lineage = fct_lump_n(combined_lineage, n = 3, w = relative_abundances, other_level = "Other lineages")) %>%
+  ungroup() %>%
+  mutate(combined_lineage = factor(combined_lineage,
+                                   levels = c(levels(combined_lineage)[!levels(combined_lineage) %in% other_lineage_fct_lvl],
+                                              other_lineage_fct_lvl))) %>%
+  ungroup() %>%
+  group_by(sample_id, sample_type, combined_lineage) %>%
+  summarise(relative_abundances = sum(relative_abundances)) %>%
+  ungroup() %>%
   order_on_other_col(sample_id, sample_type, decreasing = FALSE) %>%
   {
-  ggplot(., aes(x = sample_id, y = relative_abundances, fill = main_lineage)) +
+  ggplot(., aes(x = sample_id, y = relative_abundances, fill = combined_lineage)) +
     geom_col() +
-    scale_fill_manual(values = colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$main_lineage)))) +
+    scale_fill_manual(values = 
+                        c(colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$combined_lineage))-2),
+                          "#808080", "#000000")) +
+    scale_y_continuous(labels = percent, expand=c(0,0)) +
+    theme_classic() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.ticks.x.bottom = element_blank(),
+          axis.text.x.bottom = element_blank()
+          ) +
+    labs(x = "", y = "Relative proportions", fill = "Variants")
+  } /
+  sample_type_legend
+
+```
+
+## Freyja summarized
+
+```{r freyja results summarized, fig.height=11, fig.width=8}
+
+s %>%
+  select(sample_id, sample_type, freyja_summarized) %>%
+  mutate(freyja_summarized = gsub("\\[\\(|\\)\\]", "", freyja_summarized)) %>%
+  group_by(sample_id) %>%
+  mutate(summarized_lineages = list(freyja_summarized)) %>%
+  separate_longer_delim(summarized_lineages, delim = "), (") %>%
+  separate_wider_delim(summarized_lineages,
+                       delim = ", ",
+                       names = c("summarized_lineages", "relative_abundances")) %>%
+  mutate(summarized_lineages = gsub("'", "", summarized_lineages)) %>%
+  mutate(relative_abundances = as.numeric(relative_abundances)) %>%
+  ungroup() %>%
+  order_on_other_col(sample_id, sample_type, decreasing = FALSE) %>%
+  {
+  ggplot(., aes(x = sample_id, y = relative_abundances, fill = summarized_lineages)) +
+    geom_col() +
+    scale_fill_manual(values = colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$summarized_lineages)))) +
     scale_y_continuous(labels = percent, expand=c(0,0)) +
     theme_classic() +
     theme(panel.grid = element_blank(),
@@ -1197,7 +1269,7 @@ empty_plate %>%
 \elandscape
 
 ## Summary of variants
-Percentages of variants only in samples that meet criteria (Pangolin results)
+Percentages of variants only in samples that meet criteria (Nextclade pangolin results)
 
 ```{r percent table}
 
