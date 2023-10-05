@@ -7,9 +7,9 @@ install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra"
 
 ```{r manual input ARTIC primer bed file to use}
 
-primer_select <- 1 # set variable as 1 for V3, 2 for V4, or 3 for V4.1
+primer_select <- 1 # set variable as 1 for V3 or 2 for V5.3.2
 
-artic_primer_scheme <- c("ncov_V3", "ncov_V4", "ncov_V4.1")[primer_select]
+artic_primer_scheme <- c("V3", "V5.3.2")[primer_select]
 
 # minimum acceptable number of reads per sample
 min_reads <- 1000000
@@ -349,39 +349,21 @@ write_csv(mapped_read_lengths, actual_read_lengths_fp, append = TRUE)
 
 ```
 
-```{r get cecret file paths, eval = import_data}
-
-#amplicon depth files (overlapping regions separated by amplicon)
-amplicon_fps <- list.files(here("data", "processed_cecret", "multicov"), pattern = ".multicov.txt", recursive = TRUE, full.names = TRUE)
-
-#overall coverage depth files (overlapping regions included in overall coverage)
-coverage_fps <- list.files(here("data", "processed_cecret", "samtools_depth"), pattern = ".depth.txt", recursive = TRUE, full.names = TRUE)
-
-#number of reads that mapped to reference
-cov_num_fps <- list.files(here("data", "processed_cecret", "samtools_coverage"), pattern = ".cov.txt", recursive = TRUE, full.names = TRUE)
-
-```
-
 ```{r load amplicon results, eval = import_data}
 
-amplicon_depth <- amplicon_fps %>%
-  data_frame(FileName = .) %>%
-  group_by(FileName) %>%
-  do(read_delim(.$FileName, col_names = FALSE)) %>%
-  ungroup() %>%
-  filter(X1 == "MN908947.3") %>%
-  rename(start = "X2", end = "X3", tile = "X5", depth = "X7") %>%
-  select(FileName, start, end, tile, depth) %>%
-  mutate(sample_id = gsub(".*/", "", FileName),
-         sample_id = gsub("\\.multicov.txt", "", sample_id),
-         amp_pos = paste0(start, "-", end),
-         multicov = paste0("amp_tile", tile, "_", amp_pos)) %>%
-  select(sample_id, multicov, depth) %>%
-  pivot_wider(names_from = "multicov", values_from = "depth")
+amplicon_fp <- here("data", "processed_cecret", "aci", "amplicon_depth.csv")
+
+amplicon_depth <- read_csv(amplicon_fp) %>%
+  rename(sample_id = "bam") %>%
+  mutate(sample_id = gsub(".primertrim.sorted.bam", "", sample_id)) %>%
+  rename_with(function(x) paste0("amp_tile_", x, "_artic_", artic_primer_scheme), -sample_id)
 
 ```
 
 ```{r load coverage results, eval = import_data}
+
+#overall coverage depth files (overlapping regions included in overall coverage)
+coverage_fps <- list.files(here("data", "processed_cecret", "samtools_depth"), pattern = ".depth.txt", recursive = TRUE, full.names = TRUE)
 
 slide_window_coverage <- coverage_fps %>%
   data_frame(FileName = .) %>%
@@ -416,6 +398,9 @@ coverage <- slide_window_coverage %>%
 
 ```{r load samtools coverage data, eval = import_data}
 
+#number of reads that mapped to reference
+cov_num_fps <- list.files(here("data", "processed_cecret", "samtools_coverage"), pattern = ".cov.txt", recursive = TRUE, full.names = TRUE)
+
 #the mean coverage from samtools is slightly different than by manually calculation but the 1X coverage is the same
 cov_stats <- cov_num_fps %>%
   data_frame(FileName = .) %>%
@@ -448,7 +433,7 @@ k2_files_fps %>%
   mutate(k2_top_rank = case_when(grepl("^u$|^r$|^d$|^k$|^p$", k2_rank) ~ paste0(k2_rank, "__", k2_name),
                                  TRUE ~ NA)) %>%
   fill(k2_top_rank, .direction = "down") %>%
-  #filter out taxon with at least 2 kmer hits
+  #filter for taxon with at least 2 kmer hits
   filter(k2_kmers > 1) %>%
   mutate(k2_props = k2_kmers/sum(k2_kmers)) %>%
   ungroup() %>%
@@ -762,7 +747,7 @@ seqsender <- s_toPlot %>%
          orig_lab = "sample_collected_by") %>%
   mutate(patient_status = "Unknown",
          instrument = paste0("Illumina ", instrument_type),
-         library = "ARTIC Network Protocol V3",
+         library = paste0("ARTIC Network Protocol ", artic_primer_scheme),
          assembly_method = paste0("iVar v", software_version$ivar),
          library_strategy = "AMPLICON",
          library_source = "VIRAL RNA",
