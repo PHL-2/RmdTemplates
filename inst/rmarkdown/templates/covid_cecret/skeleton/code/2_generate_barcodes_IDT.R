@@ -12,7 +12,7 @@ library(stringr)
 # Manual input
 ##############
 
-tar_n_upload_run <- FALSE
+tar_n_upload_run <- TRUE
 
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
@@ -81,15 +81,6 @@ barcodes <- tryCatch(
     stop (simpleError("The nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv file needs to sit in an [aux_files/metadata_references] directory path above this project directory"))
   }
 )
-
-if(sequencing_date == "2022-08-01") {
-  barcodes <- data.frame(idt_plate_coord = paste0("Z_", LETTERS[1:8], "01"),
-                         I7_Index_ID = "UDP9999", I5_Index_ID = "UDP9999", UDI_Index_ID = "UDP9999",
-                         index = c("CTTCCTAGGA", "GAGGCCTATT", "GTGACACGCA", "CTGACTCTAC",
-                                   "AGATCCATTA", "GTGGACAAGT", "ATTATCCACT", "AGTGTTGCAC"),
-                         index2 = c("CCTAGAGTAT", "CTAGTCCGGA", "GCTTACGGAC", "ACGGCCGTCA",
-                                    "ATCTCTACCA", "CCGTGGCCTT", "TACGCACGTA", "CTGGTACACG"))
-}
 
 #######################
 # Load run sample sheet
@@ -443,6 +434,7 @@ metadata_sheet <- metadata_sheet %>%
                                       sample_type == "Nasal swab" ~ "Clinical",
                                       sample_type == "Wastewater" ~ "Wastewater",
                                       grepl("control$", sample_type) ~ "Environmental",
+                                      grepl("test", sample_type, ignore.case = TRUE) ~ "Test sample",
                                       TRUE ~ NA)) %>%
   mutate(requester = case_when(!(is.na(requester) | requester == "") ~ requester,
                                sample_type == "Wastewater" ~ "Jose Lojo",
