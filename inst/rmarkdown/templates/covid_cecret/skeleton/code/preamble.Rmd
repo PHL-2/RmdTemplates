@@ -93,11 +93,8 @@ cecret_results_fp <- here("data", paste0(sequencing_date, "_cecret_results.csv")
 
 ```{r load metadata}
 
+#define control sample types
 ctrl_fct_lvls <- c("Water control", "Reagent control", "Environmental control", "Mock DNA positive control")
-
-sample_type_lvls <- c("Reference", "Unassigned reads",
-                      ctrl_fct_lvls,
-                      "Nasal swab", "Nasal swab - Poor", "Wastewater", "Wastewater - Poor", NA)
 
 s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
   mutate(isControl = sample_type %in% ctrl_fct_lvls) %>%
@@ -105,6 +102,14 @@ s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
 
 read_length <- unique(s_meta$read_length)
 index_length <- unique(s_meta$index_length)
+
+#define all other sample types
+typical_sample_types <- c("Nasal swab", "Nasal swab - Poor", "Wastewater", "Wastewater - Poor")
+
+unaccounted_sample_types <- unique(s_meta$sample_type)[!unique(s_meta$sample_type) %in% c(ctrl_fct_lvls, typical_sample_types)]
+
+sample_type_lvls <- c("Reference", "Unassigned reads",
+                      ctrl_fct_lvls, typical_sample_types, unaccounted_sample_types, NA)
 
 ```
 
@@ -769,6 +774,10 @@ seqsender <- s_toPlot %>%
 seqsender %>%
   write_tsv(seqsender_meta_fp)
 
+```
+
+```{r reported numbers}
+
 #double checking to see if number of samples match
 n_samples_report <- s %>%
   filter(!grepl("None|Undetermined", sample_id)) %>%
@@ -787,25 +796,7 @@ rerun_samples <- s %>%
   select(sample_id) %>%
   pull()
 
-```
-
-```{r check all files generated}
-
-#check the csv file for the epi's
-if(have_phi) {
-
-  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
-  
-  epi_report <- epi_2_upload_fp %>%
-    read_csv() %>%
-    select(accession_number) %>%
-    merge(select(s_phi, sample_id, sample_name), by.x = "accession_number", by.y = "sample_name", all.x = TRUE) %>%
-    mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
-    mutate(file = "epi") %>%
-    select(file, sample_id)
-
-}
-
+#number of samples to submit
 #check the seqsender file to upload to ncbi
 seqsender_2_upload_fp <- list.files(here("upload", "seqsender"), pattern = ".tsv", recursive = TRUE, full.names = TRUE)
 
@@ -826,6 +817,25 @@ if (!all(all_sample_ids_from_seqsender$all_sample_same)) {
 
 all_sample_ids_from_seqsender %<>% select(file, upload_id) %>%
   rename(sample_id = "upload_id")
+
+```
+
+```{r check all files generated}
+
+#check the csv file for the epi's
+if(have_phi) {
+
+  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
+  
+  epi_report <- epi_2_upload_fp %>%
+    read_csv() %>%
+    select(accession_number) %>%
+    merge(select(s_phi, sample_id, sample_name), by.x = "accession_number", by.y = "sample_name", all.x = TRUE) %>%
+    mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
+    mutate(file = "epi") %>%
+    select(file, sample_id)
+
+}
 
 #check the fastq files to upload; should be 1 set here
 fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
@@ -891,8 +901,8 @@ ann_geom_values[["sample_type_shapes"]] <- setNames(c(4, 8, 24, 13, 25, 23,
 #make the controls and unassigned reads samples bigger in size
 ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 4, 2, 4, 2, 4, rep(2, length(sample_type_lvls)-6)), sample_type_lvls)
 
-#make alpha for nasal swabs to 0.5
-ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, 1, 1, rep(0.2, length(sample_type_lvls)-6)), sample_type_lvls)
+#different alpha values based on sample numbers
+ann_geom_values[["alpha"]] <- setNames(c(1, 1, 0.4, 1, 0.4, 1, rep(0.2, length(sample_type_lvls)-6)), sample_type_lvls)
 
 ann_geom_values[["linetype"]] <- setNames(c("solid", "twodash", "dotted", "dashed"), c("good", "mediocre", "bad", "control"))
 
@@ -974,7 +984,7 @@ for(who_label in c("Reference", sort(unique(s$nextclade_clade_who)[unique(s$next
       sublineage <- combined_variant
     }
     
-    variant_color <- calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)][i]
+    variant_color <- c(calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)], few_pal(palette = "Light")(8))[i]
     variant_gradient <- colorRampPalette(c(variant_color, adjustcolor(variant_color, alpha.f = 0.1)), alpha = TRUE)(length(sublineage))
     names(variant_gradient) <- sublineage
     
@@ -1062,13 +1072,16 @@ annotation_legend <- rbind(SC2_annotation, ddPCR_annotation) %>%
 
 slide_window_coverage %>%
   merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
+  mutate(slide_window_100 = ifelse(slide_window_100 <= 1, 1, slide_window_100)) %>%
   {
-  ggplot(., aes(x = position, y = slide_window_100, color = sample_type, group = sample_id, alpha = sample_type)) +
-    geom_line() +
+  ggplot(., aes(x = position, y = slide_window_100, fill = sample_type, group = sample_id)) +
+    geom_area(aes(alpha = sample_type), position = "identity") +
+    geom_hline(yintercept = 100, linetype = "dashed", alpha = 0.4) +
     facet_wrap(~sample_type, ncol = 1, scales = "free_y") +
-    scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     scale_alpha_manual(values = ann_geom_values$alpha[match(levels(.$sample_type), names(ann_geom_values$alpha))]) + 
     scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
+    scale_y_continuous(trans = "log10") + 
     theme_bw() +
     theme(
       strip.background = element_blank(),
@@ -1093,11 +1106,14 @@ col2show <- s %>%
 for(col_num in col2show) {
   
   filtered_samp_name <- s %>%
-    mutate(nextclade_qc_overallstatus = ifelse(is.na(nextclade_qc_overallstatus), "control", nextclade_qc_overallstatus)) %>%
+    mutate(nextclade_qc_overallstatus = case_when(is.na(nextclade_qc_overallstatus) & !isControl ~ "bad",
+                                                  is.na(nextclade_qc_overallstatus) & isControl ~ "control",
+                                                  TRUE ~ nextclade_qc_overallstatus)) %>%
     mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = names(ann_geom_values$linetype))) %>%
-    mutate(who_label = ifelse(is.na(Nextclade_pango), "control",
-                              paste0(nextclade_clade_who, " - ", gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", Nextclade_pango)))) %>%
-    mutate(who_label = factor(who_label, levels = c(names(ann_geom_values$who_label), "control"))) %>%
+    mutate(who_label = case_when(is.na(Nextclade_pango) & !isControl ~ "no results",
+                                 is.na(Nextclade_pango) & isControl ~ "control",
+                                 TRUE ~ paste0(nextclade_clade_who, " - ", gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", Nextclade_pango)))) %>%
+    mutate(who_label = factor(who_label, levels = c(names(ann_geom_values$who_label), "no results", "control"))) %>%
     filter(sample_id != "Undetermined") %>%
     filter(plate_col == col_num) %>%
     droplevels() %>%
@@ -1107,15 +1123,17 @@ for(col_num in col2show) {
 
   slide_window_coverage %>%
     filter(sample_id %in% filtered_samp_name$sample_id) %>%
+    mutate(slide_window_100 = ifelse(slide_window_100 > 100, 100, slide_window_100)) %>%
     merge(filtered_samp_name, by = "sample_id", all = TRUE) %>%
     droplevels() %>%
     {
-    ggplot(., aes(x = position, y = slide_window_100, group = sample_id, linetype = nextclade_qc_overallstatus, color = who_label)) +
-      geom_line() +
+    ggplot(., aes(x = position, y = slide_window_100, group = sample_id, fill = who_label)) +
+      geom_line(aes(linetype = nextclade_qc_overallstatus), color = "black") +
+      geom_area(position = "identity") +
       facet_wrap(~sample_id, ncol = 1, scales = "free_y", labeller = labeller(sample_id = sample_type_label)) +
       scale_linetype_manual(values = ann_geom_values$linetype[match(levels(.$nextclade_qc_overallstatus), names(ann_geom_values$linetype))]) +
-      scale_color_manual(values = c(ann_geom_values$who_label, setNames("#000000", "control"))[match(levels(.$who_label),
-                                                                                                  c(names(ann_geom_values$who_label), "control"))]) +
+      scale_fill_manual(values = c(ann_geom_values$who_label, setNames(c("#808080", "#000000"), c("no results", "control")))[match(levels(.$who_label),
+                                                                                                  c(names(ann_geom_values$who_label), "no results", "control"))]) +
       scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
       theme_bw() +
       theme(
@@ -1127,9 +1145,9 @@ for(col_num in col2show) {
         ) +
       labs(x=paste0("Column ", col_num, " samples"),
            y="Sliding window average (X)",
-           color = "WHO",
+           fill = "WHO",
            linetype = "Nextclade Quality") +
-      guides(linetype = guide_legend(order = 1), color = guide_legend(order = 2)) +
+      guides(linetype = guide_legend(order = 1), fill = guide_legend(order = 2)) +
     annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
     } %>%
     ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sample_sliding_coverage_100_bp_col", col_num, ".png")), plot = ., width = 11, height = 8)
