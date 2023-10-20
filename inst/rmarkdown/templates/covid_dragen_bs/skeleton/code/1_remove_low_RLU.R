@@ -279,14 +279,18 @@ TU_samples <- TU_data %>%
   rename(sample_name = "SPECIMEN_NUMBER") %>%
   arrange(`ct value`)
 
-shared_environ_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing Action plan updated", "Enviromental_samples"),
-                                    pattern = "^[0-9]*-[0-9]*-[0-9]*", full.names = TRUE))
+#if the shared drive can be accessed, copy the environmental swabs over
+if(file.exists(shared_drive_fp)) {
 
-environmental_file_date <- as.Date(gsub("_.*", "", basename(shared_environ_fp)))
+  shared_environ_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing Action plan updated", "Enviromental_samples"),
+                                      pattern = "^[0-9]*-[0-9]*-[0-9]*", full.names = TRUE))
 
-#if the date of the latest environmental samples is within 5 days of sequencing request, use this file
-if((Sys.Date() - environmental_file_date) < 5) {
-  file.copy(shared_environ_fp, here("metadata", "extra_metadata"))
+  environmental_file_date <- as.Date(gsub("_.*", "", basename(shared_environ_fp)))
+
+  #if the date of the latest environmental samples is within 5 days of sequencing request, use this file
+  if((Sys.Date() - environmental_file_date) < 5) {
+    file.copy(shared_environ_fp, here("metadata", "extra_metadata"))
+  }
 }
 
 environmental_samples_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_Environmental_Swab.xlsx$", full.names = TRUE)
@@ -302,6 +306,8 @@ if(length(environmental_samples_fp) > 0) {
     select(sample_name, environmental_site)
 } else {
   enviro_samples <- data.frame(sample_name = paste0("ENV", 1:11), environmental_site = paste0("ENV", 1:11))
+  message("\nEnvironmental swab file was not found")
+  Sys.sleep(5)
 }
 
 older_samples_fp <- list.files(here("metadata", "extra_metadata", "prev_run"), pattern = "_filtered.xlsx", full.names = TRUE)
@@ -371,9 +377,18 @@ write_csv(plate_view, file = here("metadata", "for_scientists", paste0(format(Sy
 plate_map_local_fp <- here("metadata", "for_scientists", paste0(format(Sys.time(), "%Y%m%d"), "_combined_samples_plate_map.csv"))
 write_csv(real_plate_view, file = plate_map_local_fp)
 
-plate_map_cp_fp <- file.path(shared_drive_fp, "Sequencing Action plan updated", "Plate Maps",
-                             paste0(format(Sys.time(), "%Y-%m-%d"), "_Plate_Map.csv"))
+if(file.exists(shared_drive_fp)) {
 
-file.copy(plate_map_local_fp, plate_map_cp_fp, overwrite = TRUE)
+  plate_map_cp_fp <- file.path(shared_drive_fp, "Sequencing Action plan updated", "Plate Maps",
+                               paste0(format(Sys.time(), "%Y-%m-%d"), "_Plate_Map.csv"))
+
+  file.copy(plate_map_local_fp, plate_map_cp_fp, overwrite = TRUE)
+
+} else{
+
+  message("\nCould not access shared drive path. Plate map not copied")
+  Sys.sleep(5)
+
+}
 
 write_csv(enviro_samples, file = here("metadata", "extra_metadata", paste0(format(Sys.time(), "%Y%m%d"), "_environmental_samples.csv")))
