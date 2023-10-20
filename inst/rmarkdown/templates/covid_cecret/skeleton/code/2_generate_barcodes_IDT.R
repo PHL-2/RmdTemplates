@@ -12,6 +12,8 @@ library(stringr)
 # Manual input
 ##############
 
+tar_n_upload_run <- FALSE
+
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
 #sequencing date of the run folder should match the RStudio project date
@@ -162,23 +164,33 @@ PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xl
 
 PHL_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "PHL")) %>%
-  bind_rows() %>%
-  rename(sample_name = "SPECIMEN_NUMBER") %>%
-  #filter rows where sample_id is NA
-  filter(!is.na(sample_name)) %>%
-  #make these columns character vectors
-  mutate(sample_name = as.character(sample_name))
+  bind_rows()
 
 #if PHL_data exists, do the following
-if(ncol(PHL_data) > 2) {
+# if it's just a blank sheet, just save sample_name and RLU column names
+if(ncol(PHL_data) == 2) {
+
+  PHL_data <- PHL_fp %>%
+    lapply(function(x) read_excel_safely(x, "PHL")) %>%
+    bind_rows() %>%
+    rename(sample_name = "SPECIMEN_NUMBER") %>%
+    #filter rows where sample_id is NA
+    filter(!is.na(sample_name)) %>%
+    #make these columns character vectors
+    mutate(sample_name = as.character(sample_name))
+
+} else if (ncol(PHL_data) > 2) {
 
   PHL_data <- PHL_data %>%
     mutate(SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y"), BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y")) %>%
-    rename(sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
+    rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
     select(any_of(phi_info), sample_collection_date, DOB, age, gender, RLU) %>%
     mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
+    #filter rows where sample_id is NA
+    filter(!is.na(sample_name)) %>%
     #make these columns character vectors
-    mutate(across(c(case_id, breakthrough_case, priority, gender), as.character))
+    mutate(across(c(sample_name, case_id, breakthrough_case, priority, gender), as.character))
+
 }
 
 #if PHL_data is not empty, do the following
@@ -205,20 +217,28 @@ if(nrow(PHL_data) > 0) {
 
 TU_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "Temple")) %>%
-  bind_rows() %>%
-  rename(sample_name = "SPECIMEN_NUMBER", CT = "ct value") %>%
-  #filter rows where sample_id is NA
-  filter(!is.na(sample_name)) %>%
-  mutate(sample_name = as.character(sample_name))
+  bind_rows()
 
-if(ncol(TU_data) > 2) {
+if(ncol(TU_data) == 2) {
+
+  TU_data <- PHL_fp %>%
+    lapply(function(x) read_excel_safely(x, "Temple")) %>%
+    bind_rows() %>%
+    rename(sample_name = "SPECIMEN_NUMBER", CT = "ct value") %>%
+    #filter rows where sample_id is NA
+    filter(!is.na(sample_name)) %>%
+    mutate(sample_name = as.character(sample_name))
+
+} else if(ncol(TU_data) > 2) {
 
   TU_data <- TU_data %>%
     mutate(Collection_date = as.Date(Collection_date, format = "%m/%d/%Y")) %>%
-    rename(sample_collection_date = "Collection_date", gender = "GENDER") %>%
+    rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value", gender = "GENDER") %>%
     select(any_of(phi_info), sample_collection_date, CT, age, gender) %>%
+    #filter rows where sample_id is NA
+    filter(!is.na(sample_name)) %>%
     #make these columns character vectors
-    mutate(across(c(case_id, breakthrough_case, priority, gender), as.character))
+    mutate(across(c(sample_name, case_id, breakthrough_case, priority, gender), as.character))
 }
 
 if(nrow(TU_data) > 0) {
@@ -401,6 +421,10 @@ metadata_sheet <- metadata_sheet %>%
                                               sample_type == "Wastewater" ~ NA,
                                               #use Tuesday of the current week if no date specified; older samples that are rerun should have a date manually added in on the sheet
                                               TRUE ~ as.Date(cut(as.POSIXct(Sys.time()), "week")) + 1)) %>%
+  mutate(sample_collection_date = case_when(!(is.na(sample_collection_date) | as.character(sample_collection_date) == "") ~ as.Date(sample_collection_date),
+                                            #if it's a wastewater sample without a date, use the PHL sample received date
+                                            sample_type == "Wastewater" ~ PHL_sample_received_date,
+                                            TRUE ~ NA)) %>%
   mutate(organism = case_when(!(is.na(organism) | organism == "") ~ organism,
                               sample_type == "Nasal swab" ~ "Severe acute respiratory syndrome coronavirus 2",
                               #WW sample has to be listed as metagenome even if targeted sequencing was used
@@ -446,19 +470,25 @@ for(x in fill_in_columns) {
 
 epi_sample_not_found <- PHL_data %>%
   select(any_of("sample_name")) %>%
-  rbind(select(TU_data, any_of("sample_name"))) %>%
-  filter(!sample_name %in% metadata_sheet$sample_name) %>%
-  pull() %>%
-  str_sort()
+  rbind(select(TU_data, any_of("sample_name")))
 
-#throw error
-if(length(epi_sample_not_found) > 0) {
+if(ncol(epi_sample_not_found > 0)) {
 
-  message("\nThese samples were found in the epidemiologists metadata sheet but not in our sample sheet. Something might be wrong!")
-  message("Check email to see if these samples could not be located by the receiving department")
-  message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check:")
+  epi_sample_not_found <- epi_sample_not_found %>%
+    filter(!sample_name %in% metadata_sheet$sample_name) %>%
+    pull() %>%
+    str_sort()
 
-  stop(simpleError(paste0(epi_sample_not_found, collapse = ", ")))
+  #throw error
+  if(length(epi_sample_not_found) > 0) {
+
+    message("\nThese samples were found in the epidemiologists metadata sheet but not in our sample sheet. Something might be wrong!")
+    message("Check email to see if these samples could not be located by the receiving department")
+    message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check:")
+
+    stop(simpleError(paste0(epi_sample_not_found, collapse = ", ")))
+  }
+
 }
 
 missing_metadata_non_ctrl_samples <- metadata_sheet %>%
@@ -643,51 +673,55 @@ metadata_sheet %>%
 # Tar the sequencing folder and upload to S3
 ############################################
 
-folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
-  as.Date(format = "%Y%m%d")
+if(tar_n_upload_run) {
 
-sequencing_run <- gsub(".*/", "", run_folder)
+  folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
+    as.Date(format = "%Y%m%d")
 
-if(folder_date != gsub("_.*", "", basename(here())) | is.na(folder_date)) {
-  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
-}
+  sequencing_run <- gsub(".*/", "", run_folder)
 
-#tar the run folder
-message("Making sequencing run tarball")
-system2("tar", c("-czf", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"),
-                 "-C", shQuote(run_folder, type = "cmd"), "."))
+  if(folder_date != gsub("_.*", "", basename(here())) | is.na(folder_date)) {
+    stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+  }
 
-s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
+  #tar the run folder
+  message("Making sequencing run tarball")
+  system2("tar", c("-czf", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"),
+                   "-C", shQuote(run_folder, type = "cmd"), "."))
 
-nf_demux_samplesheet <- data.frame(
-  id = sequencing_run,
-  samplesheet = paste0(s3_run_bucket_fp, sample_sheet_fn),
-  lane = "",
-  flowcell = paste0(s3_run_bucket_fp, sequencing_run, ".tar.gz")
-)
+  s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
-nf_demux_samplesheet_fp <- here("metadata", "munge", paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
+  nf_demux_samplesheet <- data.frame(
+    id = sequencing_run,
+    samplesheet = paste0(s3_run_bucket_fp, sample_sheet_fn),
+    lane = "",
+    flowcell = paste0(s3_run_bucket_fp, sequencing_run, ".tar.gz")
+  )
 
-nf_demux_samplesheet %>%
-  write.csv(file = nf_demux_samplesheet_fp,
-            row.names = FALSE, quote = FALSE)
+  nf_demux_samplesheet_fp <- here("metadata", "munge", paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
 
-md5_fp <- file.path(sequencing_folder_fp, paste0(sequencing_run, ".md5"))
+  nf_demux_samplesheet %>%
+    write.csv(file = nf_demux_samplesheet_fp,
+              row.names = FALSE, quote = FALSE)
 
-message("Making md5 file")
+  md5_fp <- file.path(sequencing_folder_fp, paste0(sequencing_run, ".md5"))
 
-paste0(sequencing_run, ".tar.gz") %>%
-  paste0(tools::md5sum(file.path(sequencing_folder_fp, .)), "  ", .) %>%
-  write(file = md5_fp)
+  message("Making md5 file")
 
-system2("aws", c("sso login"))
+  paste0(sequencing_run, ".tar.gz") %>%
+    paste0(tools::md5sum(file.path(sequencing_folder_fp, .)), "  ", .) %>%
+    write(file = md5_fp)
 
-message("Uploading to AWS S3")
-s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
-s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samplesheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
-s3_cp_md5 <- system2("aws", c("s3 cp", shQuote(md5_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
-s3_cp_run_tarball <- system2("aws", c("s3 cp", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
+  system2("aws", c("sso login"))
 
-if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet, s3_cp_md5, s3_cp_run_tarball), ignore.case = TRUE))) {
-  stop(simpleError("Upload to s3 bucket failed"))
+  message("Uploading to AWS S3")
+  s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
+  s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samplesheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
+  s3_cp_md5 <- system2("aws", c("s3 cp", shQuote(md5_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
+  s3_cp_run_tarball <- system2("aws", c("s3 cp", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
+
+  if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet, s3_cp_md5, s3_cp_run_tarball), ignore.case = TRUE))) {
+    stop(simpleError("Upload to s3 bucket failed"))
+  }
+
 }
