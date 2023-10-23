@@ -154,10 +154,10 @@ cli_submit <- function(exe_path, bs_cli_command, sh_arguments, shQuote_type = "s
 ##   Read in Excel file with sheet name. Return NULL if no sheet
 ## =============================================================
 
-read_excel_safely <- function(file, sheet) {
+read_excel_safely <- function(file, sheet, skip_row = 0) {
 
   try_read_excel <- purrr::safely(readxl::read_excel, otherwise = NULL)
 
-  try_read_excel(file, sheet = sheet)$result
+  try_read_excel(file, sheet = sheet, skip = skip_row)$result
 
 }

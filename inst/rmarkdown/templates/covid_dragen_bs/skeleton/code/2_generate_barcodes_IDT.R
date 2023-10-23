@@ -21,6 +21,7 @@ instrument_select <- 1 #select 1 for MiSeq or 2 for NextSeq
 instrument_type <- c("MiSeq", "NextSeq")[instrument_select]
 
 read_length <- "76"
+#this Rmd template only works for runs with 76 bp in length
 
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
 
@@ -122,15 +123,25 @@ PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xl
 PHL_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "PHL")) %>%
   bind_rows() %>%
-  mutate(SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y"), BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y")) %>%
-  rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
-  select(any_of(phi_info), sample_collection_date, DOB, age, gender, RLU) %>%
-  mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
+  rename(sample_name = "SPECIMEN_NUMBER") %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
   #make these columns character vectors
-  mutate(across(c(sample_name, case_id, breakthrough_case, priority, gender), as.character))
+  mutate(sample_name = as.character(sample_name))
 
+#if PHL_data exists, do the following
+if(ncol(PHL_data) > 2) {
+
+  PHL_data <- PHL_data %>%
+    mutate(SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y"), BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y")) %>%
+    rename(sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
+    select(any_of(phi_info), sample_collection_date, DOB, age, gender, RLU) %>%
+    mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
+    #make these columns character vectors
+    mutate(across(c(case_id, breakthrough_case, priority, gender), as.character))
+}
+
+#if PHL_data is not empty, do the following
 if(nrow(PHL_data) > 0) {
 
   PHL_data <- PHL_data %>%
@@ -155,13 +166,20 @@ if(nrow(PHL_data) > 0) {
 TU_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "Temple")) %>%
   bind_rows() %>%
-  mutate(Collection_date = as.Date(Collection_date, format = "%m/%d/%Y")) %>%
-  rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value", gender = "GENDER") %>%
-  select(any_of(phi_info), sample_collection_date, CT, age, gender) %>%
+  rename(sample_name = "SPECIMEN_NUMBER", CT = "ct value") %>%
   #filter rows where sample_id is NA
   filter(!is.na(sample_name)) %>%
-  #make these columns character vectors
-  mutate(across(c(sample_name, case_id, breakthrough_case, priority, gender), as.character))
+  mutate(sample_name = as.character(sample_name))
+
+if(ncol(TU_data) > 2) {
+
+  TU_data <- TU_data %>%
+    mutate(Collection_date = as.Date(Collection_date, format = "%m/%d/%Y")) %>%
+    rename(sample_collection_date = "Collection_date", gender = "GENDER") %>%
+    select(any_of(phi_info), sample_collection_date, CT, age, gender) %>%
+    #make these columns character vectors
+    mutate(across(c(case_id, breakthrough_case, priority, gender), as.character))
+}
 
 if(nrow(TU_data) > 0) {
 
@@ -379,28 +397,39 @@ for(x in fill_in_columns) {
 # Samples in epi metadata but we don't have the samples or they could not be extracted
 ######################################################################################
 
-message("\nThese samples were found in the epidemiologists metadata sheet but not in our sample sheet. Check the email to see if these samples could not be located by the receiving department")
-message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check")
-
 epi_sample_not_found <- PHL_data %>%
   select(any_of("sample_name")) %>%
-  rbind(select(TU_data, any_of("sample_name")))
+  rbind(select(TU_data, any_of("sample_name"))) %>%
+  filter(!sample_name %in% metadata_sheet$sample_name) %>%
+  pull() %>%
+  str_sort()
 
-if(ncol(epi_sample_not_found > 0)) {
-  epi_sample_not_found <- epi_sample_not_found %>%
-    filter(!sample_name %in% metadata_sheet$sample_name) %>%
-    pull() %>%
-    str_sort()
+#throw error
+if(length(epi_sample_not_found) > 0) {
+
+  message("\nThese samples were found in the epidemiologists metadata sheet but not in our sample sheet. Something might be wrong!")
+  message("Check email to see if these samples could not be located by the receiving department")
+  message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check:")
+
+  stop(simpleError(paste0(epi_sample_not_found, collapse = ", ")))
 }
-
-message(paste0(epi_sample_not_found, collapse = ", "))
 
 missing_metadata_non_ctrl_samples <- metadata_sheet %>%
   filter(!grepl("control", sample_type))
 
 missing_sample_date <- missing_metadata_non_ctrl_samples %>%
   filter(is.na(sample_collection_date)) %>%
-  select(sample_name)
+  select(sample_name) %>%
+  pull() %>%
+  str_sort()
+
+#throw error
+if(length(missing_sample_date) > 0) {
+  message("\nThese non-control samples are in the sample sheet but are missing a collection date!")
+  message("Something must be wrong:")
+
+  stop(simpleError(paste0(missing_sample_date, collapse = ", ")))
+}
 
 missing_sample_RLU <- missing_metadata_non_ctrl_samples %>%
   filter(sample_collected_by == "Philadelphia Department of Public Health") %>%
@@ -412,12 +441,15 @@ missing_sample_CT <- missing_metadata_non_ctrl_samples %>%
   filter(is.na(CT)) %>%
   select(sample_name)
 
-missing_metadata_samples <- rbind(missing_sample_date, missing_sample_RLU, missing_sample_CT)
+missing_metadata_samples <- rbind(missing_sample_RLU, missing_sample_CT)
 
+#show warning
 if(nrow(missing_metadata_samples) > 0){
-  stop(simpleError(paste0("These non-control samples are in the sample sheet but are missing RLU values, CT values, or collection date from the epidemiologists!\n",
-                          "They may also be GeneXpert samples. If so, comment out this error\n",
-                          paste0(pull(missing_metadata_samples), collapse = ", "))))
+  message("\nThese non-control samples are in the sample sheet but are missing RLU or CT values")
+  message("They may also be GeneXpert samples. These samples should be double checked:")
+
+  message(paste0(pull(missing_metadata_samples), collapse = ", "))
+  Sys.sleep(5)
 }
 
 #############

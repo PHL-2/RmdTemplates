@@ -7,12 +7,16 @@ install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra"
 
 ```{r manual input ARTIC primer bed file to use}
 
-primer_select <- 1 # set variable as 1 for V3, 2 for V4, or 3 for V4.1
+primer_select <- 1 # set variable as 1 for V3 or 2 for V5.3.2
 
-artic_primer_scheme <- c("ncov_V3", "ncov_V4", "ncov_V4.1")[primer_select]
+artic_primer_scheme <- c("V3", "V5.3.2")[primer_select]
 
 # minimum acceptable number of reads per sample
 min_reads <- 1000000
+
+project_name <- basename(here())
+
+sequencing_date <- as.Date(gsub("_.*", "", project_name))
 
 ```
 
@@ -69,34 +73,6 @@ tryCatch(
 
 ```
 
-```{r find newest run folder}
-
-project_name <- basename(here())
-sequencing_date <- as.Date(gsub("_.*", "", project_name))
-
-#get the sequencing run folder
-run_folder <- sequencing_folder_fp %>%
-  list.files(full.names = T) %>%
-  file.info() %>%
-  filter(grepl(paste0(format(sequencing_date, "%y%m%d"), ".*\\.tar\\.gz$"), rownames(.))) %>%
-  rownames()
-
-run_folder_name <- gsub(".*/|\\..*", "", run_folder) #real run folder name
-
-folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
-  as.Date(format = "%Y%m%d")
-
-if (is.na(run_folder)) {
-  stop(simpleError(paste0("Could not connect to path: ", sequencing_folder_fp,
-                          "\nCheck your network connection and make sure you're connected to the city's network")))
-}
-
-if (folder_date != gsub("_.*", "", basename(here()))) {
-  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
-}
-
-```
-
 ```{r file paths for metadata and results}
 
 ### mapping file paths
@@ -105,7 +81,8 @@ PHI_file_fp <- list.files(here("metadata"), pattern = "_PHI.csv", full.names = T
 
 ### file paths to save results to
 unkwn_barcodes_fp <- here("data", paste0(sequencing_date, "_unknown_barcodes.csv"))
-fastqc_mean_fp <- here("data", paste0(sequencing_date, "_fastqc.csv"))
+fastqc_qual_fp <- here("data", paste0(sequencing_date, "_fastqc_qual.csv"))
+actual_read_lengths_fp <- here("data", paste0(sequencing_date, "_read_lengths.csv"))
 
 kraken_props_fp <- here("data", paste0(sequencing_date, "_kraken_props.csv"))
 snpdists_fp <- here("data", paste0(sequencing_date, "_snpdists.csv"))
@@ -116,11 +93,8 @@ cecret_results_fp <- here("data", paste0(sequencing_date, "_cecret_results.csv")
 
 ```{r load metadata}
 
+#define control sample types
 ctrl_fct_lvls <- c("Water control", "Reagent control", "Environmental control", "Mock DNA positive control")
-
-sample_type_lvls <- c("Reference", "Unassigned reads",
-                      ctrl_fct_lvls,
-                      "Nasal swab", "Nasal swab - Poor", "Wastewater", "Wastewater - Poor", NA)
 
 s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
   mutate(isControl = sample_type %in% ctrl_fct_lvls) %>%
@@ -129,47 +103,35 @@ s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
 read_length <- unique(s_meta$read_length)
 index_length <- unique(s_meta$index_length)
 
-```
+#define all other sample types
+typical_sample_types <- c("Nasal swab", "Nasal swab - Poor", "Wastewater", "Wastewater - Poor")
 
-```{r aws cli demux and cecret commands}
+unaccounted_sample_types <- unique(s_meta$sample_type)[!unique(s_meta$sample_type) %in% c(ctrl_fct_lvls, typical_sample_types)]
 
-# tar.gz the run folder:
-# tar -czvf [sequencing run name].tar.gz -C /path/to/[sequencing run folder]/ .
-# (if you are taring from the parent directory of the sequencing runs, don't include a period in front of the sequencing run folder)
-#
-# upload the tar run folder to s3 bucket (there is no way to get the SHA256 of object upload with 'aws s3 cp' at the moment)
-# 
-# run the nf-core demux pipeline (running this with AWS Batch takes 33 minutes with 18 samples)
-# 
-# check that all the sample fastq files are available
-#
-# run the Cecret pipeline
-# 
-# download the results
-
-# aws s3 cp s3://nextflow-output/COVIDSeq/[sequencing_date]_COVIDSeq/ . \
-#   --recursive \
-#   --exclude "*" \
-#   --include "*software_versions.yml" \
-#   --include "*Demultiplex_Stats.csv" \
-#   --include "*Quality_Metrics.csv" \
-#   --include "*Top_Unknown_Barcodes.csv" \
-#   --include "*.fastq.gz_fastqc_data.txt" \
-#   --include "*.consensus.fa" \
-#   --include "*_filtered_R[12].fastq.gz" \
-#   --include "*aggregated-freyja.tsv" \
-#   --include "*_kraken2_report.txt" \
-#   --include "*snp-dists.txt" \
-#   --include "*.multicov.txt" \
-#   --include "*nextclade.tsv" \
-#   --include "*nextclade.json" \
-#   --include "*.cov.txt" \
-#   --include "*.depth.txt" \
-#   --include "*cecret_results.csv"
+sample_type_lvls <- c("Reference", "Unassigned reads",
+                      ctrl_fct_lvls, typical_sample_types, unaccounted_sample_types, NA)
 
 ```
 
 <!-- Load QC data -->
+
+```{r find run folder name, eval = import_data}
+
+#get the sequencing run folder
+run_folder_name <- list.files(here("data", "processed_bclconvert"), pattern = "^[0-9].*[0-9A-Z]$")
+
+folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder_name)) %>%
+  as.Date(format = "%Y%m%d")
+
+if (is.na(folder_date)) {
+  stop(simpleError(paste0("Could not find the demultiplexed report from BCL Convert. Have you tried downloading the data?")))
+}
+
+if (folder_date != gsub("_.*", "", basename(here()))) {
+  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+}
+
+```
 
 ```{r file paths for qc data, eval = import_data}
 
@@ -251,13 +213,24 @@ if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] >
 
 ```
 
-```{r load fastqc files if doing fastqc from demux, eval = import_data}
+```{r load fastqc files, eval = import_data}
 
 fastqc_fps <- list.files(here("data", "processed_bclconvert", run_folder_name), pattern = "fastqc_data.txt", recursive = TRUE, full.names = TRUE)
 
+#line positions to skip to
+quality_indic <- ">>Per base sequence quality"
+seq_length_indic <- ">>Sequence Length Distribution"
+
 fastqc <- lapply(fastqc_fps, function(f) {
-  #skip the first 13 lines, assuming the fastqc_data file format does not change
-  read_qc <- read_tsv(f, skip = 12, n_max = read_length)
+  
+  #find the line to start reading the file as tsv
+  read_all <- readLines(f)
+  line_start <- grep(quality_indic, read_all)
+  end_modules <- grep(">>END_MODULE", read_all) - line_start
+  line_end <- min(end_modules[which(end_modules > 0)]) - 2
+  rm(read_all)
+  
+  read_qc <- read_tsv(f, skip = line_start, n_max = line_end)
   read_qc$sample_id <- gsub(".*/|_S[0-9]*_L00[0-9]*_R[12].*", "", f)
   read_qc$direction <- gsub(".*(R[12]).*", "\\1", f)
   return(read_qc)
@@ -278,43 +251,124 @@ if(!all(length_check == read_length)) {
   stop(simpleError(paste0("Some samples did not have reads up to ", read_length, " bp")))
 }
 
-write_csv(fastqc, fastqc_mean_fp)
+actual_read_lengths <- lapply(fastqc_fps, function(f) {
+  #find the line to start reading the file as tsv
+  read_all <- readLines(f)
+  line_start <- grep(seq_length_indic, read_all)
+  end_modules <- grep(">>END_MODULE", read_all) - line_start
+  line_end <- min(end_modules[which(end_modules > 0)]) - 2
+  rm(read_all)
+  
+  read_in_lengths <- read_tsv(f, skip = line_start, n_max = line_end)
+  read_in_lengths$sample_id <- gsub(".*/|_S[0-9]*_L00[0-9]*_R[12].*", "", f)
+  read_in_lengths$direction <- gsub(".*(R[12]).*", "\\1", f)
+  return(read_in_lengths)
+  }) %>%
+  do.call("rbind", .) %>%
+  rename(read_length = "#Length", count = "Count") %>%
+  group_by(sample_id, read_length) %>%
+  summarize(count = sum(count)) %>%
+  ungroup() %>%
+  mutate(software = "fastqc") %>%
+  select(software, sample_id, read_length, count)
+
+write_csv(fastqc, fastqc_qual_fp)
+write_csv(actual_read_lengths, actual_read_lengths_fp)
 
 ```
 
-```{r get cecret file paths, eval = import_data}
+```{r load samtools stats files, eval = import_data}
 
-#amplicon depth files (overlapping regions separated by amplicon)
-amplicon_fps <- list.files(here("data", "processed_cecret", "multicov"), pattern = ".multicov.txt", recursive = TRUE, full.names = TRUE)
+samtools_stats_fps <- list.files(here("data", "processed_cecret", "samtools_stats"), pattern = ".stats.txt", recursive = TRUE, full.names = TRUE)
 
-#overall coverage depth files (overlapping regions included in overall coverage)
-coverage_fps <- list.files(here("data", "processed_cecret", "samtools_depth"), pattern = ".depth.txt", recursive = TRUE, full.names = TRUE)
+#line positions to skip to
+summary_indic <- "# Summary Numbers."
 
-#number of reads that mapped to reference
-cov_num_fps <- list.files(here("data", "processed_cecret", "samtools_coverage"), pattern = ".cov.txt", recursive = TRUE, full.names = TRUE)
+samtools_stat <- lapply(samtools_stats_fps, function(f) {
+  
+  #find the line to start reading the file as tsv
+  read_all <- readLines(f)
+  line_start <- grep(summary_indic, read_all)
+  line_end <- grep("# First Fragment Qualities.", read_all) - line_start - 2
+  rm(read_all)
+  
+  summary_numbers <- read_tsv(f, skip = line_start, n_max = line_end,
+                              col_names = c("SN", "samtools_stat", "samtools_stat_val", "comments"))
+  summary_numbers$sample_id <- gsub(".*/|\\.stats.txt", "", f)
+  return(summary_numbers)
+  }) %>%
+  do.call("rbind", .) %>%
+  mutate(samtools_stat = gsub(" ", "_", samtools_stat),
+         samtools_stat = gsub(":", "", samtools_stat),
+         samtools_stat = gsub("^", "samtools_", samtools_stat)) %>%
+  #select certain rows
+  filter(grepl(paste0(c("^samtools_raw_total_sequences$", 
+                        "^samtools_filtered_sequences$", 
+                        "^samtools_sequences$", 
+                        "^samtools_reads_mapped$", 
+                        "^samtools_reads_unmapped$", 
+                        "^samtools_reads_properly_paired$"), collapse = "|"), samtools_stat)) %>%
+  select(sample_id, samtools_stat, samtools_stat_val) %>%
+  pivot_wider(names_from = "samtools_stat", values_from = "samtools_stat_val")
+
+read_length_indic <- "# Read lengths\\."
+
+mapped_read_lengths <- lapply(samtools_stats_fps, function(f) {
+  
+  #find the line to start reading the file as tsv
+  read_all <- readLines(f)
+  line_start <- grep(read_length_indic, read_all)
+  line_end <- grep("# Read lengths - first fragments.", read_all) - line_start - 1
+  rm(read_all)
+  
+  #some samples may have 0 reads
+  if(line_end == 0) {
+    read_lengths <- data.frame(sample_id = gsub(".*/|\\.stats.txt", "", f),
+                               RL = "RL",
+                               samtools_read_length = 0,
+                               count = 0)
+  } else {
+    read_lengths <- read_tsv(f, skip = line_start, n_max = line_end,
+                              col_names = c("RL", "samtools_read_length", "count"))
+    read_lengths$sample_id <- gsub(".*/|\\.stats.txt", "", f)
+  }
+
+  return(read_lengths)
+  }) %>%
+  do.call("rbind", .) %>%
+  mutate(software = "samtools") %>%
+  select(software, sample_id, samtools_read_length, count)
+
+samtools_tot_sequences <- mapped_read_lengths %>%
+  group_by(sample_id) %>%
+  summarize(count = sum(count)) %>%
+  ungroup() %>%
+  merge(samtools_stat, by = "sample_id", all = TRUE) %>%
+  mutate(all_reads_equal = count == samtools_raw_total_sequences)
+
+if(!all(samtools_tot_sequences$all_reads_equal)) {
+  stop(simpleError("Error with parsing samtools file. Sum of read length count does not equal total number of reads from samtools"))
+}
+
+write_csv(mapped_read_lengths, actual_read_lengths_fp, append = TRUE)
 
 ```
 
 ```{r load amplicon results, eval = import_data}
 
-amplicon_depth <- amplicon_fps %>%
-  data_frame(FileName = .) %>%
-  group_by(FileName) %>%
-  do(read_delim(.$FileName, col_names = FALSE)) %>%
-  ungroup() %>%
-  filter(X1 == "MN908947.3") %>%
-  rename(start = "X2", end = "X3", tile = "X5", depth = "X7") %>%
-  select(FileName, start, end, tile, depth) %>%
-  mutate(sample_id = gsub(".*/", "", FileName),
-         sample_id = gsub("\\.multicov.txt", "", sample_id),
-         amp_pos = paste0(start, "-", end),
-         multicov = paste0("amp_tile", tile, "_", amp_pos)) %>%
-  select(sample_id, multicov, depth) %>%
-  pivot_wider(names_from = "multicov", values_from = "depth")
+amplicon_fp <- here("data", "processed_cecret", "aci", "amplicon_depth.csv")
+
+amplicon_depth <- read_csv(amplicon_fp) %>%
+  rename(sample_id = "bam") %>%
+  mutate(sample_id = gsub(".primertrim.sorted.bam", "", sample_id)) %>%
+  rename_with(function(x) paste0("amp_tile_", x, "_artic_", artic_primer_scheme), -sample_id)
 
 ```
 
 ```{r load coverage results, eval = import_data}
+
+#overall coverage depth files (overlapping regions included in overall coverage)
+coverage_fps <- list.files(here("data", "processed_cecret", "samtools_depth"), pattern = ".depth.txt", recursive = TRUE, full.names = TRUE)
 
 slide_window_coverage <- coverage_fps %>%
   data_frame(FileName = .) %>%
@@ -349,6 +403,9 @@ coverage <- slide_window_coverage %>%
 
 ```{r load samtools coverage data, eval = import_data}
 
+#number of reads that mapped to reference
+cov_num_fps <- list.files(here("data", "processed_cecret", "samtools_coverage"), pattern = ".cov.txt", recursive = TRUE, full.names = TRUE)
+
 #the mean coverage from samtools is slightly different than by manually calculation but the 1X coverage is the same
 cov_stats <- cov_num_fps %>%
   data_frame(FileName = .) %>%
@@ -381,7 +438,7 @@ k2_files_fps %>%
   mutate(k2_top_rank = case_when(grepl("^u$|^r$|^d$|^k$|^p$", k2_rank) ~ paste0(k2_rank, "__", k2_name),
                                  TRUE ~ NA)) %>%
   fill(k2_top_rank, .direction = "down") %>%
-  #filter out taxon with at least 2 kmer hits
+  #filter for taxon with at least 2 kmer hits
   filter(k2_kmers > 1) %>%
   mutate(k2_props = k2_kmers/sum(k2_kmers)) %>%
   ungroup() %>%
@@ -499,7 +556,7 @@ cecret_aggregate <- cecret_aggregate %>%
 
 ```{r write cecret results, eval = import_data}
 
-list(samp_reads, cov_stats, coverage, next_clade, freyja, amplicon_depth) %>%
+list(samp_reads, cov_stats, coverage, next_clade, freyja, amplicon_depth, samtools_stat) %>%
   reduce(merge, by = "sample_id", all = TRUE) %>%
   merge(cecret_aggregate,
         by = c("sample_id", "nextclade_clade", "nextclade_clade_who", "nextclade_qc_overallstatus", "nextclade_qc_overallscore"),
@@ -515,7 +572,9 @@ list(samp_reads, cov_stats, coverage, next_clade, freyja, amplicon_depth) %>%
 
 top_unkwn_indices <- read_csv(unkwn_barcodes_fp)
 
-fastqc <- read_csv(fastqc_mean_fp)
+fastqc <- read_csv(fastqc_qual_fp)
+
+actual_read_lengths <- read_csv(actual_read_lengths_fp)
 
 cecret_results <- read_csv(cecret_results_fp)
 
@@ -644,9 +703,9 @@ s_phi <- read_csv(PHI_file_fp)
 epi_report <- s_toPlot %>%
   merge(s_phi, by = "sample_id", all.x = TRUE) %>%
   filter4report() %>%
-  select(sample_name, sample_collected_by, sequencing_date, pangolin_lineage, nextclade_clade_who) %>%
+  select(sample_name, sample_collected_by, sequencing_date, Nextclade_pango, nextclade_clade_who) %>%
   arrange(sample_collected_by, sample_name) %>%
-  rename(accession_number = "sample_name", who_label = "nextclade_clade_who", lineage = "pangolin_lineage")
+  rename(accession_number = "sample_name", who_label = "nextclade_clade_who", lineage = "Nextclade_pango")
 
 epi_report %>%
   write_csv(epi_report_fp)
@@ -693,7 +752,7 @@ seqsender <- s_toPlot %>%
          orig_lab = "sample_collected_by") %>%
   mutate(patient_status = "Unknown",
          instrument = paste0("Illumina ", instrument_type),
-         library = "ARTIC Network Protocol V3",
+         library = paste0("ARTIC Network Protocol ", artic_primer_scheme),
          assembly_method = paste0("iVar v", software_version$ivar),
          library_strategy = "AMPLICON",
          library_source = "VIRAL RNA",
@@ -715,36 +774,29 @@ seqsender <- s_toPlot %>%
 seqsender %>%
   write_tsv(seqsender_meta_fp)
 
+```
+
+```{r reported numbers}
+
 #double checking to see if number of samples match
 n_samples_report <- s %>%
   filter(!grepl("None|Undetermined", sample_id)) %>%
   filter(!grepl("control", sample_type, ignore.case = TRUE)) %>%
   filter(!is.na(pangolin_lineage)) %>%
+  filter(!is.na(Nextclade_pango)) %>%
   filter(!is.na(nextclade_qc_overallstatus)) %>%
   filter(nextclade_qc_overallstatus != "bad") %>%
   filter(!(nextclade_qc_overallstatus == "mediocre" & pct_genome_coverage_over_30x < .8)) %>%
   filter(pangolin_qc_status != "fail") %>%
   nrow()
 
-```
+#these are samples that failed in the pipeline for whatever reason. Can rerun pipeline to generate results for these samples
+rerun_samples <- s %>%
+  filter(is.na(pangolin_qc_status)) %>%
+  select(sample_id) %>%
+  pull()
 
-```{r check all files generated}
-
-#check the csv file for the epi's
-if(have_phi) {
-
-  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
-  
-  epi_report <- epi_2_upload_fp %>%
-    read_csv() %>%
-    select(accession_number) %>%
-    merge(select(s_phi, sample_id, sample_name), by.x = "accession_number", by.y = "sample_name", all.x = TRUE) %>%
-    mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
-    mutate(file = "epi") %>%
-    select(file, sample_id)
-
-}
-
+#number of samples to submit
 #check the seqsender file to upload to ncbi
 seqsender_2_upload_fp <- list.files(here("upload", "seqsender"), pattern = ".tsv", recursive = TRUE, full.names = TRUE)
 
@@ -765,6 +817,25 @@ if (!all(all_sample_ids_from_seqsender$all_sample_same)) {
 
 all_sample_ids_from_seqsender %<>% select(file, upload_id) %>%
   rename(sample_id = "upload_id")
+
+```
+
+```{r check all files generated}
+
+#check the csv file for the epi's
+if(have_phi) {
+
+  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
+  
+  epi_report <- epi_2_upload_fp %>%
+    read_csv() %>%
+    select(accession_number) %>%
+    merge(select(s_phi, sample_id, sample_name), by.x = "accession_number", by.y = "sample_name", all.x = TRUE) %>%
+    mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
+    mutate(file = "epi") %>%
+    select(file, sample_id)
+
+}
 
 #check the fastq files to upload; should be 1 set here
 fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
@@ -811,12 +882,6 @@ if (!all(check_all$count_all_samples == total_file_sets_2_count)) {
   stop (simpleError("Some files are missing samples to upload!"))
 }
 
-#these are samples that failed in the pipeline for whatever reason. Can rerun pipeline to generate results for these samples
-rerun_samples <- s %>%
-  filter(is.na(pangolin_qc_status)) %>%
-  select(sample_id) %>%
-  pull()
-
 ```
 
 <!-- Assign colors to sample attributes and create some ggplot legends and figures -->
@@ -836,8 +901,8 @@ ann_geom_values[["sample_type_shapes"]] <- setNames(c(4, 8, 24, 13, 25, 23,
 #make the controls and unassigned reads samples bigger in size
 ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 4, 2, 4, 2, 4, rep(2, length(sample_type_lvls)-6)), sample_type_lvls)
 
-#make alpha for nasal swabs to 0.5
-ann_geom_values[["alpha"]] <- setNames(c(1, 1, 1, 1, 1, 1, rep(0.2, length(sample_type_lvls)-6)), sample_type_lvls)
+#different alpha values based on sample numbers
+ann_geom_values[["alpha"]] <- setNames(c(1, 1, 0.4, 1, 0.4, 1, rep(0.2, length(sample_type_lvls)-6)), sample_type_lvls)
 
 ann_geom_values[["linetype"]] <- setNames(c("solid", "twodash", "dotted", "dashed"), c("good", "mediocre", "bad", "control"))
 
@@ -907,13 +972,19 @@ for(who_label in c("Reference", sort(unique(s$nextclade_clade_who)[unique(s$next
     
     #if a pangolin_lineage ends with a number, get the sub-lineages with that number
     if(grepl("[0-9]$", combined_variant)) {
-      sublineage <- variant_list[grepl(paste0("^", combined_variant), variant_list)]
-    }
-    else{
+      
+      #make the sublineage regex
+      combined_variant_gsub <- gsub("\\.", "\\\\.", combined_variant)
+      exact_lineage_regex <- paste0("^", combined_variant_gsub, "$")
+      sublineage_regex <- paste0("^", combined_variant_gsub, "\\.")
+      final_sublineage_regex <- paste0(exact_lineage_regex, "|", sublineage_regex)
+      
+      sublineage <- variant_list[grepl(final_sublineage_regex, variant_list)]
+    } else{
       sublineage <- combined_variant
     }
     
-    variant_color <- calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)][i]
+    variant_color <- c(calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)], few_pal(palette = "Light")(8))[i]
     variant_gradient <- colorRampPalette(c(variant_color, adjustcolor(variant_color, alpha.f = 0.1)), alpha = TRUE)(length(sublineage))
     names(variant_gradient) <- sublineage
     
@@ -1001,13 +1072,16 @@ annotation_legend <- rbind(SC2_annotation, ddPCR_annotation) %>%
 
 slide_window_coverage %>%
   merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
+  mutate(slide_window_100 = ifelse(slide_window_100 <= 1, 1, slide_window_100)) %>%
   {
-  ggplot(., aes(x = position, y = slide_window_100, color = sample_type, group = sample_id, alpha = sample_type)) +
-    geom_line() +
+  ggplot(., aes(x = position, y = slide_window_100, fill = sample_type, group = sample_id)) +
+    geom_area(aes(alpha = sample_type), position = "identity") +
+    geom_hline(yintercept = 100, linetype = "dashed", alpha = 0.4) +
     facet_wrap(~sample_type, ncol = 1, scales = "free_y") +
-    scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     scale_alpha_manual(values = ann_geom_values$alpha[match(levels(.$sample_type), names(ann_geom_values$alpha))]) + 
     scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
+    scale_y_continuous(trans = "log10") + 
     theme_bw() +
     theme(
       strip.background = element_blank(),
@@ -1032,11 +1106,14 @@ col2show <- s %>%
 for(col_num in col2show) {
   
   filtered_samp_name <- s %>%
-    mutate(nextclade_qc_overallstatus = ifelse(is.na(nextclade_qc_overallstatus), "control", nextclade_qc_overallstatus)) %>%
+    mutate(nextclade_qc_overallstatus = case_when(is.na(nextclade_qc_overallstatus) & !isControl ~ "bad",
+                                                  is.na(nextclade_qc_overallstatus) & isControl ~ "control",
+                                                  TRUE ~ nextclade_qc_overallstatus)) %>%
     mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = names(ann_geom_values$linetype))) %>%
-    mutate(who_label = ifelse(is.na(pangolin_lineage), "control",
-                              paste0(nextclade_clade_who, " - ", gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", pangolin_lineage)))) %>%
-    mutate(who_label = factor(who_label, levels = c(names(ann_geom_values$who_label), "control"))) %>%
+    mutate(who_label = case_when(is.na(Nextclade_pango) & !isControl ~ "no results",
+                                 is.na(Nextclade_pango) & isControl ~ "control",
+                                 TRUE ~ paste0(nextclade_clade_who, " - ", gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", Nextclade_pango)))) %>%
+    mutate(who_label = factor(who_label, levels = c(names(ann_geom_values$who_label), "no results", "control"))) %>%
     filter(sample_id != "Undetermined") %>%
     filter(plate_col == col_num) %>%
     droplevels() %>%
@@ -1046,15 +1123,17 @@ for(col_num in col2show) {
 
   slide_window_coverage %>%
     filter(sample_id %in% filtered_samp_name$sample_id) %>%
+    mutate(slide_window_100 = ifelse(slide_window_100 > 100, 100, slide_window_100)) %>%
     merge(filtered_samp_name, by = "sample_id", all = TRUE) %>%
     droplevels() %>%
     {
-    ggplot(., aes(x = position, y = slide_window_100, group = sample_id, linetype = nextclade_qc_overallstatus, color = who_label)) +
-      geom_line() +
+    ggplot(., aes(x = position, y = slide_window_100, group = sample_id, fill = who_label)) +
+      geom_line(aes(linetype = nextclade_qc_overallstatus), color = "black") +
+      geom_area(position = "identity") +
       facet_wrap(~sample_id, ncol = 1, scales = "free_y", labeller = labeller(sample_id = sample_type_label)) +
       scale_linetype_manual(values = ann_geom_values$linetype[match(levels(.$nextclade_qc_overallstatus), names(ann_geom_values$linetype))]) +
-      scale_color_manual(values = c(ann_geom_values$who_label, setNames("#000000", "control"))[match(levels(.$who_label),
-                                                                                                  c(names(ann_geom_values$who_label), "control"))]) +
+      scale_fill_manual(values = c(ann_geom_values$who_label, setNames(c("#808080", "#000000"), c("no results", "control")))[match(levels(.$who_label),
+                                                                                                  c(names(ann_geom_values$who_label), "no results", "control"))]) +
       scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
       theme_bw() +
       theme(
@@ -1066,9 +1145,9 @@ for(col_num in col2show) {
         ) +
       labs(x=paste0("Column ", col_num, " samples"),
            y="Sliding window average (X)",
-           color = "WHO",
+           fill = "WHO",
            linetype = "Nextclade Quality") +
-      guides(linetype = guide_legend(order = 1), color = guide_legend(order = 2)) +
+      guides(linetype = guide_legend(order = 1), fill = guide_legend(order = 2)) +
     annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
     } %>%
     ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sample_sliding_coverage_100_bp_col", col_num, ".png")), plot = ., width = 11, height = 8)
