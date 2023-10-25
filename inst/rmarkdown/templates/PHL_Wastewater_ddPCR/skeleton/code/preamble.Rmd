@@ -93,6 +93,7 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
           Process = ifelse(is.na(Process), "Non-processed", Process),
           Process = ifelse(grepl(pattern = "dil", x = Extra, ignore.case = T), "Dilution", Process),
           Process = ifelse(Spiked == "Unspiked", "Unspiked", Process),
+          Spiked = ifelse(grepl(pattern = "Spiked", x = Type), "Unspiked", Spiked),
           Process = droplevels(factor(Process, level = c("Concentrated", "Unconcentrated", "Non-processed", "Unspiked","Dilution", "Frozen", "QuickExtract"))),
           `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
           Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
