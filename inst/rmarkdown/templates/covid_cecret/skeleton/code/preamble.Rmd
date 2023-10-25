@@ -103,13 +103,10 @@ s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
 read_length <- unique(s_meta$read_length)
 index_length <- unique(s_meta$index_length)
 
-#define all other sample types
-typical_sample_types <- c("Nasal swab", "Nasal swab - Poor", "Wastewater", "Wastewater - Poor")
+unaccounted_sample_types <- unique(s_meta$sample_type)[!unique(s_meta$sample_type) %in% c(ctrl_fct_lvls)]
 
-unaccounted_sample_types <- unique(s_meta$sample_type)[!unique(s_meta$sample_type) %in% c(ctrl_fct_lvls, typical_sample_types)]
-
-sample_type_lvls <- c("Reference", "Unassigned reads",
-                      ctrl_fct_lvls, typical_sample_types, unaccounted_sample_types, NA)
+sample_type_lvls <- c(NA, "Reference", "Unassigned reads",
+                      ctrl_fct_lvls, unaccounted_sample_types, paste0(unaccounted_sample_types, " - Poor"))
 
 ```
 
@@ -594,7 +591,7 @@ snpdists <- read_csv(snpdists_fp)
 #df with all samples
 s <- s_meta %>%
   merge(cecret_results, by = c("sample_id", "barcode_sequence", "index", "index2", "lane"), all = TRUE) %>%
-  mutate(sample_type = case_when(grepl("^Undetermined$", sample_id) ~ sample_type_lvls[2],
+  mutate(sample_type = case_when(grepl("^Undetermined$", sample_id) ~ "Unassigned reads",
                                  ((pangolin_qc_status == "fail" | nextclade_qc_overallstatus == "bad") & !isControl) ~ paste0(sample_type, " - Poor"),
                                  TRUE ~ sample_type)) %>%
   #rearrange the sampletypes by ctrls first
@@ -818,9 +815,11 @@ if (!all(all_sample_ids_from_seqsender$all_sample_same)) {
 all_sample_ids_from_seqsender %<>% select(file, upload_id) %>%
   rename(sample_id = "upload_id")
 
+run_check_all_chunk <- any(grepl("Nasal swab", sample_type_lvls))
+
 ```
 
-```{r check all files generated}
+```{r check all files generated, eval = run_check_all_chunk}
 
 #check the csv file for the epi's
 if(have_phi) {
@@ -886,28 +885,43 @@ if (!all(check_all$count_all_samples == total_file_sets_2_count)) {
 
 <!-- Assign colors to sample attributes and create some ggplot legends and figures -->
 
-```{r sample type attributes}
+```{r sample type attributes for ggplot}
+
+sample_type_num_vector <- 1:length(sample_type_lvls)
 
 ann_geom_values <- list()
 
-#leave Unassigned reads as purple
-ann_geom_values[["sample_type_colors"]] <- setNames(c("#000000", pal_d3("category20")(20)[c(15, 19, 16, 13, 2, 1, 4, 10, 7, 8)]), sample_type_lvls)
+# pick sample type colors for ggplot
+sample_type_color_select <- c(15, 19, 16, 13, 2, 1, 4)
+sample_type_color_scheme <- c("#808080", "#000000", pal_d3("category20")(20)[sample_type_color_select])
+additional_colors <- pal_d3("category20")(20)[!1:20 %in% sample_type_color_select]
 
-#make the controls and unassigned reads into triangle and diamond shapes
-ann_geom_values[["sample_type_shapes"]] <- setNames(c(4, 8, 24, 13, 25, 23,
-                                                      21, 22, 21, 22,
-                                                    c(9:14)[1:(length(sample_type_lvls)-10)]), sample_type_lvls)
+ann_geom_values[["sample_type_colors"]] <- setNames(c(sample_type_color_scheme, additional_colors)[sample_type_num_vector],
+                                                    sample_type_lvls)
 
-#make the controls and unassigned reads samples bigger in size
-ann_geom_values[["sample_type_sizes"]] <- setNames(c(4, 4, 2, 4, 2, 4, rep(2, length(sample_type_lvls)-6)), sample_type_lvls)
+# pick sample type shapes for ggplot
+sample_type_shape_select <- c(4, 3, 8, 24, 13, 25, 23, 21, 22)
+additional_shapes <- c(9:14)
 
-#different alpha values based on sample numbers
-ann_geom_values[["alpha"]] <- setNames(c(1, 1, 0.4, 1, 0.4, 1, rep(0.2, length(sample_type_lvls)-6)), sample_type_lvls)
+ann_geom_values[["sample_type_shapes"]] <- setNames(c(sample_type_shape_select, additional_shapes)[sample_type_num_vector], sample_type_lvls)
 
+# pick sample shape sizes for ggplot
+sample_type_size_select <- c(4, 4, 4, 2, 4, 2, 4, 2, 2)
+additional_sizes <- rep(2, length(sample_type_lvls) - length(sample_type_size_select))
+
+ann_geom_values[["sample_type_sizes"]] <- setNames(c(sample_type_size_select, additional_sizes), sample_type_lvls)
+
+# pick alpha values for ggplot
+alpha_select <- c(1, 1, 1, 0.4, 1, 0.4, 1, 0.2, 0.2)
+additional_alphas <- rep(0.2, length(sample_type_lvls) - length(sample_type_size_select))
+
+ann_geom_values[["alpha"]] <- setNames(c(alpha_select, additional_alphas), sample_type_lvls)
+
+# pick additional ggplot parameters
 ann_geom_values[["linetype"]] <- setNames(c("solid", "twodash", "dotted", "dashed"), c("good", "mediocre", "bad", "control"))
-
 ann_geom_values[["nc_qc"]] <- setNames(c(brewer.pal(6, "Set3")[c(1, 6, 4)], "#808080"), c("good", "mediocre", "bad", NA))
 
+# create a sample type legend
 sample_type_legend <- s %>%
   select(sample_id, sample_type) %>%
   order_on_other_col(sample_id, sample_type, decreasing = FALSE) %>%
