@@ -1,6 +1,6 @@
 ---
 general:
-  submission_directory: '/parent/directory/of/Rprojects' # *
+  submission_directory: '..'
   submit_Genbank: True
   submit_GISAID: True
   submit_SRA: True
@@ -39,7 +39,7 @@ ncbi:
   BioProject: 'PRJNA884724' # this is the BioProject accession number for real submissions
   BioSample_sample_name_col: genbank_name
   SRA_sample_name_col: sra_name
-  Genbank_sample_name_col: genbank_name
+  Genbank_sample_name_col: sample_id
   BioSample_package: SARS-CoV-2.cl.1.0
   Center_title: Philadelphia Public Health Laboratory
   Genbank_organization_type: center
@@ -53,8 +53,8 @@ ncbi:
     city: 'Philadelphia'
     sub: 'PA'
     country: 'USA'
-    street: '500 South Broad Street'
-    postal-code: '19146'
+    street: '1930 South Broad Street Suite 37'
+    postal-code: '19145'
     email: 'phl.sequencing@phila.gov'
     phone: ''
   SRA_file_location: local
@@ -114,6 +114,6 @@ gisaid:
   cid: ''
   username: 'gisaid.username' # *
   password: ''
-  authfile_fp: '/parent/directory/of/Rprojects/aux_files/seqsender/gisaid_uploader.authtoken' # * path of the REAL auth token
+  authfile_fp: ''
   type: betacoronavirus
   Update_sequences_on_Genbank_auto_removal: False # update GISAID submission based on auto removal of GenBank samples. Keep this as False since we are uploading to GISAID before GenBank

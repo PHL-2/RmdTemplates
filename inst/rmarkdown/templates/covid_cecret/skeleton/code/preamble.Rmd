@@ -103,10 +103,11 @@ s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
 read_length <- unique(s_meta$read_length)
 index_length <- unique(s_meta$index_length)
 
-unaccounted_sample_types <- unique(s_meta$sample_type)[!unique(s_meta$sample_type) %in% c(ctrl_fct_lvls)]
+unaccounted_sample_types <- sort(unique(s_meta$sample_type)[!unique(s_meta$sample_type) %in% c(ctrl_fct_lvls)])
 
 sample_type_lvls <- c(NA, "Reference", "Unassigned reads",
-                      ctrl_fct_lvls, unaccounted_sample_types, paste0(unaccounted_sample_types, " - Poor"))
+                      ctrl_fct_lvls,
+                      unlist(lapply(unaccounted_sample_types, function(x) c(x, paste0(x, " - Poor")))))
 
 ```
 
@@ -735,7 +736,7 @@ seqsender <- s_toPlot %>%
   mutate(gisaid_accession = "",
          location = "USA: Pennsylvania",
          gisaid_location = "North America/USA/Pennsylvania",
-         zip = "19146",
+         zip = "19145",
          type = "betacoronavirus",
          passage = "Original") %>%
   #make gender and age for Temple samples as Unknown for now until they confirm its okay to submit these fields on their behalf
@@ -750,19 +751,21 @@ seqsender <- s_toPlot %>%
   mutate(patient_status = "Unknown",
          instrument = paste0("Illumina ", instrument_type),
          library = paste0("ARTIC Network Protocol ", artic_primer_scheme),
-         assembly_method = paste0("iVar v", software_version$ivar),
+         assembly_method = paste0("UPHL-BioNGS Cecret v", software_version$Cecret),
          library_strategy = "AMPLICON",
          library_source = "VIRAL RNA",
-         library_selection = "RT-PCR",
+         library_selection = "PCR",
          library_layout = "PAIRED",
          structured_comment = "Assembly-Data",
          genbank_note = "") %>%
-  mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "500 South Broad Street, Philadelphia, PA 19146 USA",
+  mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "1930 South Broad Street Suite 37, Philadelphia, PA 19145 USA",
                                       orig_lab == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122 USA",
                                       TRUE ~ "Unknown")) %>%
   mutate(sra_file_path_1 = here("upload", "fastq", paste0(sample_id, "_filtered_R1_001.fastq.gz")),
          sra_file_path_2 = here("upload", "fastq", paste0(sample_id, "_filtered_R2_001.fastq.gz"))) %>%
-  mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC V3 primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
+  mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC ", artic_primer_scheme,
+                                     " primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length,
+                                     " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
   select(sample_id, genbank_name, sra_name, gisaid_name, gisaid_accession, collection_date, location, gisaid_location, zip, type, passage, organism,
          isolation_source, host, host_disease, host_age_bin, sex, patient_status, 
          instrument, library, assembly_method, library_strategy, library_source, library_selection, library_layout, structured_comment, median_coverage, genbank_note, design_description,
@@ -892,7 +895,7 @@ sample_type_num_vector <- 1:length(sample_type_lvls)
 ann_geom_values <- list()
 
 # pick sample type colors for ggplot
-sample_type_color_select <- c(15, 19, 16, 13, 2, 1, 4)
+sample_type_color_select <- c(15, 19, 16, 13, 2, 1, 4, 10, 7, 11, 14, 20, 17)
 sample_type_color_scheme <- c("#808080", "#000000", pal_d3("category20")(20)[sample_type_color_select])
 additional_colors <- pal_d3("category20")(20)[!1:20 %in% sample_type_color_select]
 
