@@ -12,6 +12,9 @@ sh_exe_fp <- "sh"
 
 bioinformatician_name <- "First Last, Degree"
 
+#full path of where the seqsender repo was cloned
+seqsender_fp <- "path/to/seqsender"
+
 #path changes on Windows system
 if(Sys.info()["sysname"] == "Windows")
 {

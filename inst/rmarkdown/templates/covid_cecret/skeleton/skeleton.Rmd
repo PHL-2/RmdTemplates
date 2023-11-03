@@ -113,6 +113,16 @@ rmarkdown::render(qc_report_fp, output_file = "README.md",
 rstudioapi::documentSaveAll()
 library(here)
 
+#this file needs to sit in a [aux_files/config] directory path above this project directory
+tryCatch(
+  {
+    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+  },
+  error = function(e) {
+  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+  }
+)
+
 #run this script if exists
 tryCatch(
   {
@@ -132,13 +142,13 @@ tryCatch(
 ### =============
 
 #do a test upload first. change this to FALSE when SRA upload and gisaid upload testing is successful and you want to submit the files for real
-test_upload <- TRUE 
+test_upload <- TRUE
 
 #change this flag to FALSE to not use proxy
 use_proxy <- TRUE 
 
-#change this to FALSE to overwrite the submitted files on the sFTP and to resubmit
-report_or_overwrite <- TRUE 
+#change this to TRUE to overwrite the submitted files on the sFTP and to resubmit
+overwrite <- FALSE
 
 ### =================
 ### End manual inputs
@@ -148,11 +158,13 @@ rstudioapi::documentSaveAll()
 library(here)
 library(readr)
 library(tidyverse)
-
-#intialize seqsender conda env
 library(reticulate)
-use_condaenv("seqsender", required = TRUE)
-import("os")
+
+#initialize the seqsender conda environment if it hasn't been already
+if(!grepl("seqsender", Sys.which("python"))) {
+  use_condaenv("seqsender", required = TRUE)
+  import("os")
+}
 
 #load variables
 tryCatch(
@@ -175,22 +187,28 @@ tryCatch(
 
 project_name <- basename(here())
 seqsender_py <- file.path(seqsender_fp, "seqsender.py")
+aux_seqsender_fp <- file.path(dirname(here()), "aux_files", "seqsender")
 seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.tsv", sep = "_"))
 fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
 
 seqsender <- read_tsv(seqsender_meta_fp)
 
 #path of seqsender config file
-seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "seqsender_config.yaml", full.names = TRUE)
-seqsender_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "seqsender_config_test.yaml", full.names = TRUE)
-
+seqsender_config_fp <- list.files(aux_seqsender_fp, pattern = "seqsender_config.yaml", full.names = TRUE)
+seqsender_config_test_fp <- list.files(aux_seqsender_fp, pattern = "seqsender_config_test.yaml", full.names = TRUE)
 
 if(test_upload) {
   test_flag <- "--test"
   config2use <- seqsender_config_test_fp
+  gs_token_file <- file.path(aux_seqsender_fp, "gisaid_test.authtoken")
+  gs_log <- here("gisaid", paste0(project_name, "_gisaid_test.log"))
+  gs_failed_samples_fp <- here("gisaid", paste0(project_name, "_failed_gisaid_upload_test.csv"))
 } else{
   test_flag <- ""
   config2use <- seqsender_config_fp
+  gs_token_file <- file.path(aux_seqsender_fp, "gisaid.authtoken")
+  gs_log <- here("gisaid", paste0(project_name, "_gisaid.log"))
+  gs_failed_samples_fp <- here("gisaid", paste0(project_name, "_failed_gisaid_upload.csv"))
 }
 
 if(use_proxy) {
@@ -199,10 +217,10 @@ if(use_proxy) {
   proxy_flag <- ""
 }
 
-if(report_or_overwrite) {
-  overwrite_flag <- ""
-} else{
+if(overwrite) {
   overwrite_flag <- "--overwrite"
+} else{
+  overwrite_flag <- ""
 }
 
 file_create_success_msg <- c(paste0("Processing ", project_name, "."),
@@ -217,7 +235,7 @@ upload_files_created <- cli_submit("python",
                                    seqsender_py,
                                    c(proxy_flag, "prep",
                                      "--unique_name", project_name,
-                                     "--config", shQuote(seqsender_config_test_fp, type = "cmd"),
+                                     "--config", shQuote(config2use, type = "cmd"),
                                      "--metadata", shQuote(seqsender_meta_fp, type = "cmd"),
                                      "--fasta", shQuote(fasta_fp, type = "cmd")),
                                    shQuote_type = "cmd")
@@ -226,38 +244,50 @@ if(!all(file_create_success_msg %in% upload_files_created)) {
   stop(simpleError("Seqsender failed to create some of the GISAID upload files!"))
 }
 
-gisaid_upload_success_msg <- c("Submitting now to gisaid.",
-                               "Waiting for file to write.",
-                               "No failed sequences.",
-                               "Cleaning up files.")
+gisaid_upload_success_msg <- c(paste0("[", nrow(seqsender), " rows x 30 columns]"),
+                               "failed_count: submissions failed: 0")
 
-### submit files to gisaid
-gisaid_uploaded <- cli_submit("python",
-                              seqsender_py,
-                              c(proxy_flag, "gisaid",
-                                "--unique_name", project_name,
-                                "--config", shQuote(config2use, type = "cmd"),
-                                test_flag, overwrite_flag),
-                              shQuote_type = "cmd")
+gisaid_uploaded <- ""
+
+# check the seqsender file for GISAID accession numbers
+# if the seqsender file already has legit GISAID accession numbers, don't resubmit because GISAID already has these samples
+if(all(grepl("^EPI_ISL_0$", seqsender$gisaid_accession)) | all(is.na(seqsender$gisaid_accession))) {
+  
+  # clear these GISAID log files if exist
+  file.remove(gs_log, gs_failed_samples_fp)
+  
+  ### submit files to gisaid
+  gisaid_uploaded <- cli_submit("cli3",
+                                "upload",
+                                c("--token", gs_token_file,
+                                  "--metadata", here("gisaid", paste0(project_name, "_gisaid.csv")),
+                                  "--fasta", here("gisaid", paste0(project_name, "_gisaid.fsa")),
+                                  "--frameshift", "catch_novel",
+                                  "--log", gs_log,
+                                  "--failed", gs_failed_samples_fp,
+                                  "--proxy", Sys.getenv("https_proxy")),
+                                shQuote_type = "cmd")
+}
 
 if(!all(gisaid_upload_success_msg %in% gisaid_uploaded)) {
-  stop(simpleError("Something went wrong! GISAID upload failed. Maybe there are duplicate entries already? If so, rename the GISAID name and resubmit"))
+  stop(simpleError(paste0("Something went wrong! GISAID upload failed. Have these samples been already uploaded??\n",
+                          "There may have also been a proxy error, in which case, just restart R and rerun this chunk to resubmit")))
 }
 
 #include the GISAID Accession number for the SRA and GenBank submissions
-read_gisaid_accessions <- read_csv(here("gisaid", paste0(project_name, ".log")), col_names = FALSE) %>%
-  filter(grepl("msg: ", X1)) %>%
-  mutate(X1 = gsub("msg: ", "", X1))
+read_gisaid_accessions <- read_csv(gs_log, col_names = FALSE) %>%
+  select(X2) %>%
+  mutate(X2 = gsub("msg: |}", "", X2))
 
 gisaid_number_submitted <- read_gisaid_accessions %>%
-  filter(grepl("submissions uploaded: ", X1)) %>%
-  mutate(X1 = gsub("submissions uploaded: ", "", X1)) %>%
+  filter(grepl("submissions uploaded: ", X2)) %>%
+  mutate(X2 = gsub("submissions uploaded: ", "", X2)) %>%
   pull() %>%
   as.numeric()
 
 gisaid_number_failed <- read_gisaid_accessions %>%
-  filter(grepl("submissions failed: ", X1)) %>%
-  mutate(X1 = gsub("submissions failed: ", "", X1)) %>%
+  filter(grepl("submissions failed: ", X2)) %>%
+  mutate(X2 = gsub("submissions failed: ", "", X2)) %>%
   pull() %>%
   as.numeric()
 
@@ -268,8 +298,8 @@ if(gisaid_number_submitted != nrow(seqsender) & gisaid_number_failed != 0) {
 }
   
 gisaid_accessions <- read_gisaid_accessions %>%
-  filter(!grepl("submissions uploaded: |submissions failed: ", X1)) %>%
-  separate(X1, into = c("gisaid_name", "gisaid_accession"), sep = "; ", extra = "merge") %>%
+  filter(!grepl("submissions uploaded: |submissions failed: ", X2)) %>%
+  separate(X2, into = c("gisaid_name", "gisaid_accession"), sep = "; ", extra = "merge") %>%
   mutate(genbank_note = paste0("GISAID virus name: ", gisaid_name, "; GISAID accession: ", gisaid_accession))
   
 if(!test_upload) {
