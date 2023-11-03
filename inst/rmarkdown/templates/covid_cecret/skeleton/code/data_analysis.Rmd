@@ -1043,48 +1043,7 @@ s_toPlot %>%
 
 \newpage
 
-### Figure showing conflicting variant assignments from Nextclade and pangolin
-Stars in boxes mean that the variants/sub-variants from different software agree
-
-```{r conflicting assignments, fig.height=9, fig.width=8}
-
-s_toPlot %>%
-  select(sample_id, pangolin_lineage, Nextclade_pango, sample_type, nextclade_qc_overallstatus) %>%
-  rename(Pangolin = "pangolin_lineage", NextClade = "Nextclade_pango") %>%
-  rowwise() %>%
-  mutate(pn = grepl(Pangolin, NextClade) | grepl(NextClade, Pangolin)) %>%
-  mutate(pn = ifelse(is.na(pn), FALSE, pn)) %>%
-  pivot_longer(cols = c("Pangolin", "NextClade"), names_to = "software", values_to = "variants") %>%
-  mutate(uniq = case_when(pn & grepl("Pangolin|NextClade", software) ~ "*",
-                          TRUE ~ "")) %>%
-  mutate(software = factor(software, levels = c("NextClade", "Pangolin"))) %>%
-  mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
-  mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = c("good", "mediocre", "bad"))) %>%
-  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
-  droplevels() %>%
-  {
-  ggplot(., aes(x=software, y=sample_id, fill=variants, label=uniq)) +
-    geom_tile(stat="identity") +
-    geom_text() +
-    facet_grid(nextclade_qc_overallstatus+sample_type~., space="free", scales="free",
-               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
-    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))]) +
-    theme_classic() +
-    theme(
-      strip.background = element_blank(),
-      strip.text.y = element_text(angle = 0, size = 6),
-      axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)
-      ) +
-    labs(y="", x="Software used to determine variants", fill="Variants") +
-  who_legend
-  }  +
-  plot_layout(widths = c(5, 1))
-
-```
-
-\newpage
-
-## Freyja grouped
+### Freyja grouped
 
 Only top 3 lineage in each sample is shown. The rest are grouped into "Other lineages" \newline
 No freyja results or results assigned "Misc" are grouped into "Unresolved"
@@ -1155,7 +1114,7 @@ freyja_grouping %>%
 
 ```
 
-## Freyja summarized
+### Freyja summarized
 
 ```{r freyja results summarized, fig.height=11, fig.width=8}
 
@@ -1190,6 +1149,60 @@ s %>%
   sample_type_legend
 
 ```
+
+\newpage
+
+### Figure showing conflicting variant assignments from Nextclade, Pangolin, and Freyja
+Stars in boxes mean that the variants/sub-variants from different software agree \newline
+Only the top Freyja result for each sample was used here
+
+```{r conflicting assignments, fig.height=9, fig.width=8}
+
+freyja_grouping %>%
+  select(sample_id, sample_type, lineages, relative_abundances) %>%
+  group_by(sample_id) %>%
+  filter(relative_abundances == max(relative_abundances)) %>%
+  slice(1) %>%
+  ungroup() %>%
+  mutate(lineages = gsub("\\.$", "", lineages)) %>%
+  merge(select(s_toPlot, sample_id, pangolin_lineage, Nextclade_pango, sample_type, nextclade_qc_overallstatus), by = c("sample_id", "sample_type"), all.y = TRUE) %>%
+  rename(Pangolin = "pangolin_lineage", NextClade = "Nextclade_pango", Freyja = "lineages") %>%
+  rowwise() %>%
+  mutate(pn = grepl(Pangolin, NextClade) | grepl(NextClade, Pangolin)) %>%
+  mutate(nf = grepl(NextClade, Freyja) | grepl(Freyja, NextClade)) %>%
+  mutate(fp = grepl(Freyja, Pangolin) | grepl(Pangolin, Freyja)) %>%
+  mutate(across(c(pn, nf, fp), ~ replace_na(., FALSE))) %>%
+  pivot_longer(cols = c("Pangolin", "NextClade", "Freyja"), names_to = "software", values_to = "variants") %>%
+  mutate(uniq = case_when((pn + nf + fp) == 3 & grepl("Pangolin|NextClade|Freyja", software) ~ "***",
+                          pn & grepl("Pangolin|NextClade", software) ~ "*",
+                          nf & grepl("NextClade|Freyja", software) ~ "*",
+                          fp & grepl("Freyja|Pangolin", software) ~ "*",
+                          TRUE ~ "")) %>%
+  mutate(software = factor(software, levels = c("NextClade", "Pangolin", "Freyja"))) %>%
+  mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
+  mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = c("good", "mediocre", "bad"))) %>%
+  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=software, y=sample_id, fill=variants, label=uniq)) +
+    geom_tile(stat="identity") +
+    geom_text() +
+    facet_grid(nextclade_qc_overallstatus+sample_type~., space="free", scales="free",
+               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))]) +
+    theme_classic() +
+    theme(
+      strip.background = element_blank(),
+      strip.text.y = element_text(angle = 0, size = 6),
+      axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)
+      ) +
+    labs(y="", x="Software used to determine variants", fill="Variants") +
+  who_legend
+  }  +
+  plot_layout(widths = c(5, 1))
+
+```
+
 ## Quality control
 
 ### Coverage and QC status
