@@ -987,7 +987,7 @@ seqsender <- s_toPlot %>%
   mutate(gisaid_accession = "",
          location = "USA: Pennsylvania",
          gisaid_location = "North America/USA/Pennsylvania",
-         zip = "19146",
+         zip = "19145",
          type = "betacoronavirus",
          passage = "Original") %>%
   #make gender and age for Temple samples as Unknown for now until they confirm its okay to submit these fields on their behalf
@@ -1005,11 +1005,11 @@ seqsender <- s_toPlot %>%
          assembly_method = paste0("DRAGEN COVID Lineage ", dragen_covid_lineage_version),
          library_strategy = "AMPLICON",
          library_source = "VIRAL RNA",
-         library_selection = "RT-PCR",
+         library_selection = "PCR",
          library_layout = "PAIRED",
          structured_comment = "Assembly-Data",
          genbank_note = "") %>%
-  mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "500 South Broad Street, Philadelphia, PA 19146 USA",
+  mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "1930 South Broad Street Suite 37, Philadelphia, PA 19145 USA",
                                       orig_lab == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122 USA",
                                       TRUE ~ "Unknown")) %>%
   mutate(sra_file_path_1 = here("upload", "fastq", paste0(sample_id, "_S", SampleNumber, "_L00", lane, "_R1_001.fastq.gz"))) %>%

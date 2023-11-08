@@ -335,7 +335,7 @@ multi_grep <- function(named_vector, col_name) {
 
 named_sample_type <- c("^Test-" = "Testing sample type",
                        "^NC[0-9]*$|CORNER$|Corner$|corner$" = "Water control",
-                       "^BLANK[0-9]*$" = "Reagent control",
+                       "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
                        "^PC[0-9]*$" = "Mock DNA positive control",
                        "^H[0-9]*$|^8[0-9]*$|^9[0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
                        "^WW" = "Wastewater")
