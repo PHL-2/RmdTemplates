@@ -955,7 +955,91 @@ sample_type_legend <- s %>%
 
 ```
 
-```{r variant colors}
+
+#Test code
+```{r eval = TRUE}
+
+  variant_list <- s %>%
+    #is_designated means that the sample was assigned to a reference strain exactly using PANGO algorithm (decision tree) rather than PUSHER
+    #the pangolin_note section here for PUSHER will be 'Assigned from designation hash.' so its useless
+    select(nextclade_clade_who, pangolin_lineage, pangolin_note, Nextclade_pango) %>%
+    mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
+    mutate(pangolin_note = ifelse(pangolin_note == "Assigned from designation hash.", NA, pangolin_note)) %>%
+    unique() %>%
+    separate_rows(pangolin_note, sep=" ") %>%
+    pivot_longer(cols = c("pangolin_lineage", "pangolin_note", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
+    mutate(variants = gsub("\\(.*", "", variants)) %>%
+    select(-variant_num) %>%
+    filter(!is.na(variants)) %>%
+    filter(variants!="Unassigned") %>%
+    distinct() %>%
+    arrange(nextclade_clade_who, variants) %>%
+    mutate(combined_list = gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", variants))
+
+  variant_color <- data.frame(colors = c(calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)], few_pal(palette = "Light")(8))) %>%
+    slice_head(n=length(unique(variant_list$combined_list))) %>%
+    bind_cols(lineage = sort(unique(variant_list$combined_list))) %>%
+    left_join(variant_list, by = c("lineage" = "combined_list")) %>%
+    select(-nextclade_clade_who) %>%
+    distinct()
+  
+  var_colorgrad <- NULL
+  for(var in unique(variant_color$lineage)) {
+    subcolors <- variant_color %>%
+      filter(lineage == var)
+
+    variant_gradient <- colorRampPalette(c(unique(subcolors$colors), adjustcolor(unique(subcolors$colors), alpha.f = 0.1)), alpha = TRUE)(nrow(subcolors)) 
+    
+    subcolors <- data.frame(subcolors = variant_gradient) %>%
+      bind_cols(subcolors)
+    
+    var_colorgrad <- var_colorgrad %>%
+      bind_rows(subcolors)
+  }
+  
+  var_colorgrad<- var_colorgrad %>%
+    left_join(variant_list, by = c("variants", "lineage" = "combined_list"))
+
+  ann_geom_values[["variants"]] <- var_colorgrad %>%
+    select(subcolors, variants) %>%
+    distinct() %>%
+    pull(subcolors, name = variants) 
+
+  ann_geom_values[["who_label"]] <- var_colorgrad %>%
+    select(colors, lineage) %>%
+    distinct() %>%
+    pull(colors, name = "lineage")
+  
+ann_geom_values[["variants"]] <- c("#80808080", "#80808080", ann_geom_values[["variants"]])
+names(ann_geom_values[["variants"]]) <- c(NA, "Unassigned", names(ann_geom_values[["variants"]])[-(1:2)])
+
+
+who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_geom_values[["who_label"]])) %>%
+  ggplot(aes(x = x, y = y, fill = fill_col)) +
+    geom_bar(stat="identity", alpha = 0) +
+    scale_fill_manual(values = ann_geom_values$who_label) +
+    guides(fill = guide_legend(override.aes = list(alpha=1), reverse=F, order = 1)) + 
+    theme_bw() +
+    theme(
+      strip.text = element_text(size = 12),
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.line = element_blank(),
+      legend.position = c(0, .8),
+      plot.margin= margin(0, 0, 0, 0, "pt")
+    ) +
+    labs(fill = "WHO label", y = "", x = "")
+
+```
+
+
+
+#Continued code
+```{r variant colors, eval=FALSE}
 
 i <- 1
 ann_geom_values[["variants"]] <- c()
@@ -965,14 +1049,14 @@ ann_geom_values[["who_label"]] <- c()
 for(who_label in c("Reference", sort(unique(s$nextclade_clade_who)[unique(s$nextclade_clade_who) != "Reference"]))) {
   
   variant_list <- s %>%
-    filter(nextclade_clade_who == who_label) %>%
+    filter(nextclade_clade_who == "Omicron") %>%
     #is_designated means that the sample was assigned to a reference strain exactly using PANGO algorithm (decision tree) rather than PUSHER
     #the pangolin_note section here for PUSHER will be 'Assigned from designation hash.' so its useless
     select(pangolin_lineage, pangolin_note, Nextclade_pango) %>%
     mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
     mutate(pangolin_note = ifelse(pangolin_note == "Assigned from designation hash.", NA, pangolin_note)) %>%
     unique() %>%
-    separate_rows(pangolin_note, sep=" ") %>%
+    separate_rows(pangolin_note, sep=" ") #%>%
     pivot_longer(cols = c("pangolin_lineage", "pangolin_note", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
     mutate(variants = gsub("\\(.*", "", variants)) %>%
     select(variants) %>%
