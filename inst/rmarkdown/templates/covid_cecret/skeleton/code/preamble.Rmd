@@ -751,7 +751,7 @@ seqsender <- s_toPlot %>%
   mutate(patient_status = "Unknown",
          instrument = paste0("Illumina ", instrument_type),
          library = paste0("ARTIC Network Protocol ", artic_primer_scheme),
-         assembly_method = paste0("UPHL-BioNGS Cecret v", software_version$Cecret),
+         assembly_method = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
          library_strategy = "AMPLICON",
          library_source = "VIRAL RNA",
          library_selection = "PCR",
