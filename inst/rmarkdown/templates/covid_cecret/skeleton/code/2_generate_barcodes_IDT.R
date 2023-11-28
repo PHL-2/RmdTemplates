@@ -12,7 +12,7 @@ library(stringr)
 # Manual input
 ##############
 
-tar_n_upload_run <- TRUE
+run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
@@ -86,16 +86,52 @@ barcodes <- tryCatch(
 # Load run sample sheet
 #######################
 
-#get the newly added run folder
-run_folder <- sequencing_folder_fp %>%
-  list.files(full.names = T) %>%
-  data.frame(filenames = .) %>%
-  filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
-  filter(grepl("[0-9]*_[M|N][0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$", filenames)) %>%
-  filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
-  pull()
+sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date),
+                                  "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
 
-run_samplesheet_fp <- file.path(run_folder, "SampleSheet.csv")
+if(run_uploaded_2_basespace) {
+
+  # Get the run id from BaseSpace
+  bs_run <- cli_submit("bs", "list", c("runs", "-f csv")) %>%
+    str_split(",") %>%
+    do.call("rbind", .) %>%
+    as.data.frame() %>%
+    `colnames<-`(.[1, ]) %>%
+    slice(-1) %>%
+    filter(grepl(paste0("^", sequencing_folder_regex), Name))
+
+  bs_run_id <- bs_run %>%
+    select(Id) %>%
+    pull()
+
+  if(length(bs_run_id) > 1) {
+    stop(simpleError("There were two sequencing runs that matched this date. Investigate!"))
+  }
+
+  # Download the SampleSheet from BaseSpace
+  cli_submit("bs", "download", c("runs", "--id", bs_run_id,
+                                 "--exclude '*'",
+                                 "--include 'SampleSheet.csv'",
+                                 "-o", here("metadata", "munge"),
+                                 "--no-metadata",
+                                 "--overwrite"))
+
+} else {
+
+  #get the local run folder
+  run_folder <- sequencing_folder_fp %>%
+    list.files(full.names = T) %>%
+    data.frame(filenames = .) %>%
+    filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
+    filter(grepl(sequencing_folder_regex, filenames)) %>%
+    filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
+    pull()
+
+  file.copy(file.path(run_folder, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
+
+}
+
+run_samplesheet_fp <- here("metadata", "munge", "SampleSheet.csv")
 run_sample_sheet <- load_sample_sheet(run_samplesheet_fp)
 
 read_length <- unique(unlist(run_sample_sheet$Reads))
@@ -144,7 +180,6 @@ read_sheet <- function(fp, sheet_name) {
 
 index_sheet <- read_sheet(metadata_input_fp, "Index")
 sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
-
 
 ###################################################################################
 # Load the metadata sheet from epidemiologists and merge with sample metadata sheet
@@ -660,60 +695,3 @@ metadata_sheet %>%
 metadata_sheet %>%
   select(sample_id, any_of(phi_info)) %>%
   write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")), row.names = FALSE)
-
-############################################
-# Tar the sequencing folder and upload to S3
-############################################
-
-if(tar_n_upload_run) {
-
-  folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
-    as.Date(format = "%Y%m%d")
-
-  sequencing_run <- gsub(".*/", "", run_folder)
-
-  if(folder_date != gsub("_.*", "", basename(here())) | is.na(folder_date)) {
-    stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
-  }
-
-  #tar the run folder
-  message("Making sequencing run tarball")
-  system2("tar", c("-czf", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"),
-                   "-C", shQuote(run_folder, type = "cmd"), "."))
-
-  s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
-
-  nf_demux_samplesheet <- data.frame(
-    id = sequencing_run,
-    samplesheet = paste0(s3_run_bucket_fp, sample_sheet_fn),
-    lane = "",
-    flowcell = paste0(s3_run_bucket_fp, sequencing_run, ".tar.gz")
-  )
-
-  nf_demux_samplesheet_fp <- here("metadata", "munge", paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
-
-  nf_demux_samplesheet %>%
-    write.csv(file = nf_demux_samplesheet_fp,
-              row.names = FALSE, quote = FALSE)
-
-  md5_fp <- file.path(sequencing_folder_fp, paste0(sequencing_run, ".md5"))
-
-  message("Making md5 file")
-
-  paste0(sequencing_run, ".tar.gz") %>%
-    paste0(tools::md5sum(file.path(sequencing_folder_fp, .)), "  ", .) %>%
-    write(file = md5_fp)
-
-  system2("aws", c("sso login"))
-
-  message("Uploading to AWS S3")
-  s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
-  s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samplesheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
-  s3_cp_md5 <- system2("aws", c("s3 cp", shQuote(md5_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
-  s3_cp_run_tarball <- system2("aws", c("s3 cp", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
-
-  if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet, s3_cp_md5, s3_cp_run_tarball), ignore.case = TRUE))) {
-    stop(simpleError("Upload to s3 bucket failed"))
-  }
-
-}
