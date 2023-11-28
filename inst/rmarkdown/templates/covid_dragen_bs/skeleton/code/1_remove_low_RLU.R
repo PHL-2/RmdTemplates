@@ -114,7 +114,8 @@ MEO_samples <- read_csv(RLU_fp) %>%
 PHL_all_fp <- list.files(here("metadata", "extra_metadata"), pattern = "PHLspecimens.*.xlsx", full.names = TRUE)
 PHL_fp <- PHL_all_fp[!grepl("_filtered.xlsx$", PHL_all_fp)]
 
-PHL_data <- read_excel_safely(PHL_fp, sheet = "PHL", skip_row = 1)
+PHL_data <- lapply(PHL_fp, read_excel_safely, sheet = "PHL", skip_row = 1) %>%
+  do.call(rbind, .)
 
 if(is.null(PHL_data)) {
   PHL_data <- data.frame(SPECIMEN_NUMBER = "", RLU = "")
@@ -211,7 +212,8 @@ filtered_PHL_data <- PHL_data %>%
 potential_ct_col_names <- c("ct value", "CT value", "CT values", "CTvalue", "CTvalues",
                             "ct values", "ctvalue", "ctvalues")
 
-TU_data <- read_excel_safely(PHL_fp, sheet = "Temple")
+TU_data <- lapply(PHL_fp, read_excel_safely, sheet = "Temple") %>%
+  do.call(rbind, .)
 
 if(is.null(TU_data)) {
   TU_data <- data.frame(SPECIMEN_NUMBER = "") %>%
@@ -227,7 +229,11 @@ if(is.null(TU_data)) {
 
 excel_data <- list(PHL = filtered_PHL_data, Temple = TU_data)
 
-other_sheets <- excel_sheets(PHL_fp)[!grepl("PHL|Temple", excel_sheets(PHL_fp))]
+other_sheets <- lapply(PHL_fp, excel_sheets) %>%
+  unlist() %>%
+  unique()
+
+other_sheets <- other_sheets[!grepl("PHL|Temple", other_sheets)]
 
 other_samples <- data.frame(sample_name = "")
 
@@ -257,7 +263,7 @@ for(sheet_name in other_sheets) {
 
 }
 
-write.xlsx(excel_data, file = gsub(".xlsx$", "_filtered.xlsx", PHL_fp))
+write.xlsx(excel_data, file = gsub(".xlsx$", "_filtered.xlsx", PHL_fp[1]))
 
 ################################################################################
 # Make a preliminary platemap for scientists (no environmental samples included)

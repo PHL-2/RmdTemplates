@@ -95,7 +95,7 @@ run_folder <- sequencing_folder_fp %>%
   list.files(full.names = T) %>%
   data.frame(filenames = .) %>%
   filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
-  filter(grepl("[0-9]*_[M|N][0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$", filenames)) %>%
+  filter(grepl(paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$"), filenames)) %>%
   filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
   pull()
 
