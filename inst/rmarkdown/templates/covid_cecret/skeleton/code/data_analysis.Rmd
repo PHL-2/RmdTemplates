@@ -960,7 +960,9 @@ Nextclade version `r software_version$nextclade`
 s_toPlot %>%
   select(sample_id, Nextclade_pango, sample_type, nextclade_clade_who) %>%
   group_by(sample_type, nextclade_clade_who) %>%
-  mutate(fraction = 1/n()) %>%
+  mutate(fraction = 1/n(),
+         sample_type = gsub(pattern = "(Mock).*", replacement = "\\1", x = sample_type),
+         nextclade_clade_who = str_to_title(nextclade_clade_who)) %>%
   ungroup() %>%
   mutate(variants = fct_lump(Nextclade_pango, 20, w = fraction)) %>% 
   select(-Nextclade_pango) %>%
@@ -972,14 +974,15 @@ s_toPlot %>%
   {
   ggplot(., aes(x=sample_type, y=props, fill=variants)) +
     geom_bar(stat="identity", position = position_fill(reverse = FALSE)) +
-    facet_grid(nextclade_clade_who~sample_type, space = "free", scales="free",
-               labeller = labeller(.default = function(x) {gsub(" ", "\n", x)}, .multi_line = FALSE)) +
+    facet_wrap(sample_type+nextclade_clade_who~.,  scales="free", #space = "free",
+               #labeller = labeller(.default = function(x) {gsub(" ", "\n", x)}, .multi_line = FALSE)
+               ) +
     scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))]) +
     scale_y_continuous(limits = c(0,1), expand=c(0,0), labels=percent) +
     theme_classic() +
     theme(
-      strip.background = element_rect(color = "white", size = 10),
-      strip.text = element_text(size = 12),
+      strip.background = element_blank(),
+      strip.text = element_text(size = 12, margin = margin()),
       axis.text.x = element_blank(),
       axis.ticks.x = element_blank(),
       plot.title = element_text(hjust = 0.5)
