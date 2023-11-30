@@ -955,176 +955,61 @@ sample_type_legend <- s %>%
 
 ```
 
+```{r variant colors}
 
-#Test code
-```{r eval = TRUE}
+variant_list <- s %>%
+  select(nextclade_clade_who, pangolin_lineage, pangolin_note, Nextclade_pango) %>%
+  mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
+  mutate(pangolin_note = ifelse(pangolin_note == "Assigned from designation hash.", NA, pangolin_note)) %>%
+  unique() %>%
+  separate_rows(pangolin_note, sep=" ") %>%
+  pivot_longer(cols = c("pangolin_lineage", "pangolin_note", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
+  mutate(variants = gsub("\\(.*", "", variants)) %>%
+  select(-variant_num) %>%
+  filter(!is.na(variants)) %>%
+  filter(variants!="Unassigned") %>%
+  distinct() %>%
+  arrange(nextclade_clade_who, variants) %>%
+  mutate(combined_list = gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", variants))
 
-  variant_list <- s %>%
-    #is_designated means that the sample was assigned to a reference strain exactly using PANGO algorithm (decision tree) rather than PUSHER
-    #the pangolin_note section here for PUSHER will be 'Assigned from designation hash.' so its useless
-    select(nextclade_clade_who, pangolin_lineage, pangolin_note, Nextclade_pango) %>%
-    mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
-    mutate(pangolin_note = ifelse(pangolin_note == "Assigned from designation hash.", NA, pangolin_note)) %>%
-    unique() %>%
-    separate_rows(pangolin_note, sep=" ") %>%
-    pivot_longer(cols = c("pangolin_lineage", "pangolin_note", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
-    mutate(variants = gsub("\\(.*", "", variants)) %>%
-    select(-variant_num) %>%
-    filter(!is.na(variants)) %>%
-    filter(variants!="Unassigned") %>%
-    distinct() %>%
-    arrange(nextclade_clade_who, variants) %>%
-    mutate(combined_list = gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", variants))
-
-  variant_color <- data.frame(colors = c(calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)], few_pal(palette = "Light")(8))) %>%
-    slice_head(n=length(unique(variant_list$combined_list))) %>%
-    bind_cols(lineage = sort(unique(variant_list$combined_list))) %>%
-    left_join(variant_list, by = c("lineage" = "combined_list")) %>%
-    select(-nextclade_clade_who) %>%
-    distinct()
+variant_color <- data.frame(colors = c(calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)],
+                                       few_pal(palette = "Light")(8))) %>%
+  slice_head(n=length(unique(variant_list$combined_list))) %>%
+  bind_cols(lineage = sort(unique(variant_list$combined_list))) %>%
+  left_join(variant_list, by = c("lineage" = "combined_list")) %>%
+  select(-nextclade_clade_who) %>%
+  distinct()
   
-  var_colorgrad <- NULL
-  for(var in unique(variant_color$lineage)) {
-    subcolors <- variant_color %>%
-      filter(lineage == var)
+var_colorgrad <- NULL
+for(var in unique(variant_color$lineage)) {
+  subcolors <- variant_color %>%
+    filter(lineage == var)
 
-    variant_gradient <- colorRampPalette(c(unique(subcolors$colors), adjustcolor(unique(subcolors$colors), alpha.f = 0.1)), alpha = TRUE)(nrow(subcolors)) 
+  variant_gradient <- colorRampPalette(c(unique(subcolors$colors),
+                                         adjustcolor(unique(subcolors$colors), alpha.f = 0.1)), alpha = TRUE)(nrow(subcolors)) 
     
-    subcolors <- data.frame(subcolors = variant_gradient) %>%
-      bind_cols(subcolors)
-    
-    var_colorgrad <- var_colorgrad %>%
-      bind_rows(subcolors)
-  }
+  subcolors <- data.frame(subcolors = variant_gradient) %>%
+    bind_cols(subcolors)
   
-  var_colorgrad<- var_colorgrad %>%
-    left_join(variant_list, by = c("variants", "lineage" = "combined_list"))
-
-  ann_geom_values[["variants"]] <- var_colorgrad %>%
-    select(subcolors, variants) %>%
-    distinct() %>%
-    pull(subcolors, name = variants) 
-
-  ann_geom_values[["who_label"]] <- var_colorgrad %>%
-    select(colors, lineage) %>%
-    distinct() %>%
-    pull(colors, name = "lineage")
-  
-ann_geom_values[["variants"]] <- c("#80808080", "#80808080", ann_geom_values[["variants"]])
-names(ann_geom_values[["variants"]]) <- c(NA, "Unassigned", names(ann_geom_values[["variants"]])[-(1:2)])
-
-
-who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_geom_values[["who_label"]])) %>%
-  ggplot(aes(x = x, y = y, fill = fill_col)) +
-    geom_bar(stat="identity", alpha = 0) +
-    scale_fill_manual(values = ann_geom_values$who_label) +
-    guides(fill = guide_legend(override.aes = list(alpha=1), reverse=F, order = 1)) + 
-    theme_bw() +
-    theme(
-      strip.text = element_text(size = 12),
-      strip.background = element_blank(),
-      panel.grid = element_blank(),
-      panel.border = element_blank(),
-      axis.title = element_blank(),
-      axis.text = element_blank(),
-      axis.ticks = element_blank(),
-      axis.line = element_blank(),
-      legend.position = c(0, .8),
-      plot.margin= margin(0, 0, 0, 0, "pt")
-    ) +
-    labs(fill = "WHO label", y = "", x = "")
-
-```
-
-
-
-#Continued code
-```{r variant colors, eval=FALSE}
-
-i <- 1
-ann_geom_values[["variants"]] <- c()
-ann_geom_values[["who_label"]] <- c()
-
-#loop over the VOCs
-for(who_label in c("Reference", sort(unique(s$nextclade_clade_who)[unique(s$nextclade_clade_who) != "Reference"]))) {
-  
-  variant_list <- s %>%
-    filter(nextclade_clade_who == "Omicron") %>%
-    #is_designated means that the sample was assigned to a reference strain exactly using PANGO algorithm (decision tree) rather than PUSHER
-    #the pangolin_note section here for PUSHER will be 'Assigned from designation hash.' so its useless
-    select(pangolin_lineage, pangolin_note, Nextclade_pango) %>%
-    mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
-    mutate(pangolin_note = ifelse(pangolin_note == "Assigned from designation hash.", NA, pangolin_note)) %>%
-    unique() %>%
-    separate_rows(pangolin_note, sep=" ") #%>%
-    pivot_longer(cols = c("pangolin_lineage", "pangolin_note", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
-    mutate(variants = gsub("\\(.*", "", variants)) %>%
-    select(variants) %>%
-    filter(!is.na(variants)) %>%
-    filter(variants!="Unassigned") %>%
-    unique() %>%
-    pull() %>%
-    str_sort(numeric = TRUE, decreasing = FALSE)
-  
-  #get the letters, period, and first number of each variant
-  combined_list <- unique(gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", variant_list))
-  
-  for(combined_variant in combined_list) {
-    
-    #if a pangolin_lineage ends with a number, get the sub-lineages with that number
-    if(grepl("[0-9]$", combined_variant)) {
-      
-      #make the sublineage regex
-      combined_variant_gsub <- gsub("\\.", "\\\\.", combined_variant)
-      exact_lineage_regex <- paste0("^", combined_variant_gsub, "$")
-      sublineage_regex <- paste0("^", combined_variant_gsub, "\\.")
-      final_sublineage_regex <- paste0(exact_lineage_regex, "|", sublineage_regex)
-      
-      sublineage <- variant_list[grepl(final_sublineage_regex, variant_list)]
-    } else{
-      sublineage <- combined_variant
-    }
-    
-    variant_color <- c(calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)], few_pal(palette = "Light")(8))[i]
-    variant_gradient <- colorRampPalette(c(variant_color, adjustcolor(variant_color, alpha.f = 0.1)), alpha = TRUE)(length(sublineage))
-    names(variant_gradient) <- sublineage
-    
-    who_color <- variant_color
-    names(who_color) <- paste0(who_label, " - ", combined_variant)
-  
-    ann_geom_values[["variants"]] <- c(ann_geom_values[["variants"]], variant_gradient)
-    ann_geom_values[["who_label"]] <- c(ann_geom_values[["who_label"]], who_color)
-  
-  i <- i + 1
-    
-  }
-  
+  var_colorgrad <- var_colorgrad %>%
+    bind_rows(subcolors)
 }
+  
+var_colorgrad<- var_colorgrad %>%
+  left_join(variant_list, by = c("variants", "lineage" = "combined_list"))
 
+ann_geom_values[["variants"]] <- var_colorgrad %>%
+  select(subcolors, variants) %>%
+  distinct() %>%
+  pull(subcolors, name = variants) 
+
+ann_geom_values[["parent_variant"]] <- var_colorgrad %>%
+  select(colors, lineage) %>%
+  distinct() %>%
+  pull(colors, name = "lineage")
+  
 ann_geom_values[["variants"]] <- c("#80808080", "#80808080", ann_geom_values[["variants"]])
 names(ann_geom_values[["variants"]]) <- c(NA, "Unassigned", names(ann_geom_values[["variants"]])[-(1:2)])
-
-#show_col(ann_geom_values[["variants"]])
-
-who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_geom_values[["who_label"]])) %>%
-  ggplot(aes(x = x, y = y, fill = fill_col)) +
-    geom_bar(stat="identity", alpha = 0) +
-    scale_fill_manual(values = ann_geom_values$who_label) +
-    guides(fill = guide_legend(override.aes = list(alpha=1), reverse=F, order = 1)) + 
-    theme_bw() +
-    theme(
-      strip.text = element_text(size = 12),
-      strip.background = element_blank(),
-      panel.grid = element_blank(),
-      panel.border = element_blank(),
-      axis.title = element_blank(),
-      axis.text = element_blank(),
-      axis.ticks = element_blank(),
-      axis.line = element_blank(),
-      legend.position = c(0, .8),
-      plot.margin= margin(0, 0, 0, 0, "pt")
-    ) +
-    labs(fill = "WHO label", y = "", x = "")
 
 ```
 
@@ -1211,14 +1096,14 @@ for(col_num in col2show) {
                                                   is.na(nextclade_qc_overallstatus) & isControl ~ "control",
                                                   TRUE ~ nextclade_qc_overallstatus)) %>%
     mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = names(ann_geom_values$linetype))) %>%
-    mutate(who_label = case_when(is.na(Nextclade_pango) & !isControl ~ "no results",
+    mutate(parent_variant = case_when(is.na(Nextclade_pango) & !isControl ~ "no results",
                                  is.na(Nextclade_pango) & isControl ~ "control",
-                                 TRUE ~ paste0(nextclade_clade_who, " - ", gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", Nextclade_pango)))) %>%
-    mutate(who_label = factor(who_label, levels = c(names(ann_geom_values$who_label), "no results", "control"))) %>%
+                                 TRUE ~ gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", Nextclade_pango))) %>%
+    mutate(parent_variant = factor(parent_variant, levels = c(names(ann_geom_values$parent_variant), "no results", "control"))) %>%
     filter(sample_id != "Undetermined") %>%
     filter(plate_col == col_num) %>%
     droplevels() %>%
-    select(sample_id, who_label, nextclade_qc_overallstatus, sample_type)
+    select(sample_id, parent_variant, nextclade_qc_overallstatus, sample_type)
   
   sample_type_label <- setNames(as.character(filtered_samp_name$sample_type), filtered_samp_name$sample_id)
 
@@ -1228,13 +1113,13 @@ for(col_num in col2show) {
     merge(filtered_samp_name, by = "sample_id", all = TRUE) %>%
     droplevels() %>%
     {
-    ggplot(., aes(x = position, y = slide_window_100, group = sample_id, fill = who_label)) +
+    ggplot(., aes(x = position, y = slide_window_100, group = sample_id, fill = parent_variant)) +
       geom_line(aes(linetype = nextclade_qc_overallstatus), color = "black") +
       geom_area(position = "identity") +
       facet_wrap(~sample_id, ncol = 1, scales = "free_y", labeller = labeller(sample_id = sample_type_label)) +
       scale_linetype_manual(values = ann_geom_values$linetype[match(levels(.$nextclade_qc_overallstatus), names(ann_geom_values$linetype))]) +
-      scale_fill_manual(values = c(ann_geom_values$who_label, setNames(c("#808080", "#000000"), c("no results", "control")))[match(levels(.$who_label),
-                                                                                                  c(names(ann_geom_values$who_label), "no results", "control"))]) +
+      scale_fill_manual(values = c(ann_geom_values$parent_variant, setNames(c("#808080", "#000000"), c("no results", "control")))[match(levels(.$parent_variant),
+                                                                                                  c(names(ann_geom_values$parent_variant), "no results", "control"))]) +
       scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
       theme_bw() +
       theme(
@@ -1246,7 +1131,7 @@ for(col_num in col2show) {
         ) +
       labs(x=paste0("Column ", col_num, " samples"),
            y="Sliding window average (X)",
-           fill = "WHO",
+           fill = "Parent\nvariant",
            linetype = "Nextclade Quality") +
       guides(linetype = guide_legend(order = 1), fill = guide_legend(order = 2)) +
     annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))

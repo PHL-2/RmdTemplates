@@ -984,8 +984,7 @@ s_toPlot %>%
       axis.ticks.x = element_blank(),
       plot.title = element_text(hjust = 0.5)
       ) +
-    labs(x="", y="Relative abundance", title = "Sample type", fill="Variants") #+
-    #who_legend
+    labs(x="", y="Relative abundance", title = "Sample type", fill="Variants")
   } +
   plot_layout(widths = c(5, 1))
 
@@ -1034,8 +1033,7 @@ s_toPlot %>%
       strip.background = element_blank(),
       strip.text.y = element_text(angle = 0, size = 6)
       ) +
-    labs(y="", x="Relative abundance", fill="Variants") #+
-  #who_legend
+    labs(y="", x="Relative abundance", fill="Variants")
   } +
   plot_layout(widths = c(5, 1))
 
@@ -1196,8 +1194,7 @@ freyja_grouping %>%
       strip.text.y = element_text(angle = 0, size = 6),
       axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)
       ) +
-    labs(y="", x="Software used to determine variants", fill="Variants") #+
-  #who_legend
+    labs(y="", x="Software used to determine variants", fill="Variants")
   }  +
   plot_layout(widths = c(5, 1))
 
