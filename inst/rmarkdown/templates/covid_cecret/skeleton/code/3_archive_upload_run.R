@@ -107,7 +107,7 @@ if(run_uploaded_2_basespace) {
                     command2run = paste("echo Estimated:", paste0(c("[", rep("=", bars+1), "];"), collapse = ""),
                                         "echo -n 'Progress:  [ ';",
                                         "tar",
-                                        "--checkpoint=`du -sk --apparent-size", sequencing_run_fp, "| cut -f1 | awk '{print $1 /", bars, "}'`",
+                                        "--checkpoint=`du -sk --apparent-size", sequencing_run_fp, "| cut -f1 | awk '{print int($1 /", bars, ")}'`",
                                         # this flag shows a progress bar
                                         "--checkpoint-action='ttyout=\b=>'",
                                         # this flag shows the read/write speed

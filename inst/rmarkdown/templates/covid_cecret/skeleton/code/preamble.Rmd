@@ -477,6 +477,21 @@ nc_v_fp %>%
   select(pipeline, software, version) %>%
   write_csv(file = software_version_fp, append = TRUE)
 
+unzip(here("data", "processed_cecret", "nextclade", "sars.zip"),
+      exdir = here("data", "processed_cecret", "nextclade"), files = "tag.json")
+
+nc_dl_fp <- here("data", "processed_cecret", "nextclade", "tag.json")
+
+nc_dl_fp %>%
+  read_csv(col_names = FALSE) %>%
+  rename(version = "X1") %>%
+  filter(grepl("tag", version)) %>%
+  mutate(pipeline = "UPHL-BioNGS-Cecret",
+         software = "nextclade-dataset",
+         version = gsub("tag: |,", "", version)) %>%
+  select(pipeline, software, version) %>%
+  write_csv(file = software_version_fp, append = TRUE)
+
 ```
 
 ```{r load freyja results, eval = import_data}
@@ -1118,8 +1133,7 @@ for(col_num in col2show) {
       geom_area(position = "identity") +
       facet_wrap(~sample_id, ncol = 1, scales = "free_y", labeller = labeller(sample_id = sample_type_label)) +
       scale_linetype_manual(values = ann_geom_values$linetype[match(levels(.$nextclade_qc_overallstatus), names(ann_geom_values$linetype))]) +
-      scale_fill_manual(values = c(ann_geom_values$parent_variant, setNames(c("#808080", "#000000"), c("no results", "control")))[match(levels(.$parent_variant),
-                                                                                                  c(names(ann_geom_values$parent_variant), "no results", "control"))]) +
+      scale_fill_manual(values = c(ann_geom_values$parent_variant, setNames(c("#808080", "#000000"), c("no results", "control")))[match(levels(.$parent_variant), c(names(ann_geom_values$parent_variant), "no results", "control"))]) +
       scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
       theme_bw() +
       theme(
@@ -1149,7 +1163,4 @@ empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) re
 ```
 
 ```{r}
-
-## this is a test for the PR
-
 ```

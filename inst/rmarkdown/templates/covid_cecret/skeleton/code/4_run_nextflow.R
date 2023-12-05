@@ -59,7 +59,7 @@ submit_screen_job(message2display = "Demultiplex with BCLConvert",
                   command2run = paste("nextflow run nf-core/demultiplex",
                                       "-c ~/.nextflow/config",
                                       "-profile", demux_profile,
-                                      "-bucket-dir", paste0(s3_nf_work_bucket, "/demux_", sequencing_date),
+                                      "-bucket-dir", paste0(s3_nextflow_work_bucket, "/demux_", sequencing_date),
                                       "-resume",
                                       "--input", paste0(s3_run_bucket, "/", sequencing_date, "/", sequencing_date, "_nf_demux_samplesheet.csv"),
                                       "--outdir", paste0(s3_fastq_bucket, "/", sequencing_date, "/processed_bclconvert")))
@@ -92,13 +92,29 @@ if(undetermined_bytes/sum(fastq_file_sizes$bytes) > 0.5) {
   stop(simpleError("Something might've went wrong with the demultiplexing!\nThe unassigned reads makes up more than 50% of the total reads!"))
 }
 
+# Download most recent Nextclade dataset
+submit_screen_job(message2display = "Download Nextclade SARS-CoV-2 data",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = "nextclade-dl",
+                  command2run = paste("mkdir -p ~/.local/bin/;",
+                                      "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
+                                      "chmod +x ~/.local/bin/nextclade;",
+                                      "nextclade --version;",
+                                      "nextclade dataset get --name sars-cov-2 --output-zip ~/sars.zip;",
+                                      "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
+                                      "rm ~/sars.zip"))
+
+check_screen_job(message2display = "Checking Nextclade download job",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = "nextclade-dl")
+
 # Cecret pipeline
 submit_screen_job(message2display = "Process data through Cecret pipeline",
                   ec2_login = ec2_hostname,
                   screen_session_name = "cecret",
                   command2run = paste("nextflow run UPHL-BioNGS/Cecret",
                                       "-profile", cecret_profile,
-                                      "-bucket-dir", paste0(s3_nf_work_bucket, "/cecret_", sequencing_date),
+                                      "-bucket-dir", paste0(s3_nextflow_work_bucket, "/cecret_", sequencing_date),
                                       "-r master",
                                       "-resume",
                                       "--reads", paste0(s3_fastq_bucket, "/", sequencing_date, "/processed_bclconvert/", unique(fastq_file_sizes$sequencing_folder)),
@@ -139,3 +155,8 @@ system2("aws", c("s3 cp",
                  "--include '*.cov.txt'",
                  "--include '*.depth.txt'",
                  "--include '*cecret_results.csv'"))
+
+# Download Nextclade dataset
+system2("aws", c("s3 cp",
+                 paste0(s3_reference_bucket, "/nextclade/sars.zip"),
+                 here("data", "processed_cecret", "nextclade")))

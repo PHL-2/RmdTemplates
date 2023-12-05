@@ -952,8 +952,9 @@ knitr::include_graphics(here("data", "figures", paste0(sequencing_date, "_slidin
 ## Lineage Results
 
 ### Variant assignments from Nextclade
+Nextclade version `r software_version[["nextclade"]]`
 
-Nextclade version `r software_version$nextclade`
+Nextclade dataset version `r software_version[["nextclade-dataset"]]`
 
 ```{r variant assignments, fig.height=9, fig.width=7}
 
