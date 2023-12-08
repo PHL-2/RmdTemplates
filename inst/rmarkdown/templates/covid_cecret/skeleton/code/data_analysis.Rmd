@@ -689,9 +689,9 @@ snp_dist_reorder <- snpdists %>%
   merge(select(s, sample_id, sample_type), by.x = "query", by.y = "sample_id", all.x = TRUE) %>%
   rename(query_sample_type = "sample_type") %>%
   mutate(subject_sample_type = ifelse(is.na(subject_sample_type), "Reference", as.character(subject_sample_type)),
-         subject_sample_type = factor(subject_sample_type, levels = c("Reference", levels(s$sample_type))),
+         subject_sample_type = factor(subject_sample_type, levels = c("Reference", "Mock DNA positive control", levels(s$sample_type)[!grepl("^Mock", levels(s$sample_type))])),
          query_sample_type = ifelse(is.na(query_sample_type), "Reference", as.character(query_sample_type)),
-         query_sample_type = factor(query_sample_type, levels = c("Reference", levels(s$sample_type)))) %>%
+         query_sample_type = factor(query_sample_type, levels = c("Reference",  "Mock DNA positive control", levels(s$sample_type)[!grepl("^Mock", levels(s$sample_type))]))) %>%
   order_on_other_col(subject, subject_sample_type) %>%
   mutate(query = factor(query, levels = rev(levels(subject))))
 
@@ -949,6 +949,73 @@ knitr::include_graphics(here("data", "figures", paste0(sequencing_date, "_slidin
 
 \elandscape
 
+## Nextclade quality control
+
+### Coverage and QC status
+
+```{r nextclade coverage, fig.height=8, fig.width=7}
+
+s %>%
+  select(sample_type, median_coverage, pct_genome_coverage_over_30x, nextclade_qc_overallstatus) %>%
+  filter(!is.na(median_coverage)) %>%
+  mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = c("good", "mediocre", "bad"))) %>%
+  {
+  ggplot(., aes(x = nextclade_qc_overallstatus, y = pct_genome_coverage_over_30x)) +
+    geom_hline(yintercept = 0.8, color = "grey", linetype = "dotted", lwd=0.75) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_point(aes(fill = median_coverage, shape = sample_type), position = position_jitterdodge(), size = 3) +
+    scale_shape_manual(values = ann_geom_values$sample_type_shapes[match(levels(.$sample_type), names(ann_geom_values$sample_type_shapes))]) +
+    scale_fill_viridis_c() +
+    scale_y_continuous(labels=percent) +
+    theme_classic() +
+    theme(
+      strip.background = element_rect(color = "white", size = 50)
+    ) +
+    labs(x="NextClade QC Status", y="Percentage of genome\nwith >= 30X coverage", fill = "Median\nCoverage (X)", shape = "Sample Type")
+  }
+
+```
+
+\newpage
+
+### Nextclade QC score breakdown
+
+Nextclade uses an overall quality score to grade the assembled sequences based on various metrics. Each of these metrics are assigned a numeric score whereby a higher score indicates problematic sequencing quality and should be investigated further. The following figure displays the breakdown of the Nextclade QC scores used to calculate the overall score. \newline
+For more information, please visit: \newline https://docs.nextstrain.org/projects/nextclade/en/stable/user/algorithm/07-quality-control.html
+
+```{r nextclade scores}
+
+s %>%
+  select(sample_id, sample_type, nextclade_qc_overallstatus, nextclade_qc_overallscore, matches("^qc\\..*\\.score$")) %>%
+  pivot_longer(cols = matches("^qc\\..*\\.score$"), names_to = "Nextclade QC score", values_to = "qc_value") %>%
+  filter(!is.na(nextclade_qc_overallscore)) %>%
+  mutate(`Nextclade QC score` = gsub("^qc\\.|\\.score$", "", `Nextclade QC score`),
+         `Nextclade QC score` = factor(`Nextclade QC score`, levels = nextclade_qc_score_lvls),
+         qc_score_percent = ifelse(nextclade_qc_overallscore == 0, 0, qc_value^2/100/nextclade_qc_overallscore),
+         nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = c("good", "mediocre", "bad"))) %>%
+  order_on_other_col(sample_id, nextclade_qc_overallscore) %>%
+  {
+  ggplot(., aes(y = sample_id, x = qc_score_percent, fill = `Nextclade QC score`)) +
+    geom_col() +
+    facet_grid(nextclade_qc_overallstatus~., space = "free", scales = "free") +
+    scale_fill_manual(values = ann_geom_values$nc_qc_scores) +
+    scale_x_continuous(labels = percent, expand = c(0, 0)) +
+    scale_y_discrete(breaks = .$sample_id, labels = .$sample_type) +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.text.y = element_text(angle = 0),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      plot.margin= margin(0, 0, 0, 0, "pt")
+      ) +
+    labs(y="", x="QC score percentage")
+  }
+
+```
+
+\newpage
+
 ## Lineage Results
 
 ### Variant assignments from Nextclade
@@ -1201,33 +1268,6 @@ freyja_grouping %>%
 
 ```
 
-## Quality control
-
-### Coverage and QC status
-
-```{r nextclade coverage, fig.height=8, fig.width=7}
-
-s %>%
-  select(sample_type, median_coverage, pct_genome_coverage_over_30x, nextclade_qc_overallstatus) %>%
-  filter(!is.na(median_coverage)) %>%
-  mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = c("good", "mediocre", "bad"))) %>%
-  {
-  ggplot(., aes(x = nextclade_qc_overallstatus, y = pct_genome_coverage_over_30x)) +
-    geom_hline(yintercept = 0.8, color = "grey", linetype = "dotted", lwd=0.75) +
-    geom_boxplot(outlier.alpha = 0) +
-    geom_point(aes(fill = median_coverage, shape = sample_type), position = position_jitterdodge(), size = 3) +
-    scale_shape_manual(values = ann_geom_values$sample_type_shapes[match(levels(.$sample_type), names(ann_geom_values$sample_type_shapes))]) +
-    scale_fill_viridis_c() +
-    scale_y_continuous(labels=percent) +
-    theme_classic() +
-    theme(
-      strip.background = element_rect(color = "white", size = 50)
-    ) +
-    labs(x="NextClade QC Status", y="Percentage of genome\nwith >= 30X coverage", fill = "Median\nCoverage (X)", shape = "Sample Type")
-  }
-
-```
-
 \blandscape
 
 ### Plateview of results
@@ -1249,7 +1289,7 @@ empty_plate %>%
     geom_tile(fill = "white") +
     geom_point(shape = 21, size = 16) +
     geom_text(check_overlap = TRUE, size = 3, color = "black") +
-    scale_fill_manual(values = ann_geom_values$nc_qc) +
+    scale_fill_manual(values = ann_geom_values$nc_qc_status) +
     #facet_wrap(~plate, ncol = 1) + names(ann_geom_values$sample_type_colors))]) +
     scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
     theme_bw() +

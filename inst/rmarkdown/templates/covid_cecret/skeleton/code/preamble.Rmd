@@ -937,7 +937,10 @@ ann_geom_values[["alpha"]] <- setNames(c(alpha_select, additional_alphas), sampl
 
 # pick additional ggplot parameters
 ann_geom_values[["linetype"]] <- setNames(c("solid", "twodash", "dotted", "dashed"), c("good", "mediocre", "bad", "control"))
-ann_geom_values[["nc_qc"]] <- setNames(c(brewer.pal(6, "Set3")[c(1, 6, 4)], "#808080"), c("good", "mediocre", "bad", NA))
+ann_geom_values[["nc_qc_status"]] <- setNames(c(brewer.pal(6, "Set3")[c(1, 6, 4)], "#808080"), c("good", "mediocre", "bad", NA))
+
+nextclade_qc_score_lvls <- c("missingData", "mixedSites", "privateMutations", "snpClusters", "stopCodons", "frameShifts")
+ann_geom_values[["nc_qc_scores"]] <- setNames(c(colorblind_pal()(8)[3:8]), nextclade_qc_score_lvls)
 
 # create a sample type legend
 sample_type_legend <- s %>%
