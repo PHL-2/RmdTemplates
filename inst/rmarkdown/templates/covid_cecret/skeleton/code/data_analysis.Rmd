@@ -872,7 +872,7 @@ s %>%
 
 \blandscape
 
-### SARS-CoV-2 genome coverage
+### SARS-CoV-2 whole genome coverage
 
 ```{r lower coverage results, fig.width=11}
 
@@ -899,6 +899,37 @@ s %>%
       aspect.ratio = 1
       ) +
     labs(x="Coverage depth (X)", y="Percentage genome coverage", fill="Sample Type", color = "Sample Type")
+  }
+
+```
+
+### SARS-CoV-2 S-gene coverage
+
+```{r s gene coverage results, fig.width=11}
+
+s %>%
+  select(sample_id, sample_type, matches("pct_s_gene_coverage_over")) %>%
+  pivot_longer(cols = matches("pct_s_gene_coverage_over"), names_to = "depth", values_to = "pct_coverage") %>%
+  filter(!is.na(pct_coverage)) %>%
+  mutate(depth = as.numeric(gsub(".*_|.$", "", depth))) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = depth, y = pct_coverage, fill = sample_type, group = sample_id)) +
+    geom_line(aes(color = sample_type)) +
+    geom_point(shape = 21, size = 3) +
+    scale_y_continuous(labels=percent) +
+    facet_wrap(~sample_type, nrow = 2) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      legend.position = "none",
+      aspect.ratio = 1
+      ) +
+    labs(x="Coverage depth (X)", y="Percentage S gene coverage", fill="Sample Type", color = "Sample Type")
   }
 
 ```
@@ -939,11 +970,19 @@ s %>%
 
 \blandscape
 
-### Sliding window coverage (100 bp)
+### Whole genome sliding window coverage (100 bp)
 
 ```{r slide window results, fig.width=11, fig.height=8}
 
 knitr::include_graphics(here("data", "figures", paste0(sequencing_date, "_sliding_coverage_100_bp.png")))
+
+```
+
+### S-gene sliding window coverage (100 bp)
+
+```{r sgene slide window results, fig.width=11, fig.height=8}
+
+knitr::include_graphics(here("data", "figures", paste0(sequencing_date, "_s_gene_sliding_coverage_100_bp.png")))
 
 ```
 

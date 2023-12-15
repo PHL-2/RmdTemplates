@@ -106,6 +106,10 @@ if(run_uploaded_2_basespace) {
 
   if(length(bs_run_id) > 1) {
     stop(simpleError("There were two sequencing runs that matched this date. Investigate!"))
+  } else if (length(bs_run_id) == 0) {
+    stop(simpleError(paste0("There is no sequencing run on BaseSpace with date ", sequencing_date,
+                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run\n",
+                            "Otherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
   }
 
   # Download the SampleSheet from BaseSpace
@@ -287,7 +291,7 @@ if(nrow(TU_data) > 0) {
 # Load the environmental samples
 ################################
 
-ENV_fp <- list.files(here("metadata", "extra_metadata"), pattern = "environmental_samples.csv", full.names = TRUE)
+ENV_fp <- max(list.files(here("metadata", "extra_metadata"), pattern = "environmental_samples.csv", full.names = TRUE))
 
 if(length(ENV_fp) > 0) {
 
@@ -428,7 +432,7 @@ multi_grep <- function(named_vector, col_name) {
 }
 
 named_sample_type <- c("^Test-" = "Testing sample type",
-                       "^NC[0-9]*$|CORNER$|Corner$|corner$" = "Water control",
+                       "^NC-" = "Water control",
                        "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
                        "^PC[0-9]*$" = "Mock DNA positive control",
                        "^H[0-9]*$|^8[0-9]*$|^9[0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
@@ -485,7 +489,7 @@ metadata_sheet <- metadata_sheet %>%
 
 for(x in fill_in_columns) {
   if(any(is.na(metadata_sheet[[x]]))) {
-    stop(simpleError(paste0("There shouldn't be an NA in column ", x, ".\n",
+    stop(simpleError(paste0("\nThere shouldn't be an NA in column ", x, "\n",
                             "Was there a new sample included in this run?\n",
                             "Do the wastewater samples have a collection date?")))
   }

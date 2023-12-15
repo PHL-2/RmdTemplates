@@ -397,6 +397,21 @@ coverage <- slide_window_coverage %>%
             mean_coverage = mean(map_per_position)) %>%
   ungroup()
 
+s_gene_coverage <- slide_window_coverage %>%
+  filter(position >= 21563) %>%
+  filter(position <= 25384) %>%
+  group_by(sample_id) %>%
+  summarise(pct_s_gene_coverage_over_30x = sum(map_per_position >= 30)/n(),
+            pct_s_gene_coverage_over_25x = sum(map_per_position >= 25)/n(),
+            pct_s_gene_coverage_over_20x = sum(map_per_position >= 20)/n(),
+            pct_s_gene_coverage_over_15x = sum(map_per_position >= 15)/n(),
+            pct_s_gene_coverage_over_10x = sum(map_per_position >= 10)/n(),
+            pct_s_gene_coverage_over_5x = sum(map_per_position >= 5)/n(),
+            pct_s_gene_coverage_over_1x = sum(map_per_position >= 1)/n(),
+            median_s_gene_coverage = median(map_per_position),
+            mean_s_gene_coverage = mean(map_per_position)) %>%
+  ungroup()
+
 ```
 
 ```{r load samtools coverage data, eval = import_data}
@@ -569,7 +584,7 @@ cecret_aggregate <- cecret_aggregate %>%
 
 ```{r write cecret results, eval = import_data}
 
-list(samp_reads, cov_stats, coverage, next_clade, freyja, amplicon_depth, samtools_stat) %>%
+list(samp_reads, cov_stats, coverage, s_gene_coverage, next_clade, freyja, amplicon_depth, samtools_stat) %>%
   reduce(merge, by = "sample_id", all = TRUE) %>%
   merge(cecret_aggregate,
         by = c("sample_id", "nextclade_clade", "nextclade_clade_who", "nextclade_qc_overallstatus", "nextclade_qc_overallscore"),
@@ -1099,6 +1114,33 @@ slide_window_coverage %>%
   annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
   } %>%
   ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
+
+slide_window_coverage %>%
+  filter(position >= 21563) %>%
+  filter(position <= 25384) %>%
+  merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
+  mutate(slide_window_100 = ifelse(slide_window_100 <= 1, 1, slide_window_100)) %>%
+  {
+  ggplot(., aes(x = position, y = slide_window_100, fill = sample_type, group = sample_id)) +
+    geom_area(aes(alpha = sample_type), position = "identity") +
+    geom_hline(yintercept = 100, linetype = "dashed", alpha = 0.4) +
+    facet_wrap(~sample_type, ncol = 1, scales = "free_y") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_alpha_manual(values = ann_geom_values$alpha[match(levels(.$sample_type), names(ann_geom_values$alpha))]) + 
+    scale_x_continuous(expand = c(0,0)) + 
+    scale_y_continuous(trans = "log10") + 
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      legend.position = "none",
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      ) +
+    labs(x="", y="Sliding window average (X)")
+  } %>%
+  ggsave(filename = here("data", "figures", paste0(sequencing_date, "_s_gene_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
 
 col2show <- s %>%
   filter(sample_id != "Undetermined") %>%
