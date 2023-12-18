@@ -14,6 +14,9 @@ library(stringr)
 
 run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
+# temporary directory in ec2 to hold to sequencing run download. This directory will be deleted after running this script
+ec2_tmp_fp <- "~/tmp_bs_dl/"
+
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
 #sequencing date of the run folder should match the RStudio project date
@@ -86,8 +89,7 @@ barcodes <- tryCatch(
 # Load run sample sheet
 #######################
 
-sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date),
-                                  "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
 
 if(run_uploaded_2_basespace) {
 
@@ -104,7 +106,11 @@ if(run_uploaded_2_basespace) {
     select(Id) %>%
     pull()
 
-  if(length(bs_run_id) > 1) {
+  sequencing_run <- bs_run %>%
+    select(Name) %>%
+    pull()
+
+  if(length(bs_run_id) > 1 | length(sequencing_run) > 1) {
     stop(simpleError("There were two sequencing runs that matched this date. Investigate!"))
   } else if (length(bs_run_id) == 0) {
     stop(simpleError(paste0("There is no sequencing run on BaseSpace with date ", sequencing_date,
@@ -112,13 +118,22 @@ if(run_uploaded_2_basespace) {
                             "Otherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
   }
 
-  # Download the SampleSheet from BaseSpace
-  cli_submit("bs", "download", c("runs", "--id", bs_run_id,
-                                 "--exclude '*'",
-                                 "--include 'SampleSheet.csv'",
-                                 "-o", here("metadata", "munge"),
-                                 "--no-metadata",
-                                 "--overwrite"))
+  sequencing_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
+
+  # Download the run from BaseSpace onto a running EC2 instance
+  submit_screen_job(message2display = "Download sequencing run from BaseSpace onto EC2 instance",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = "basespace-run-download",
+                    command2run = paste("bs download runs --id", bs_run_id, "--output", sequencing_run_fp))
+
+  check_screen_job(message2display = "Checking BaseSpace download job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = "basespace-run-download")
+
+  # Download the SampleSheet from EC2 instance
+  run_in_terminal(paste("scp", paste0(ec2_hostname, ":", sequencing_run_fp, "SampleSheet.csv"), here("metadata", "munge")))
+
+  rstudioapi::executeCommand('activateConsole')
 
 } else {
 
@@ -387,10 +402,6 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   mutate(read_length = read_length) %>%
   mutate(index_length = index_length)
 
-if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
-  stop(simpleError(paste0("Some samples have collection dates more than 2 months ago. Investigate!!")))
-}
-
 #####################################################################
 # Fill in these columns in the metadata sheet if they were left blank
 #####################################################################
@@ -571,7 +582,7 @@ for(x in c(cols2merge, "sample_id",
            "sequencing_date", "prj_descrip", "instrument_type", "read_length", "index_length",
            "environmental_site", "sample_collection_date", "gender", "zip_char")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
-    stop(simpleError(paste0("Missing column [", x, "] in the metadata sheet template!!!")))
+    stop(simpleError(paste0("\nMissing column [", x, "] in the metadata sheet template!!!")))
   }
 }
 
@@ -588,9 +599,8 @@ for(x in c("qubit_conc_ng_ul", "sample_collection_date", "host_age_bin", "gender
 
 #check lowest date of sample collection
 if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
-  stop(simpleError(paste0("Some samples have collection dates more than 2 months ago. Investigate!!")))
+  stop(simpleError(paste0("\nSome samples have collection dates more than 2 months ago. Investigate!!")))
 }
-
 
 print('What do the sample_id look like?')
 print(unique(metadata_sheet$sample_id))
