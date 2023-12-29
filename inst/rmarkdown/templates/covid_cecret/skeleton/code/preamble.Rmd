@@ -782,9 +782,20 @@ if(length(s_upload) > 0) {
     group_by(FileName) %>%
     do(read.delim(.$FileName, header = FALSE)) %>%
     ungroup() %>%
-    select(-c(FileName)) %>%
     #rename the header of the fasta file
     mutate(V1 = gsub("Consensus_|.consensus.*", "", V1)) %>%
+    mutate(is_header = grepl("^>", V1)) %>%
+    group_by(FileName, is_header) %>%
+    mutate(concat_fasta = paste0(V1, collapse = "")) %>%
+    ungroup() %>%
+    # the following lines can be used to check that the fasta file is concatenated correctly
+    #rowwise() %>%
+    #mutate(find_string_position = unlist(gregexpr(V1, concat_fasta))[1]) %>%
+    #mutate(len = nchar(concat_fasta)) %>%
+    select(concat_fasta) %>%
+    unique() %>%
+    #have to manually remove terminal N's for GenBank submission
+    mutate(concat_fasta = gsub("^N*N|N*N$", "", concat_fasta)) %>%
     #this na argument needs to be blank, otherwise it will put strings beginning with the first two letters in quotes
     write_delim(file = fasta_fp, delim = "", col_names = FALSE, na = "")
   
