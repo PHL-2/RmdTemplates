@@ -162,3 +162,6 @@ system2("aws", c("s3 cp",
 system2("aws", c("s3 cp",
                  paste0(s3_reference_bucket, "/nextclade/sars.zip"),
                  here("data", "processed_cecret", "nextclade")))
+
+# Download Nextflow config file for profile
+run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"), here("data", "processed_cecret", "nextflow.config")))

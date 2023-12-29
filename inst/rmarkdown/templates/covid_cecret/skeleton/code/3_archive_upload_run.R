@@ -1,6 +1,7 @@
 library(here)
 library(dplyr)
 library(tidyr)
+library(stringr)
 
 #This Rscript uploads the sequencing run and related files to S3
 
@@ -185,6 +186,9 @@ if(run_uploaded_2_basespace) {
 
 }
 
+sample_sheet_fn <- paste0(sequencing_date, "_SampleSheet_v2.csv")
+sample_sheet_fp <- here("metadata", "munge", sample_sheet_fn)
+
 nf_demux_samplesheet <- data.frame(
   id = sequencing_run,
   samplesheet = paste0(s3_run_bucket_fp, sample_sheet_fn),
@@ -217,4 +221,6 @@ if(run_uploaded_2_basespace) {
   check_screen_job(message2display = "Checking delete job",
                    ec2_login = ec2_hostname,
                    screen_session_name = "delete-run")
+
+  rstudioapi::executeCommand('activateConsole')
 }

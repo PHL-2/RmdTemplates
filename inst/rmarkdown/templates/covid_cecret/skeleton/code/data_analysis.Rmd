@@ -38,13 +38,14 @@ if (length(in_results_not_in_s) > 0) {
 
 # Introduction
 
-This report summarizes the results of `r nrow(s)-1` samples and controls sequenced on `r sequencing_date` and analyzed with Cecret pipeline `r software_version$Cecret`. Reads from the sequencing run were trimmed and filtered before alignment to the reference SARS-CoV-2 genome `r unique(cecret_results$vadr_model)` \newline
+This report summarizes the results of `r nrow(s)-1` samples and controls sequenced on `r sequencing_date` and analyzed with Cecret pipeline `r software_version$Cecret`. Reads from the sequencing run were trimmed and filtered before alignment to the reference SARS-CoV-2 genome `r unique(cecret_results$vadr_model)[!is.na(unique(cecret_results$vadr_model))]` \newline
 
 The results section contains lineage information using \newline
 pangolin (https://cov-lineages.org/resources/pangolin.html), \newline
 nextclade (https://clades.nextstrain.org/), \newline
 and freyja (https://github.com/andersen-lab/Freyja). \newline
-Tiled amplification was performed using the ARTIC `r artic_primer_scheme` primer scheme 
+Tiled amplification was performed using the ARTIC `r artic_primer_scheme` primer scheme \newline
+Kraken2 results were analyzed with the `r software_version$kraken2_db` database
 
 # Number of samples sequenced
 

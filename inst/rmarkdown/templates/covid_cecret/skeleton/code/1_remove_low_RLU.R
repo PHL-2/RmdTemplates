@@ -311,7 +311,7 @@ if(length(environmental_samples_fp) > 0) {
     rename(sample_name = 1, environmental_site = 2) %>%
     select(sample_name, environmental_site)
 } else {
-  enviro_samples <- data.frame(sample_name = paste0("ENV", 1:11), environmental_site = paste0("ENV", 1:11))
+  enviro_samples <- data.frame(sample_name = paste0("ENV", 1:10), environmental_site = paste0("ENV", 1:10))
   message("\nEnvironmental swab file was not found")
   Sys.sleep(5)
 }
@@ -367,7 +367,7 @@ plate_view <- combined_list_first_half %>%
   mutate(number = cumsum(duplicated(sample_name)) + 1) %>%
   mutate(sample_name = ifelse(sample_name == "NC-pre-extract", paste0(sample_name, number), sample_name)) %>%
   select(-number) %>%
-  rbind(data.frame(sample_name = c("NC-pre-cDNA", "NC-pre-ARTIC", "NC-pre-library", "BLANK", "PC"))) %>%
+  rbind(data.frame(sample_name = c("BLANK", "PC", "NC-pre-cDNA", "NC-pre-ARTIC", "NC-pre-library"))) %>%
   mutate(sample_order = row_number()) %>%
   merge(empty_plate, by = "sample_order", all = TRUE) %>%
   mutate(sample_name = case_when(sample_order == 96 ~ "NC-corner",
