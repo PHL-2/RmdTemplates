@@ -439,9 +439,10 @@ k2_files_fps <- list.files(here("data", "processed_cecret", "kraken2"), pattern 
 k2_files_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
-  do(read_delim(.$FileName, col_names = FALSE)) %>%
+  do(read_delim(.$FileName,
+                col_names = c("k2_percent", "k2_clade_kmers", "k2_kmers", "k2_rank", "k2_ncbi_taxon_id", "k2_name"),
+                col_types = cols("k2_percent" = col_character()))) %>%
   ungroup() %>%
-  rename(k2_kmers = "X3", k2_rank = "X4", k2_name = "X6") %>%
   mutate(sample_id = gsub(".*/", "", FileName),
          sample_id = gsub("_kraken2_report.txt", "", sample_id),
          k2_name = gsub("^ *", "", k2_name),
@@ -1213,18 +1214,21 @@ slide_window_coverage %>%
     facet_wrap(~sample_type, ncol = 1, scales = "free_y") +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     scale_alpha_manual(values = ann_geom_values$alpha[match(levels(.$sample_type), names(ann_geom_values$alpha))]) + 
-    scale_x_continuous(expand = c(0,0)) + 
+    scale_x_continuous(expand = c(0, 50),
+                       breaks = c(min(.$position),
+                                  labeling::extended(min(.$position),
+                                                     max(.$position),
+                                                     m = 5),
+                                  max(.$position))) + 
     scale_y_continuous(trans = "log10") + 
     theme_bw() +
     theme(
       strip.background = element_blank(),
       panel.grid = element_blank(),
       panel.border = element_rect(color = "black", fill = NA, size = 1),
-      legend.position = "none",
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank(),
+      legend.position = "none"
       ) +
-    labs(x="", y="Sliding window average (X)")
+    labs(x="Genomic coordinates (bp)", y="Sliding window average (X)")
   } %>%
   ggsave(filename = here("data", "figures", paste0(sequencing_date, "_s_gene_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
 
