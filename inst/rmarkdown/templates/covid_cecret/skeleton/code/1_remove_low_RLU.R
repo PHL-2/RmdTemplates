@@ -330,7 +330,9 @@ if(length(older_samples_fp) > 0) {
     rename(sample_name = "SPECIMEN_NUMBER") %>%
     mutate(PHL_sample = grepl("^H", sample_name)) %>%
     arrange(-PHL_sample, sample_name) %>%
-    select(sample_name)
+    select(sample_name) %>%
+    filter(sample_name != "") %>%
+    filter(!is.na(sample_name))
 
 } else {
   older_samples <- data.frame(sample_name = "")

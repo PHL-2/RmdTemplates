@@ -28,6 +28,13 @@ ec2_hostname <- ""
 demux_profile <- ""
 cecret_profile <- ""
 
+####################
+# GISAID credentials
+####################
+
+gisaid_client_id <- ""
+gisaid_username <- ""
+
 ################
 # Local settings
 ################

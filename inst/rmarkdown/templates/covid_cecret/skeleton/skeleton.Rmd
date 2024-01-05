@@ -215,15 +215,13 @@ seqsender_config_test_fp <- list.files(aux_seqsender_fp, pattern = "seqsender_co
 if(test_upload) {
   test_flag <- "--test"
   config2use <- seqsender_config_test_fp
-  gs_token_file <- file.path(aux_seqsender_fp, "gisaid_test.authtoken")
+  gs_client_id <- "TEST-EA76875B00C3"
   gs_log <- here("gisaid", paste0(project_name, "_gisaid_test.log"))
-  gs_failed_samples_fp <- here("gisaid", paste0(project_name, "_failed_gisaid_upload_test.csv"))
 } else{
   test_flag <- ""
   config2use <- seqsender_config_fp
-  gs_token_file <- file.path(aux_seqsender_fp, "gisaid.authtoken")
+  gs_client_id <- gisaid_client_id
   gs_log <- here("gisaid", paste0(project_name, "_gisaid.log"))
-  gs_failed_samples_fp <- here("gisaid", paste0(project_name, "_failed_gisaid_upload.csv"))
 }
 
 if(use_proxy) {
@@ -259,69 +257,56 @@ if(!all(file_create_success_msg %in% upload_files_created)) {
   stop(simpleError("Seqsender failed to create some of the GISAID upload files!"))
 }
 
-gisaid_upload_success_msg <- c(paste0("[", nrow(seqsender), " rows x 30 columns]"),
-                               "failed_count: submissions failed: 0")
-
-gisaid_uploaded <- ""
-
 # check the seqsender file for GISAID accession numbers
 # if the seqsender file already has legit GISAID accession numbers, don't resubmit because GISAID already has these samples
 if(all(grepl("^EPI_ISL_0$", seqsender$gisaid_accession)) | all(is.na(seqsender$gisaid_accession))) {
   
   # clear these GISAID log files if exist
-  file.remove(gs_log, gs_failed_samples_fp)
+  file.remove(gs_log)
   
-  ### submit files to gisaid
-  gisaid_uploaded <- cli_submit("cli3",
-                                "upload",
-                                c("--token", gs_token_file,
-                                  "--metadata", here("gisaid", paste0(project_name, "_gisaid.csv")),
-                                  "--fasta", here("gisaid", paste0(project_name, "_gisaid.fsa")),
-                                  "--frameshift", "catch_novel",
-                                  "--log", gs_log,
-                                  "--failed", gs_failed_samples_fp,
-                                  "--proxy", Sys.getenv("https_proxy")),
-                                shQuote_type = "cmd")
+  # submit files to gisaid
+  run_in_terminal(paste("covCLI", "upload",
+                        "--clientid", gs_client_id,
+                        "--username", gisaid_username,
+                        "--metadata", here("gisaid", paste0(project_name, "_gisaid.csv")),
+                        "--fasta", here("gisaid", paste0(project_name, "_gisaid.fsa")),
+                        "--frameshift", "catch_novel",
+                        "--log", gs_log))
+  
+}
+rstudioapi::executeCommand('activateConsole')
+
+# read in the GISAID log file
+# if upload was successful, grab the GISAID accessions for the SRA and GenBank submissions
+read_gisaid_accessions <- read_csv(gs_log, col_names = "log")
+
+gisaid_errors <- read_gisaid_accessions %>%
+  filter(grepl("error", log, ignore.case = TRUE))
+
+if(nrow(gisaid_errors) > 0) {
+  stop(simpleError(paste0("Something went wrong! GISAID upload failed. Did you use the wrong credentials?\n",
+                          "Otherwise, there may have been a proxy error\n",
+                          "This error may also occur if these samples have been already uploaded\n",
+                          "Depending on following error message, you may be able to just rerun this chunk to resubmit:\n",
+                          gisaid_errors)))
 }
 
-if(!all(gisaid_upload_success_msg %in% gisaid_uploaded)) {
-  stop(simpleError(paste0("Something went wrong! GISAID upload failed. Have these samples been already uploaded??\n",
-                          "There may have also been a proxy error, in which case, just restart R and rerun this chunk to resubmit")))
-}
+gisaid_success <- read_gisaid_accessions %>%
+  filter(grepl("^SUCCESS; ", log))
 
-#include the GISAID Accession number for the SRA and GenBank submissions
-read_gisaid_accessions <- read_csv(gs_log, col_names = FALSE) %>%
-  select(X2) %>%
-  mutate(X2 = gsub("msg: |}", "", X2))
-
-gisaid_number_submitted <- read_gisaid_accessions %>%
-  filter(grepl("submissions uploaded: ", X2)) %>%
-  mutate(X2 = gsub("submissions uploaded: ", "", X2)) %>%
-  pull() %>%
-  as.numeric()
-
-gisaid_number_failed <- read_gisaid_accessions %>%
-  filter(grepl("submissions failed: ", X2)) %>%
-  mutate(X2 = gsub("submissions failed: ", "", X2)) %>%
-  pull() %>%
-  as.numeric()
-
-if(gisaid_number_submitted != nrow(seqsender) & gisaid_number_failed != 0) {
-  
+if(nrow(gisaid_success) != nrow(seqsender)) {
   stop(simpleError("Some GISAID samples failed to upload."))
-  
 }
   
 gisaid_accessions <- read_gisaid_accessions %>%
-  filter(!grepl("submissions uploaded: |submissions failed: ", X2)) %>%
-  separate(X2, into = c("gisaid_name", "gisaid_accession"), sep = "; ", extra = "merge") %>%
+  filter(grepl("^SUCCESS; ", log)) %>%
+  mutate(log = gsub("^SUCCESS; ", "", log)) %>%
+  separate(log, into = c("gisaid_name", "gisaid_accession"), sep = " assigned to accession: ", extra = "merge") %>%
   mutate(genbank_note = paste0("GISAID virus name: ", gisaid_name, "; GISAID accession: ", gisaid_accession))
   
 if(!test_upload) {
-  
   gisaid_accessions %>%
     write_csv(here("gisaid", paste0(project_name, "_gisaid_accessions.csv")))
-  
 }
 
 #rewrite the seqsender file with the gisaid accession numbers and remove the old prepared files
