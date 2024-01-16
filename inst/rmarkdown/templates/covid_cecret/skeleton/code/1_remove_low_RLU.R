@@ -8,9 +8,18 @@ library(openxlsx)
 #This Rscript filters out low RLU values from the metadata sheet received from the epidemiologists
 #Send this filtered sheet to the epidemiologists and scientists
 
-###################################################
+##############
+# Manual input
+##############
+
+missing_samples <- c("")
+
+# number of unspecified environmental swabs to add to plate
+enviro_number <- 10
+
+################
 # Load functions
-###################################################
+################
 
 #this file needs to sit in a [aux_files/functions] directory path above this project directory
 tryCatch(
@@ -22,9 +31,9 @@ tryCatch(
   }
 )
 
-###################################################
+#############
 # Load config
-###################################################
+#############
 
 #this file needs to sit in a [aux_files/config] directory path above this project directory
 tryCatch(
@@ -71,9 +80,9 @@ RLU_data <- read_csv(RLU_fp) %>%
   #filter rows where sample_id is NA
   filter(!is.na(SPECIMEN_NUMBER))
 
-###################################################
+#################
 # Get HC1 samples
-###################################################
+#################
 
 HC1_samples <- read_csv(RLU_fp) %>%
   filter(Test == "POCT 4 Plex Sars-CoV-2") %>%
@@ -193,7 +202,7 @@ if(length(epi_sample_not_found) > 0) {
 
 samples_removed <- PHL_data %>%
   filter(SPECIMEN_NUMBER != "") %>%
-  filter(RLU < 1000 | SPECIMEN_NUMBER %in% c(MEO_samples)) %>%
+  filter(RLU < 1000 | SPECIMEN_NUMBER %in% c(MEO_samples, missing_samples)) %>%
   select(SPECIMEN_NUMBER) %>%
   pull()
 
@@ -311,7 +320,7 @@ if(length(environmental_samples_fp) > 0) {
     rename(sample_name = 1, environmental_site = 2) %>%
     select(sample_name, environmental_site)
 } else {
-  enviro_samples <- data.frame(sample_name = paste0("ENV", 1:10), environmental_site = paste0("ENV", 1:10))
+  enviro_samples <- data.frame(sample_name = paste0("ENV", 1:enviro_number), environmental_site = paste0("ENV", 1:enviro_number))
   message("\nEnvironmental swab file was not found")
   Sys.sleep(5)
 }

@@ -89,7 +89,14 @@ barcodes <- tryCatch(
 # Load run sample sheet
 #######################
 
+samplesheet_exists <- file.exists(here("metadata", "munge", "SampleSheet.csv"))
+
 sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+
+run_cd <- NA
+run_q30 <- NA
+run_pf <- NA
+run_error <- NA
 
 if(run_uploaded_2_basespace) {
 
@@ -110,6 +117,40 @@ if(run_uploaded_2_basespace) {
     select(Name) %>%
     pull()
 
+  run_stats <- cli_submit("bs", "run", c("seqstats", "--id", bs_run_id))
+
+  run_cd <- run_stats %>%
+    list(run_stats = .) %>%
+    as.data.frame() %>%
+    filter(grepl("SequencingStatsCompact.ClusterDensity", run_stats)) %>%
+    mutate(run_stats = gsub(".*\\| |e.*", "", run_stats),
+           run_stats = as.numeric(run_stats)*1000) %>%
+    pull()
+
+  run_q30 <- run_stats %>%
+    list(run_stats = .) %>%
+    as.data.frame() %>%
+    filter(grepl("SequencingStatsCompact.PercentGtQ30 ", run_stats)) %>%
+    mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+           run_stats = as.numeric(run_stats)/100) %>%
+    pull()
+
+  run_pf <- run_stats %>%
+    list(run_stats = .) %>%
+    as.data.frame() %>%
+    filter(grepl("SequencingStatsCompact.PercentPf", run_stats)) %>%
+    mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+           run_stats = as.numeric(run_stats)) %>%
+    pull()
+
+  run_error <- run_stats %>%
+    list(run_stats = .) %>%
+    as.data.frame() %>%
+    filter(grepl("SequencingStatsCompact.ErrorRate ", run_stats)) %>%
+    mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+           run_stats = as.numeric(run_stats)/100) %>%
+    pull()
+
   if(length(bs_run_id) > 1 | length(sequencing_run) > 1) {
     stop(simpleError("There were two sequencing runs that matched this date. Investigate!"))
   } else if (length(bs_run_id) == 0 | length(sequencing_run) == 0) {
@@ -118,24 +159,28 @@ if(run_uploaded_2_basespace) {
                             "Otherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
   }
 
-  sequencing_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
+  if(!samplesheet_exists){
 
-  # Download the run from BaseSpace onto a running EC2 instance
-  submit_screen_job(message2display = "Download sequencing run from BaseSpace onto EC2 instance",
-                    ec2_login = ec2_hostname,
-                    screen_session_name = "basespace-run-download",
-                    command2run = paste("bs download runs --id", bs_run_id, "--output", sequencing_run_fp))
+    sequencing_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
 
-  check_screen_job(message2display = "Checking BaseSpace download job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = "basespace-run-download")
+    # Download the run from BaseSpace onto a running EC2 instance
+    submit_screen_job(message2display = "Download sequencing run from BaseSpace onto EC2 instance",
+                      ec2_login = ec2_hostname,
+                      screen_session_name = "basespace-run-download",
+                      command2run = paste("bs download runs --id", bs_run_id, "--output", sequencing_run_fp))
 
-  # Download the SampleSheet from EC2 instance
-  run_in_terminal(paste("scp", paste0(ec2_hostname, ":", sequencing_run_fp, "SampleSheet.csv"), here("metadata", "munge")))
+    check_screen_job(message2display = "Checking BaseSpace download job",
+                     ec2_login = ec2_hostname,
+                     screen_session_name = "basespace-run-download")
 
-  rstudioapi::executeCommand('activateConsole')
+    # Download the SampleSheet from EC2 instance
+    run_in_terminal(paste("scp", paste0(ec2_hostname, ":", sequencing_run_fp, "SampleSheet.csv"), here("metadata", "munge")))
 
-} else {
+    rstudioapi::executeCommand('activateConsole')
+
+  }
+
+} else if (!run_uploaded_2_basespace & !samplesheet_exists) {
 
   #get the local run folder
   run_folder <- sequencing_folder_fp %>%
@@ -308,7 +353,7 @@ if(nrow(TU_data) > 0) {
 
 ENV_fp <- max(list.files(here("metadata", "extra_metadata"), pattern = "environmental_samples.csv", full.names = TRUE))
 
-if(length(ENV_fp) > 0) {
+if(!is.na(ENV_fp)) {
 
   ENV_data <- read_csv(ENV_fp) %>%
     #use the first day of the week (starting on Monday) as the sample_collection_date
@@ -400,7 +445,11 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   mutate(prj_descrip = prj_description) %>%
   mutate(instrument_type = instrument_type) %>%
   mutate(read_length = read_length) %>%
-  mutate(index_length = index_length)
+  mutate(index_length = index_length) %>%
+  mutate(run_cd = run_cd) %>%
+  mutate(run_q30 = run_q30) %>%
+  mutate(run_pf = run_pf) %>%
+  mutate(run_error = run_error)
 
 #####################################################################
 # Fill in these columns in the metadata sheet if they were left blank
@@ -500,9 +549,8 @@ metadata_sheet <- metadata_sheet %>%
 
 for(x in fill_in_columns) {
   if(any(is.na(metadata_sheet[[x]]))) {
-    stop(simpleError(paste0("\nThere shouldn't be an NA in column ", x, "\n",
-                            "Was there a new sample included in this run?\n",
-                            "Do the wastewater samples have a collection date?")))
+    stop(simpleError(paste0("\n\nWas there a new sample included in this run?\n",
+                            "There shouldn't be an NA in column ", x, "\n\n")))
   }
 }
 

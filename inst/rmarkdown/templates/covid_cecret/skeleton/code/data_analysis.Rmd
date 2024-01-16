@@ -68,6 +68,13 @@ s %>%
 
 # FASTQ generation, demultiplexing, and quality control
 
+## Sequencing Run QC Metrics
+
+Cluster density: `r unique(s_toPlot$run_cd)` \newline
+Q30 score or higher: `r unique(s_toPlot$run_q30)*100`% \newline
+Percent of reads that passed filter: `r unique(s_toPlot$run_pf)*100`% \newline
+Run error rate `r unique(s_toPlot$run_error)*100`%
+
 ## BCLConvert
 
 BCLConvert version `r software_version$bclconvert` was used to generate and demultiplex sample FASTQ files from the sequencing BCL files (raw data files that contain sequence information and quality scores). This program was initiated with the nf-core/demultiplex pipeline version `r software_version[["nf-core-demultiplex"]]`, using Nextflow version `r software_version$Nextflow`
@@ -1440,7 +1447,7 @@ if(length(has_pos_ctrl) == 0) {
 Red samples refer to results that will not be reported (controls or no lineage results) \newline
 Orange samples also refer to results that will not be reported (bad or mediocre NextClade QC with <80% 30X coverage) \newline
 The total number of samples with acceptable results for reporting is `r n_samples_report` out of `r sum(!s$isControl, na.rm = TRUE)` non-control samples sequenced. \newline
-Number of samples to send to epidemiologists: `r nrow(epi_report)` \newline
+Number of samples to send to epidemiologists: `r ifelse(have_phi, nrow(epi_report), 0)` \newline
 Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "gisaid_name", "sample_id"])` \newline
 Number of samples to upload to SRA: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])` \newline
 Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])`\newline

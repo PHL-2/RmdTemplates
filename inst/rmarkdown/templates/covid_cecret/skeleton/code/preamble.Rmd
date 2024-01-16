@@ -944,7 +944,7 @@ run_check_all_chunk <- any(grepl("Nasal swab", sample_type_lvls))
 #check the csv file for the epi's
 if(have_phi) {
 
-  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
+  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = "COVIDSeq_PHL_sequencing_results.csv", recursive = TRUE, full.names = TRUE)
   
   epi_report <- epi_2_upload_fp %>%
     read_csv() %>%
