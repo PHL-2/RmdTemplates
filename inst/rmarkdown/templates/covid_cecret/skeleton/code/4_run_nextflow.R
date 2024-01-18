@@ -109,6 +109,16 @@ check_screen_job(message2display = "Checking Nextclade download job",
                  ec2_login = ec2_hostname,
                  screen_session_name = "nextclade-dl")
 
+# Update the Cecret pipeline; this should be done as often as possible as it also updates the freyja data used for assignment
+submit_screen_job(message2display = "Update Cecret pipeline",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = "update-cecret",
+                  command2run = "nextflow pull UPHL-BioNGS/Cecret -r master")
+
+check_screen_job(message2display = "Checking Cecret update",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = "update-cecret")
+
 # Cecret pipeline
 submit_screen_job(message2display = "Process data through Cecret pipeline",
                   ec2_login = ec2_hostname,
@@ -161,7 +171,7 @@ system2("aws", c("s3 cp",
 # Download Nextclade dataset
 system2("aws", c("s3 cp",
                  paste0(s3_reference_bucket, "/nextclade/sars.zip"),
-                 here("data", "processed_cecret", "nextclade")))
+                 here("data", "processed_cecret", "nextclade/")))
 
 # Download Nextflow config file for profile
 run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"), here("data", "processed_cecret", "nextflow.config")))
