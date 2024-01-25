@@ -1,7 +1,8 @@
 
 ```{r only run this chunk once to install packages, include=FALSE, eval=FALSE}
 
-install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx", "ggsci", "reticulate"))
+# vegan package requires fortran compiler; see MacBook setup SOP for how to install
+install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx", "ggsci", "reticulate", "vegan", "ape"))
 
 ```
 
@@ -34,6 +35,8 @@ library(patchwork)
 library(zoo)
 library(stringdist)
 library(scales)
+library(vegan)
+library(ape)
 
 ```
 
@@ -354,9 +357,14 @@ write_csv(mapped_read_lengths, actual_read_lengths_fp, append = TRUE)
 
 ```{r load amplicon results, eval = import_data}
 
-amplicon_fp <- here("data", "processed_cecret", "aci", "amplicon_depth.csv")
+amplicon_fps <- list.files(here("data", "processed_cecret", "aci"), pattern = "_amplicon_depth.csv", recursive = TRUE, full.names = TRUE)
 
-amplicon_depth <- read_csv(amplicon_fp) %>%
+amplicon_depth <- amplicon_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_csv(.$FileName, col_names = TRUE)) %>%
+  ungroup() %>%
+  select(-FileName) %>%
   rename(sample_id = "bam") %>%
   mutate(sample_id = gsub(".primertrim.sorted.bam", "", sample_id)) %>%
   rename_with(function(x) paste0("amp_tile_", x, "_artic_", artic_primer_scheme), -sample_id)
@@ -493,18 +501,22 @@ nc_v_fp %>%
   select(pipeline, software, version) %>%
   write_csv(file = software_version_fp, append = TRUE)
 
-unzip(here("data", "processed_cecret", "nextclade", "sars.zip"),
-      exdir = here("data", "processed_cecret", "nextclade"), files = "tag.json")
+nc_dl_fp <- here("data", "processed_cecret", "nextclade", "nextclade-sars.json")
 
-nc_dl_fp <- here("data", "processed_cecret", "nextclade", "tag.json")
-
-nc_dl_fp %>%
+nc_dl_v <- nc_dl_fp %>%
   read_csv(col_names = FALSE) %>%
   rename(version = "X1") %>%
-  filter(grepl("tag", version)) %>%
+  filter(grepl("updatedAt", version)) %>%
+  unique()
+
+if(nrow(nc_dl_v) > 1) {
+  stop(simpleError("Check the nextclade dataset version"))
+}
+
+nc_dl_v %>%
   mutate(pipeline = "UPHL-BioNGS-Cecret",
          software = "nextclade-dataset",
-         version = gsub("tag: |,", "", version)) %>%
+         version = gsub("updatedAt: |,", "", version)) %>%
   select(pipeline, software, version) %>%
   write_csv(file = software_version_fp, append = TRUE)
 
@@ -944,7 +956,7 @@ run_check_all_chunk <- any(grepl("Nasal swab", sample_type_lvls))
 #check the csv file for the epi's
 if(have_phi) {
 
-  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = "COVIDSeq_PHL_sequencing_results.csv", recursive = TRUE, full.names = TRUE)
+  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = "_PHL_sequencing_results.csv", recursive = TRUE, full.names = TRUE)
   
   epi_report <- epi_2_upload_fp %>%
     read_csv() %>%
@@ -1287,6 +1299,83 @@ for(col_num in col2show) {
     } %>%
     ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sample_sliding_coverage_100_bp_col", col_num, ".png")), plot = ., width = 11, height = 8)
 }
+
+```
+
+```{r export freyja table}
+
+# this table groups the sublineages with the same parent lineages together and gets the sum of the abundances
+freyja_grouping <- s %>%
+  as.data.frame() %>%
+  select(sample_id, sample_type, freyja_lineages, freyja_abundances) %>%
+  group_by(sample_id) %>%
+  mutate(lineages = list(freyja_lineages),
+         relative_abundances = list(freyja_abundances)) %>%
+  separate_rows(c(lineages, relative_abundances), sep=" ") %>%
+  mutate(lineages = gsub("\\([0-9]*\\)", "", lineages),
+         lineages = ifelse((is.na(lineages) | lineages == "Misc"), "Unresolved", lineages),
+         relative_abundances = as.numeric(relative_abundances),
+         main_lineage = gsub("\\..*", "", lineages)) %>%
+  ungroup() %>%
+  select(-c("freyja_lineages", "freyja_abundances")) %>%
+  arrange(sample_id, relative_abundances, str_rank(lineages, numeric = TRUE)) %>%
+  group_by(sample_id, main_lineage, relative_abundances) %>%
+  #add an extra period to the end to help with matching lineages correctly
+  mutate(lineages = gsub("$", ".", lineages),
+         least_common_substring = attr(adist(lineages, counts = TRUE), "trafos")[, 1],
+         end_match = do.call(rbind, stringi::stri_locate_all_regex(least_common_substring, "^M+"))[, 2],
+         has_lowest_str_length = str_length(lineages) == min(str_length(lineages)),
+         substring_end = ifelse(sum(has_lowest_str_length) == 1 &
+                                grepl("^M+$", least_common_substring), end_match, NA),
+         substring_end = ifelse(all(is.na(substring_end)), min(end_match), substring_end)) %>%
+  fill(substring_end, .direction = "down") %>%
+  ungroup() %>%
+  mutate(combined_lineage = stringi::stri_sub(lineages, 1, substring_end)) %>%
+  mutate(relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", combined_lineage),
+                                      1, relative_abundances))
+
+freyja_matrix <- freyja_grouping %>%
+  complete(nesting(sample_id, sample_type), combined_lineage, fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, combined_lineage) %>%
+  summarize(relative_abundances = sum(relative_abundances)) %>%
+  ungroup() %>%
+  pivot_wider(names_from = "combined_lineage", values_from = "relative_abundances") %>%
+  column_to_rownames("sample_id")
+
+# this table groups sample type numbers together
+freyja_sample_type <- freyja_grouping %>%
+  filter(sample_id %in% s_toPlot$sample_id) %>%
+  complete(nesting(sample_id, sample_type), combined_lineage, fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, sample_type, combined_lineage) %>%
+  summarize(relative_abundances = sum(relative_abundances)) %>%
+  ungroup() %>%
+  filter(!is.na(relative_abundances)) %>%
+  group_by(sample_type) %>%
+  mutate(total_samples = n_distinct(sample_id)) %>%
+  ungroup() %>%
+  # to calculate the total standard deviation of a combined distribution,
+  # get the total variance and square root it
+  group_by(sample_type, combined_lineage) %>%
+  mutate(avg_rel_abund = relative_abundances/total_samples,
+         variance = var(avg_rel_abund)) %>%
+  summarize(avg_rel_abund = sum(avg_rel_abund),
+            total_sd = sqrt(sum(variance))) %>%
+  ungroup()
+
+dir.create(here("upload", "freyja"), recursive = TRUE)
+
+freyja_sample_type %>%
+  mutate(print_rel_abund = ifelse(!is.na(total_sd),
+                                  paste0(round(avg_rel_abund*100, 2), "% +/- ",
+                                         round(total_sd*100, 2), "%"),
+                                  paste0(round(avg_rel_abund*100, 2), "%"))) %>%
+  select(-c(total_sd, avg_rel_abund)) %>%
+  pivot_wider(names_from = "sample_type", values_from = "print_rel_abund", values_fill = "") %>%
+  mutate(combined_lineage = gsub("\\.$", "", combined_lineage)) %>%
+  filter(!is.na(combined_lineage)) %>%
+  arrange(combined_lineage) %>%
+  rename(Lineage = "combined_lineage") %>%
+  write_csv(here("upload", "freyja", paste0(project_name, "_freyja_results.csv")))
 
 ```
 

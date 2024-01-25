@@ -117,6 +117,14 @@ if(run_uploaded_2_basespace) {
     select(Name) %>%
     pull()
 
+  if(length(bs_run_id) > 1 | length(sequencing_run) > 1) {
+    stop(simpleError("There were two sequencing runs that matched this date. Investigate!"))
+  } else if (length(bs_run_id) == 0 | length(sequencing_run) == 0) {
+    stop(simpleError(paste0("There is no sequencing run on BaseSpace with date ", sequencing_date,
+                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run\n",
+                            "Otherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
+  }
+
   run_stats <- cli_submit("bs", "run", c("seqstats", "--id", bs_run_id))
 
   run_cd <- run_stats %>%
@@ -150,14 +158,6 @@ if(run_uploaded_2_basespace) {
     mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
            run_stats = as.numeric(run_stats)/100) %>%
     pull()
-
-  if(length(bs_run_id) > 1 | length(sequencing_run) > 1) {
-    stop(simpleError("There were two sequencing runs that matched this date. Investigate!"))
-  } else if (length(bs_run_id) == 0 | length(sequencing_run) == 0) {
-    stop(simpleError(paste0("There is no sequencing run on BaseSpace with date ", sequencing_date,
-                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run\n",
-                            "Otherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
-  }
 
   if(!samplesheet_exists){
 

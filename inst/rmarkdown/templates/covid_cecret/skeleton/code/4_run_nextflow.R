@@ -101,9 +101,11 @@ submit_screen_job(message2display = "Download Nextclade SARS-CoV-2 data",
                                       "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
                                       "chmod +x ~/.local/bin/nextclade;",
                                       "nextclade --version;",
+                                      "nextclade dataset list --name sars-cov-2 --json > ~/nextclade-sars.json;",
                                       "nextclade dataset get --name sars-cov-2 --output-zip ~/sars.zip;",
+                                      "aws s3 cp ~/nextclade-sars.json", paste0(s3_reference_bucket, "/nextclade/nextclade-sars.json;"),
                                       "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
-                                      "rm ~/sars.zip"))
+                                      "rm ~/nextclade-sars.json ~/sars.zip"))
 
 check_screen_job(message2display = "Checking Nextclade download job",
                  ec2_login = ec2_hostname,
@@ -136,6 +138,9 @@ check_screen_job(message2display = "Checking Cecret job",
                  ec2_login = ec2_hostname,
                  screen_session_name = "cecret")
 
+# Download Nextflow config file for profile (use terminal because of proxy login issue)
+run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"), here("data", "processed_cecret", "nextflow.config")))
+
 # Download BCLConvert files
 rstudioapi::executeCommand('activateConsole')
 system2("aws", c("s3 cp",
@@ -160,7 +165,7 @@ system2("aws", c("s3 cp",
                  "--include '*aggregated-freyja.tsv'",
                  "--include '*_kraken2_report.txt'",
                  "--include '*snp-dists.txt'",
-                 "--include '*amplicon_depth.csv'",
+                 "--include '*_amplicon_depth.csv'",
                  "--include '*nextclade.tsv'",
                  "--include '*nextclade.json'",
                  "--include '*.stats.txt'",
@@ -170,8 +175,5 @@ system2("aws", c("s3 cp",
 
 # Download Nextclade dataset
 system2("aws", c("s3 cp",
-                 paste0(s3_reference_bucket, "/nextclade/sars.zip"),
+                 paste0(s3_reference_bucket, "/nextclade/nextclade-sars.json"),
                  here("data", "processed_cecret", "nextclade/")))
-
-# Download Nextflow config file for profile
-run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"), here("data", "processed_cecret", "nextflow.config")))
