@@ -571,8 +571,7 @@ k2 %>%
   mutate(mean_props = mean(filled_in_props)) %>%
   ungroup() %>%
   order_on_other_col(k2_taxon, mean_props, decreasing = FALSE) %>%
-  merge(select(s, sample_id, sample_type), by = "sample_id", all = TRUE) %>%
-  order_on_other_col(sample_id, sample_type, decreasing = FALSE) %>%
+  mutate(sample_id = factor(sample_id, levels = levels(s$sample_id))) %>%
   {
     ggplot(., aes(y = k2_taxon, x = sample_id, fill = k2_props)) +
     geom_tile(color = "black") +
@@ -594,7 +593,8 @@ k2 %>%
     labs(x = "", y = "", fill = "Relative\nProportion",
          title = "Only the top 3 most abundant taxa within each sample are shown")
     } /
-  sample_type_legend
+  sample_type_legend +
+    geom_text(aes(label = plate_coord), size = convert_sample_size_2_font_size(nrow(s)))
 
 ```
 
@@ -617,8 +617,7 @@ k2 %>%
   mutate(mean_props = mean(filled_in_props)) %>%
   ungroup() %>%
   order_on_other_col(k2_phyla, mean_props, decreasing = FALSE) %>%
-  merge(select(s, sample_id, sample_type), by = "sample_id", all = TRUE) %>%
-  order_on_other_col(sample_id, sample_type, decreasing = FALSE) %>%
+  mutate(sample_id = factor(sample_id, levels = levels(s$sample_id))) %>%
   {
     ggplot(., aes(y = k2_phyla, x = sample_id, fill = k2_props)) +
     geom_tile(color = "black") +
@@ -639,7 +638,8 @@ k2 %>%
           ) +
     labs(x = "", y = "", fill = "Relative\nProportion", title = "Top 10 most abundant phyla across all samples")
     } /
-  sample_type_legend
+  sample_type_legend +
+    geom_text(aes(label = plate_coord), size = convert_sample_size_2_font_size(nrow(s)))
 
 ```
 
@@ -693,23 +693,31 @@ k2 %>%
 
 snp_dist_reorder <- snpdists %>%
   rename(subject = "sample_id", query = "compared_to") %>%
-  merge(select(s, sample_id, sample_type), by.x = "subject", by.y = "sample_id", all.x = TRUE) %>%
-  rename(subject_sample_type = "sample_type") %>%
-  merge(select(s, sample_id, sample_type), by.x = "query", by.y = "sample_id", all.x = TRUE) %>%
-  rename(query_sample_type = "sample_type") %>%
+  merge(select(s, sample_id, sample_type, plate_coord, plate_col, plate_row), by.x = "subject", by.y = "sample_id", all.x = TRUE) %>%
+  rename_with( ~ paste0("subject_", .x), .cols = c(sample_type, plate_coord, plate_col, plate_row)) %>%
+  mutate(subject_plate_coord = gsub(".*_", "", subject_plate_coord)) %>%
+  merge(select(s, sample_id, sample_type, plate_coord), by.x = "query", by.y = "sample_id", all.x = TRUE) %>%
+  rename(query_sample_type = "sample_type",
+         query_plate_coord = "plate_coord") %>%
+  mutate(query_plate_coord = gsub(".*_", "", query_plate_coord)) %>%
   mutate(subject_sample_type = ifelse(is.na(subject_sample_type), "Reference", as.character(subject_sample_type)),
          subject_sample_type = factor(subject_sample_type, levels = c("Reference", "Mock DNA positive control", levels(s$sample_type)[!grepl("^Mock", levels(s$sample_type))])),
          query_sample_type = ifelse(is.na(query_sample_type), "Reference", as.character(query_sample_type)),
          query_sample_type = factor(query_sample_type, levels = c("Reference",  "Mock DNA positive control", levels(s$sample_type)[!grepl("^Mock", levels(s$sample_type))]))) %>%
-  order_on_other_col(subject, subject_sample_type) %>%
+  group_by(subject) %>%
+  mutate(reference_snps = ifelse(query == "MN908947.3", snps, NA)) %>%
+  fill(reference_snps, .direction = "downup") %>%
+  ungroup() %>%
+  order_on_other_col(subject, reference_snps) %>%
   mutate(query = factor(query, levels = rev(levels(subject))))
 
 snp_dists_y_legend <- snp_dist_reorder %>%
-  select(subject, subject_sample_type) %>%
+  select(subject, subject_sample_type, subject_plate_coord) %>%
   unique() %>%
   {
   ggplot(., aes(x = 1, y = subject, fill = subject_sample_type)) +
     geom_tile(color = "black") +
+    geom_text(aes(label = subject_plate_coord), size = convert_sample_size_2_font_size(nrow(s_toPlot))) +
     coord_fixed() +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$subject_sample_type),
                                                                         names(ann_geom_values$sample_type_colors))]) +
@@ -731,11 +739,12 @@ snp_dists_y_legend <- snp_dist_reorder %>%
   }
 
 snp_dists_x_legend <- snp_dist_reorder %>%
-  select(query, query_sample_type) %>%
+  select(query, query_sample_type, query_plate_coord) %>%
   unique() %>%
   {
   ggplot(., aes(y = 1, x = query, fill = query_sample_type)) +
     geom_tile(color = "black") +
+    geom_text(aes(label = query_plate_coord), size = convert_sample_size_2_font_size(nrow(s_toPlot))) +
     coord_fixed() +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$query_sample_type),
                                                                         names(ann_geom_values$sample_type_colors))],
@@ -785,18 +794,18 @@ snp_dist_reorder %>%
 ```{r reads mapped, fig.height=11, fig.width=8}
 
 read_type <- s %>%
-  select(sample_id, sample_type, read_counts, samtools_reads_mapped) %>%
   mutate(total_read_counts = read_counts - samtools_reads_mapped) %>%
   rename(mapped = "samtools_reads_mapped",
          `total read counts` = "total_read_counts") %>%
-  select(sample_id, sample_type, read_counts, `total read counts`, mapped) %>%
+  select(sample_id, sample_type, read_counts, `total read counts`, mapped, plate_coord) %>%
   pivot_longer(cols = c("total read counts", "mapped"), names_to = "read_type", values_to = "counts") %>%
   mutate(percent_mapped = counts/read_counts) %>%
   mutate(read_type = factor(read_type, levels = c("total read counts", "mapped"))) %>%
   order_on_other_col(sample_id, read_counts)
   
 read_type_legend <- read_type %>%
-  select(sample_id, sample_type) %>%
+  select(sample_id, sample_type, plate_coord) %>%
+  mutate(plate_coord = gsub(".*_", "", plate_coord)) %>%
   unique() %>%
   {
   ggplot(., aes(y = 1, x = sample_id, fill = sample_type)) +
@@ -853,7 +862,8 @@ read_type %>%
     labs(x = "", y = "Number of reads", fill = "")
   } /
   read_type_normalized /
-  read_type_legend
+  read_type_legend +
+    geom_text(aes(label = plate_coord), size = convert_sample_size_2_font_size(nrow(s), max_font = 1.5))
 
 ```
 
@@ -1022,7 +1032,6 @@ freyja_grouping %>%
   group_by(sample_id, sample_type, combined_lineage) %>%
   summarise(relative_abundances = sum(relative_abundances)) %>%
   ungroup() %>%
-  order_on_other_col(sample_id, sample_type, decreasing = FALSE) %>%
   {
     ggplot(., aes(y = combined_lineage, x = sample_id, fill = relative_abundances)) +
     geom_tile(color = "black") +
@@ -1043,10 +1052,13 @@ freyja_grouping %>%
           ) +
     labs(x = "", y = "", fill = "Relative\nProportion",
          title = "Only the top 3 lineages within each sample are shown")
-    } /
-  sample_type_legend
+  } /
+  sample_type_legend +
+    geom_text(aes(label = plate_coord), size = convert_sample_size_2_font_size(nrow(s), max_font = 1.5))
 
 ```
+
+\newpage
 
 ### Shannon diversity based on Freyja results
 
@@ -1074,9 +1086,13 @@ freyja_matrix %>%
 
 ```
 
+\newpage
+
 ### PCoA plot
 
-Differences between samples were calculated using the Bray-Curtis dissimilarity, a statistic used to quantify the compositional distinctiveness between two different samples. The Bray–Curtis dissimilarity is bounded between 0 and 1, where 0 means the two samples have the same composition (that is they share all the species), and 1 means the two samples do not share any species \newline
+Differences between samples were calculated using the Bray-Curtis dissimilarity, a statistic used to quantify the compositional distinctiveness between two different samples. The Bray–Curtis dissimilarity is bounded between 0 and 1, where 0 means the two samples have the same composition (that is they share all the species), and 1 means the two samples do not share any species
+\newline
+\newline
 A PCoA (Principal Coordinates Analysis) plot then attempts to summarize and represent the dissimilarity between all samples in a reduced dimensional plane
 
 ```{r bray curtis pcoa}
@@ -1112,7 +1128,9 @@ s %>%
 
 ### Freyja grouped by sample type
 
-```{r freyja results grouped, fig.height=11, fig.width=8}
+Relative lineage abundances within each sample type
+
+```{r freyja results grouped, fig.height=10, fig.width=8}
 
 freyja_sample_type %>%
   {
@@ -1135,7 +1153,19 @@ freyja_sample_type %>%
 
 ### Freyja by sample type
 
+Relative lineage abundances within each sample type. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample type and getting the square root
+
 ```{r freyja table, fig.height=11, fig.width=8}
+
+freyja_table_delim <- freyja_sample_type %>%
+  select(combined_lineage, main_lineage) %>%
+  unique() %>%
+  group_by(main_lineage) %>%
+  summarize(total_lineage = n()) %>%
+  ungroup() %>%
+  mutate(line_position = cumsum(total_lineage)) %>%
+  select(line_position) %>%
+  pull()
 
 freyja_sample_type %>%
   mutate(print_rel_abund = ifelse(!is.na(total_sd),
@@ -1148,13 +1178,14 @@ freyja_sample_type %>%
   filter(!is.na(combined_lineage)) %>%
   arrange(combined_lineage) %>%
   rename(Lineage = "combined_lineage") %>%
+  select(-main_lineage) %>%
   { if(use_kable)
     mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
       select_all(~gsub(" ", "\n", .)) %>%
-      kable("latex", longtable = T, digits=2, booktabs=T, escape=F,
-          col.names = linebreak(colnames(.), align = "l")) %>%
+      kable("latex", longtable = T, digits=2, booktabs=T, escape=F, col.names = linebreak(colnames(.), align = "l")) %>%
       kable_styling(latex_options = c("repeat_header", "HOLD_position"), font_size = 10) %>%
-      row_spec(0, bold = T, color="#7C0A02")
+      row_spec(0, bold = T, color="#7C0A02") %>%
+      row_spec(freyja_table_delim[1:length(freyja_table_delim)-1], hline_after = T)
     else
       pander(.)
   }
@@ -1163,7 +1194,9 @@ freyja_sample_type %>%
 
 ### Freyja summarized
 
-```{r freyja results summarized, fig.height=11, fig.width=8}
+Relative abundances of the summarized results by Freyja within each sample
+
+```{r freyja results summarized, fig.height=10, fig.width=8}
 
 s %>%
   select(sample_id, sample_type, freyja_summarized) %>%
@@ -1171,7 +1204,7 @@ s %>%
   group_by(sample_id) %>%
   mutate(summarized_lineages = list(freyja_summarized)) %>%
   separate_longer_delim(summarized_lineages, delim = "), (") %>%
-  filter(summarized_lineages != "[]") %>%
+  mutate(summarized_lineages = ifelse(summarized_lineages == "[]", NA, summarized_lineages)) %>%
   separate_wider_delim(summarized_lineages,
                        delim = ", ",
                        names = c("summarized_lineages", "relative_abundances")) %>%
@@ -1180,7 +1213,6 @@ s %>%
   ungroup() %>%
   mutate(summarized_lineages = factor(summarized_lineages,
                                    levels = str_sort(unique(summarized_lineages), numeric = TRUE))) %>%
-  order_on_other_col(sample_id, sample_type, decreasing = FALSE) %>%
   {
   ggplot(., aes(x = sample_id, y = relative_abundances, fill = summarized_lineages)) +
     geom_col() +
@@ -1194,7 +1226,8 @@ s %>%
           ) +
     labs(x = "", y = "Relative proportions", fill = "Variants")
   } /
-  sample_type_legend
+  sample_type_legend +
+    geom_text(aes(label = plate_coord), size = convert_sample_size_2_font_size(nrow(s), max_font = 1.5))
 
 ```
 

@@ -138,11 +138,7 @@ check_screen_job(message2display = "Checking Cecret job",
                  ec2_login = ec2_hostname,
                  screen_session_name = "cecret")
 
-# Download Nextflow config file for profile (use terminal because of proxy login issue)
-run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"), here("data", "processed_cecret", "nextflow.config")))
-
 # Download BCLConvert files
-rstudioapi::executeCommand('activateConsole')
 system2("aws", c("s3 cp",
                  paste0(s3_fastq_bucket, "/", sequencing_date),
                  here("data"),
@@ -172,6 +168,10 @@ system2("aws", c("s3 cp",
                  "--include '*.cov.txt'",
                  "--include '*.depth.txt'",
                  "--include '*cecret_results.csv'"))
+
+# Download Nextflow config file for profile (use terminal because of proxy login issue)
+run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"), here("data", "processed_cecret", "nextflow.config")))
+rstudioapi::executeCommand('activateConsole')
 
 # Download Nextclade dataset
 system2("aws", c("s3 cp",
