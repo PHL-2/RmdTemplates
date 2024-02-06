@@ -130,10 +130,64 @@ file.copy(run_dat_fp, to = here())
 
 ```{r filter low droplet data}
 
+droplet_test <- sum(d_pre$Droplet_count<10000) > 0
+
 d <- d_pre %>%
   filter(Droplet_count >= 10000)
 
 ```
+
+
+
+
+```{r check variance}
+
+d_var <- d %>%
+  group_by(Type, Process, Spiked, Target, Sample_date) %>%
+  summarise(avg_pos_droplets = mean(Positives),
+            avg_conc = mean(`Conc(copies/uL)`),
+            median_conc = median(`Conc(copies/uL)`),
+            sd_pos_droplets = sd(Positives),
+            sd_conc = sd(`Conc(copies/uL)`),
+            mad_conc = mad(`Conc(copies/uL)`),
+            num_points = n(),
+            quant25 = quantile(`Conc(copies/uL)`)[2],
+            quant75 = quantile(`Conc(copies/uL)`)[4],
+            gesd = ifelse(Spiked == "Spiked", PMCMRplus::gesdTest(`Conc(copies/uL)`, 2)$p.value[2], NA)
+  ) %>%
+  ungroup() %>%
+  unique() %>%
+  mutate(cv_conc = sd_conc/avg_conc * 100,
+         cv_pos_droplets = sd_pos_droplets/avg_pos_droplets * 100) %>%
+  ungroup() %>%
+  mutate(GESD_q = p.adjust(gesd, method="BH"))
+
+d_sd <- d %>%
+  left_join(d_var, by = c("Type", "Process", "Spiked", "Target", "Sample_date")) %>%
+  mutate(sd_from_mean = abs(`Conc(copies/uL)` - avg_conc)/(sd_conc),
+         outlier_median = abs(`Conc(copies/uL)` - median_conc)/mad_conc)
+  
+```
+
+
+```{r}
+
+variance_test <- any(d_sd$outlier_median >= 9, na.rm = T) | any(d_sd$GESD_q <= 0.01)
+
+wellsToRemove <- d_sd %>%
+  filter(outlier_median >= 9 | GESD_q <= 0.01,
+         grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+         Process == "Concentrated",
+         Spiked == "Spiked",
+         Target == "N2" | Target == "E") %>%
+  group_by(Type, Process, Spiked, Sample_date) %>%
+  filter(outlier_median >= 8) %>%
+  select(Well) %>%
+  distinct() %>%
+  pull()
+
+```
+
 
 
 # Remove samples
@@ -142,7 +196,7 @@ d <- d_pre %>%
 ww_SC2_conc_result_summarised <- d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
          Process == "Concentrated",
-         Well != "" ###Edit to remove samples from summary table
+         !(Well %in% wellsToRemove),
          ) %>%
   group_by(Type, Process, Spiked, Target, Sample_date) %>%
   summarise(avg_pos_droplets = mean(Positives),
@@ -174,36 +228,6 @@ ww_SC2_conc_result_summarised <- d %>%
   select(Type, Target, Sample_date, stock_conc_GCuL, stock_conc_GC1L) %>%
   arrange(Sample_date, Type, Target)
 
-```
-
-
-```{r check variance}
-
-d_var <- d %>%
-  group_by(Type, Process, Spiked, Target, Sample_date) %>%
-  summarise(avg_pos_droplets = mean(Positives),
-            avg_conc = mean(`Conc(copies/uL)`),
-            median_conc = median(`Conc(copies/uL)`),
-            sd_pos_droplets = sd(Positives),
-            sd_conc = sd(`Conc(copies/uL)`),
-            mad_conc = mad(`Conc(copies/uL)`),
-            num_points = n(),
-            quant25 = quantile(`Conc(copies/uL)`)[2],
-            quant75 = quantile(`Conc(copies/uL)`)[4],
-            gesd = ifelse(Spiked == "Spiked", PMCMRplus::gesdTest(`Conc(copies/uL)`, 2)$p.value[2], NA)
-  ) %>%
-  ungroup() %>%
-  unique() %>%
-  mutate(cv_conc = sd_conc/avg_conc * 100,
-         cv_pos_droplets = sd_pos_droplets/avg_pos_droplets * 100) %>%
-  ungroup() %>%
-  mutate(GESD_q = p.adjust(gesd, method="BH"))
-
-d_sd <- d %>%
-  left_join(d_var, by = c("Type", "Process", "Spiked", "Target", "Sample_date")) %>%
-  mutate(sd_from_mean = abs(`Conc(copies/uL)` - avg_conc)/(sd_conc),
-         outlier_median = abs(`Conc(copies/uL)` - median_conc)/mad_conc)
-  
 ```
 
 
