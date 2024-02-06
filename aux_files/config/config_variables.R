@@ -13,7 +13,9 @@ s3_fastq_bucket <- "s3://"
 # s3 bucket holding the Nextflow output files
 s3_nextflow_output_bucket <- "s3://"
 # s3 bucket to use as temporary storage for Nextflow intermediate files
-s3_nf_work_bucket <- "s3://"
+s3_nextflow_work_bucket <- "s3://"
+# s3 bucket holding reference data files
+s3_reference_bucket <- "s3://"
 
 #host name of the ec2 instance in the .ssh/config file
 ec2_hostname <- ""
@@ -25,6 +27,13 @@ ec2_hostname <- ""
 # Nextflow profiles to use for the demultiplexing and Cecret pipelines (should be defined in the .nextflow/config file)
 demux_profile <- ""
 cecret_profile <- ""
+
+####################
+# GISAID credentials
+####################
+
+gisaid_client_id <- ""
+gisaid_username <- ""
 
 ################
 # Local settings

@@ -1,6 +1,7 @@
 library(here)
 library(dplyr)
 library(tidyr)
+library(stringr)
 
 #This Rscript uploads the sequencing run and related files to S3
 
@@ -58,11 +59,9 @@ s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
 system2("aws", c("sso login"))
 
-if(run_uploaded_2_basespace) {
+sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
 
-  sequencing_folder_regex <- paste0("^",
-                                    gsub("^..|-", "", sequencing_date),
-                                    "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+if(run_uploaded_2_basespace) {
 
   # Get the run id from BaseSpace
   bs_run <- cli_submit("bs", "list", c("runs", "-f csv")) %>%
@@ -71,7 +70,7 @@ if(run_uploaded_2_basespace) {
     as.data.frame() %>%
     `colnames<-`(.[1, ]) %>%
     slice(-1) %>%
-    filter(grepl(sequencing_folder_regex, Name))
+    filter(grepl(paste0("^", sequencing_folder_regex), Name))
 
   bs_run_id <- bs_run %>%
     select(Id) %>%
@@ -83,19 +82,13 @@ if(run_uploaded_2_basespace) {
 
   if(length(bs_run_id) > 1 | length(sequencing_run) > 1) {
     stop(simpleError("There were two sequencing runs that matched this date. Investigate!"))
+  } else if (length(bs_run_id) == 0 | length(sequencing_run) == 0) {
+    stop(simpleError(paste0("There is no sequencing run on BaseSpace with date ", sequencing_date,
+                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run\n",
+                            "Otherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
   }
 
   sequencing_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
-
-  # Download the run from BaseSpace onto a running EC2 instance
-  submit_screen_job(message2display = "Download sequencing run from BaseSpace onto EC2 instance",
-                    ec2_login = ec2_hostname,
-                    screen_session_name = "basespace-run-download",
-                    command2run = paste("bs download runs --id", bs_run_id, "--output", sequencing_run_fp))
-
-  check_screen_job(message2display = "Checking BaseSpace download job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = "basespace-run-download")
 
   # This command runs gzip separately from the tar command, in order to use the '-n' flag
   # The '-n' flag removes the time stamp from the header when compressing, which will allow generating the md5 checksum to be more consistent
@@ -107,7 +100,7 @@ if(run_uploaded_2_basespace) {
                     command2run = paste("echo Estimated:", paste0(c("[", rep("=", bars+1), "];"), collapse = ""),
                                         "echo -n 'Progress:  [ ';",
                                         "tar",
-                                        "--checkpoint=`du -sk --apparent-size", sequencing_run_fp, "| cut -f1 | awk '{print $1 /", bars, "}'`",
+                                        "--checkpoint=`du -sk --apparent-size", sequencing_run_fp, "| cut -f1 | awk '{print int($1 /", bars, ")}'`",
                                         # this flag shows a progress bar
                                         "--checkpoint-action='ttyout=\b=>'",
                                         # this flag shows the read/write speed
@@ -125,7 +118,8 @@ if(run_uploaded_2_basespace) {
   submit_screen_job(message2display = "Generate md5 checksum",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-checksum",
-                    command2run = paste0("md5sum ", ec2_tmp_fp, sequencing_run, ".tar.gz > ", ec2_tmp_fp, sequencing_run, ".md5;",
+                    command2run = paste0("cd ", ec2_tmp_fp, ";",
+                                         "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, sequencing_run, ".md5;",
                                          "cat ", ec2_tmp_fp, sequencing_run, ".md5"))
 
   check_screen_job(message2display = "Checking md5 job",
@@ -149,6 +143,8 @@ if(run_uploaded_2_basespace) {
                    ec2_login = ec2_hostname,
                    screen_session_name = "upload-run")
 
+  rstudioapi::executeCommand('activateConsole')
+
 } else {
 
   # If the run was not uploaded to BaseSpace, run this part
@@ -157,7 +153,7 @@ if(run_uploaded_2_basespace) {
     list.files(full.names = T) %>%
     data.frame(filenames = .) %>%
     filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
-    filter(grepl(paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$"), filenames)) %>%
+    filter(grepl(sequencing_folder_regex, filenames)) %>%
     filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
     pull()
 
@@ -191,6 +187,9 @@ if(run_uploaded_2_basespace) {
 
 }
 
+sample_sheet_fn <- paste0(sequencing_date, "_SampleSheet_v2.csv")
+sample_sheet_fp <- here("metadata", "munge", sample_sheet_fn)
+
 nf_demux_samplesheet <- data.frame(
   id = sequencing_run,
   samplesheet = paste0(s3_run_bucket_fp, sample_sheet_fn),
@@ -223,4 +222,6 @@ if(run_uploaded_2_basespace) {
   check_screen_job(message2display = "Checking delete job",
                    ec2_login = ec2_hostname,
                    screen_session_name = "delete-run")
+
+  rstudioapi::executeCommand('activateConsole')
 }

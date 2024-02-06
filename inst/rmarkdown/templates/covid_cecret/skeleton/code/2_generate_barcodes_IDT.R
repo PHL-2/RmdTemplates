@@ -14,6 +14,9 @@ library(stringr)
 
 run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
+# temporary directory in ec2 to hold to sequencing run download. This directory will be deleted after running this script
+ec2_tmp_fp <- "~/tmp_bs_dl/"
+
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
 #sequencing date of the run folder should match the RStudio project date
@@ -86,8 +89,14 @@ barcodes <- tryCatch(
 # Load run sample sheet
 #######################
 
-sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date),
-                                  "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+samplesheet_exists <- file.exists(here("metadata", "munge", "SampleSheet.csv"))
+
+sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+
+run_cd <- NA
+run_q30 <- NA
+run_pf <- NA
+run_error <- NA
 
 if(run_uploaded_2_basespace) {
 
@@ -104,19 +113,74 @@ if(run_uploaded_2_basespace) {
     select(Id) %>%
     pull()
 
-  if(length(bs_run_id) > 1) {
+  sequencing_run <- bs_run %>%
+    select(Name) %>%
+    pull()
+
+  if(length(bs_run_id) > 1 | length(sequencing_run) > 1) {
     stop(simpleError("There were two sequencing runs that matched this date. Investigate!"))
+  } else if (length(bs_run_id) == 0 | length(sequencing_run) == 0) {
+    stop(simpleError(paste0("There is no sequencing run on BaseSpace with date ", sequencing_date,
+                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run\n",
+                            "Otherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
   }
 
-  # Download the SampleSheet from BaseSpace
-  cli_submit("bs", "download", c("runs", "--id", bs_run_id,
-                                 "--exclude '*'",
-                                 "--include 'SampleSheet.csv'",
-                                 "-o", here("metadata", "munge"),
-                                 "--no-metadata",
-                                 "--overwrite"))
+  run_stats <- cli_submit("bs", "run", c("seqstats", "--id", bs_run_id))
 
-} else {
+  run_cd <- run_stats %>%
+    list(run_stats = .) %>%
+    as.data.frame() %>%
+    filter(grepl("SequencingStatsCompact.ClusterDensity", run_stats)) %>%
+    mutate(run_stats = gsub(".*\\| |e.*", "", run_stats),
+           run_stats = as.numeric(run_stats)*1000) %>%
+    pull()
+
+  run_q30 <- run_stats %>%
+    list(run_stats = .) %>%
+    as.data.frame() %>%
+    filter(grepl("SequencingStatsCompact.PercentGtQ30 ", run_stats)) %>%
+    mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+           run_stats = as.numeric(run_stats)/100) %>%
+    pull()
+
+  run_pf <- run_stats %>%
+    list(run_stats = .) %>%
+    as.data.frame() %>%
+    filter(grepl("SequencingStatsCompact.PercentPf", run_stats)) %>%
+    mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+           run_stats = as.numeric(run_stats)) %>%
+    pull()
+
+  run_error <- run_stats %>%
+    list(run_stats = .) %>%
+    as.data.frame() %>%
+    filter(grepl("SequencingStatsCompact.ErrorRate ", run_stats)) %>%
+    mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+           run_stats = as.numeric(run_stats)/100) %>%
+    pull()
+
+  if(!samplesheet_exists){
+
+    sequencing_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
+
+    # Download the run from BaseSpace onto a running EC2 instance
+    submit_screen_job(message2display = "Download sequencing run from BaseSpace onto EC2 instance",
+                      ec2_login = ec2_hostname,
+                      screen_session_name = "basespace-run-download",
+                      command2run = paste("bs download runs --id", bs_run_id, "--output", sequencing_run_fp))
+
+    check_screen_job(message2display = "Checking BaseSpace download job",
+                     ec2_login = ec2_hostname,
+                     screen_session_name = "basespace-run-download")
+
+    # Download the SampleSheet from EC2 instance
+    run_in_terminal(paste("scp", paste0(ec2_hostname, ":", sequencing_run_fp, "SampleSheet.csv"), here("metadata", "munge")))
+
+    rstudioapi::executeCommand('activateConsole')
+
+  }
+
+} else if (!run_uploaded_2_basespace & !samplesheet_exists) {
 
   #get the local run folder
   run_folder <- sequencing_folder_fp %>%
@@ -243,6 +307,7 @@ if(nrow(PHL_data) > 0) {
 
 TU_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "Temple")) %>%
+  lapply(function(x) mutate(x, SPECIMEN_NUMBER = as.character(SPECIMEN_NUMBER))) %>%
   bind_rows()
 
 if(ncol(TU_data) == 2) {
@@ -287,9 +352,9 @@ if(nrow(TU_data) > 0) {
 # Load the environmental samples
 ################################
 
-ENV_fp <- list.files(here("metadata", "extra_metadata"), pattern = "environmental_samples.csv", full.names = TRUE)
+ENV_fp <- max(list.files(here("metadata", "extra_metadata"), pattern = "environmental_samples.csv", full.names = TRUE))
 
-if(length(ENV_fp) > 0) {
+if(!is.na(ENV_fp)) {
 
   ENV_data <- read_csv(ENV_fp) %>%
     #use the first day of the week (starting on Monday) as the sample_collection_date
@@ -381,11 +446,11 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   mutate(prj_descrip = prj_description) %>%
   mutate(instrument_type = instrument_type) %>%
   mutate(read_length = read_length) %>%
-  mutate(index_length = index_length)
-
-if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
-  stop(simpleError(paste0("Some samples have collection dates more than 2 months ago. Investigate!!")))
-}
+  mutate(index_length = index_length) %>%
+  mutate(run_cd = run_cd) %>%
+  mutate(run_q30 = run_q30) %>%
+  mutate(run_pf = run_pf) %>%
+  mutate(run_error = run_error)
 
 #####################################################################
 # Fill in these columns in the metadata sheet if they were left blank
@@ -428,7 +493,7 @@ multi_grep <- function(named_vector, col_name) {
 }
 
 named_sample_type <- c("^Test-" = "Testing sample type",
-                       "^NC[0-9]*$|CORNER$|Corner$|corner$" = "Water control",
+                       "^NC-" = "Water control",
                        "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
                        "^PC[0-9]*$" = "Mock DNA positive control",
                        "^H[0-9]*$|^8[0-9]*$|^9[0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
@@ -485,9 +550,8 @@ metadata_sheet <- metadata_sheet %>%
 
 for(x in fill_in_columns) {
   if(any(is.na(metadata_sheet[[x]]))) {
-    stop(simpleError(paste0("There shouldn't be an NA in column ", x, ".\n",
-                            "Was there a new sample included in this run?\n",
-                            "Do the wastewater samples have a collection date?")))
+    stop(simpleError(paste0("\n\nWas there a new sample included in this run?\n",
+                            "There shouldn't be an NA in column ", x, "\n\n")))
   }
 }
 
@@ -567,7 +631,7 @@ for(x in c(cols2merge, "sample_id",
            "sequencing_date", "prj_descrip", "instrument_type", "read_length", "index_length",
            "environmental_site", "sample_collection_date", "gender", "zip_char")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
-    stop(simpleError(paste0("Missing column [", x, "] in the metadata sheet template!!!")))
+    stop(simpleError(paste0("\nMissing column [", x, "] in the metadata sheet template!!!")))
   }
 }
 
@@ -584,9 +648,8 @@ for(x in c("qubit_conc_ng_ul", "sample_collection_date", "host_age_bin", "gender
 
 #check lowest date of sample collection
 if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
-  stop(simpleError(paste0("Some samples have collection dates more than 2 months ago. Investigate!!")))
+  stop(simpleError(paste0("\nSome samples have collection dates more than 2 months ago. Investigate!!")))
 }
-
 
 print('What do the sample_id look like?')
 print(unique(metadata_sheet$sample_id))
