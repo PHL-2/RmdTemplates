@@ -243,3 +243,23 @@ check_screen_job <- function(message2display = "Running function to check screen
                                       "sleep 15;",
                                       "fi"), type = "sh")))
 }
+
+## =============================================
+##  Convert sample size to font size (inversely)
+## =============================================
+
+convert_sample_size_2_font_size <- function(sample_size = x,
+                                            max_sample_size = 96,
+                                            min_font = 0.5,
+                                            max_font = 8) {
+
+  if(sample_size > max_sample_size) {
+    stop(simpleError(paste("Sample size input of", sample_size, "is greater than the max sample size of", max_sample_size,
+                           "\nPlease adjust these inputs for this function accordingly")))
+  }
+
+  font_range = min_font - max_font
+
+  ceiling((((sample_size*font_range)/max_sample_size) + max_font)*2)/2
+
+}
