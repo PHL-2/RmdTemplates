@@ -131,7 +131,7 @@ cli_submit <- function(exe_path, bs_cli_command, sh_arguments, shQuote_type = "s
                             args = c(                               #some arguments need to be in quotes to be passed to shell
                               shQuote(bs_cli_command, type = shQuote_type), #the shell script to run
                               sh_arguments                          #arguments
-                            ), stdout = TRUE)
+                            ), stdout = TRUE, stderr = TRUE)
     message(shell_return)
 
     if(!any(grepl("Proxy Authentication Required|502 Bad Gateway: Reason unknown", shell_return))) {
@@ -154,10 +154,112 @@ cli_submit <- function(exe_path, bs_cli_command, sh_arguments, shQuote_type = "s
 ##   Read in Excel file with sheet name. Return NULL if no sheet
 ## =============================================================
 
-read_excel_safely <- function(file, sheet) {
+read_excel_safely <- function(file, sheet, skip_row = 0) {
 
   try_read_excel <- purrr::safely(readxl::read_excel, otherwise = NULL)
 
-  try_read_excel(file, sheet = sheet)$result
+  try_read_excel(file, sheet = sheet, skip = skip_row)$result
+
+}
+
+## ===================================================================================
+##   Run the following commands through the RStudio terminal (mainly for ssh commands)
+## ===================================================================================
+
+run_in_terminal <- function(command2run = "") {
+
+  init_terminal <- rstudioapi::terminalExecute(command = command2run)
+
+  # sleep if command hasn't finished running
+  while (is.null(rstudioapi::terminalExitCode(init_terminal))) {
+    Sys.sleep(1)
+  }
+  # throw error for non-zero exit codes
+  if(rstudioapi::terminalExitCode(init_terminal) != 0) {
+    stop(simpleError("There was an issue running the ssh command through the terminal!"))
+  }
+
+  Sys.sleep(5)
+  rstudioapi::terminalKill(init_terminal)
+}
+
+## =============================================================================
+##   Use the run_in_terminal function to submit jobs to EC2 instance through ssh
+## =============================================================================
+
+submit_screen_job <- function(message2display = "Running function to submit screen job", ec2_login = "", screen_session_name = "", command2run = "") {
+
+  run_in_terminal(paste("echo", paste0("'", message2display, "';"),
+                        "ssh -tt", ec2_login,
+                        shQuote(paste("sleep 5;",
+                                      "if screen -ls | grep", paste0("'", screen_session_name, "'"), "-q;",
+                                      "then echo 'Detached", screen_session_name, "session detected. Skipping ahead to check status';",
+                                      "else echo 'Submitting job now';",
+                                      "mkdir -p ~/.tmp_screen;",
+                                      "rm -f", paste0("~/.tmp_screen/", screen_session_name, ".screenlog;"),
+                                      "sleep 5;",
+                                      "screen -dm -S", screen_session_name, "-L -Logfile", paste0("~/.tmp_screen/", screen_session_name, ".screenlog"), "bash -c",
+                                      paste0("\"", command2run, "\";"),
+                                      "sleep 5;",
+                                      "fi"), type = "sh")))
+}
+
+## =============================================================
+##   Use the run_in_terminal function to check on submitted jobs
+## =============================================================
+
+check_screen_job <- function(message2display = "Running function to check screen job", ec2_login = "", screen_session_name = "") {
+
+  run_in_terminal(paste("echo 'Checking for dead jobs';",
+                        "ssh -tt", ec2_login,
+                        shQuote(paste("while (screen -ls | grep 'Dead' -q);",
+                                      "do echo 'ERROR DETECTED!!! The previous submitted job is dead';",
+                                      "echo 'Close this terminal and rerun the whole script or just the previous job';",
+                                      "echo 'This message will remain here indefinitely until the RStudio terminal is closed';",
+                                      "screen -wipe;",
+                                      "sleep infinity;",
+                                      "done;"), type = "sh")))
+
+  # monitor the screen log file
+  run_in_terminal(paste("echo", paste0("'", message2display, "';"),
+                        "ssh -tt", ec2_login,
+                        shQuote(paste("sleep 5;",
+                                      "SCREEN_PID=`screen -ls | grep", screen_session_name, "| cut -f1 -d'.' | sed 's/\\W//g'`;",
+                                      "if test -z ${SCREEN_PID};",
+                                      "then echo 'Job finished already';",
+                                      "echo -n 'Log last modified: ';",
+                                      "TZ='US/Eastern'",
+                                      "date '+%F %r' -r", paste0("~/.tmp_screen/", screen_session_name, ".screenlog;"),
+                                      "echo '\n';",
+                                      "echo", paste0(c(rep("-", 100), ";"), collapse = ""),
+                                      "echo '\n';",
+                                      "tail -n 100", paste0("~/.tmp_screen/", screen_session_name, ".screenlog;"),
+                                      "sleep 15;",
+                                      "else echo Monitoring screen session: $SCREEN_PID;",
+                                      "echo '\n';",
+                                      "echo", paste0(c(rep("-", 100), ";"), collapse = ""),
+                                      "echo '\n';",
+                                      "tail --pid=$SCREEN_PID -f", paste0("~/.tmp_screen/", screen_session_name, ".screenlog;"),
+                                      "sleep 15;",
+                                      "fi"), type = "sh")))
+}
+
+## =============================================
+##  Convert sample size to font size (inversely)
+## =============================================
+
+convert_sample_size_2_font_size <- function(sample_size = x,
+                                            max_sample_size = 96,
+                                            min_font = 0.5,
+                                            max_font = 8) {
+
+  if(sample_size > max_sample_size) {
+    stop(simpleError(paste("Sample size input of", sample_size, "is greater than the max sample size of", max_sample_size,
+                           "\nPlease adjust these inputs for this function accordingly")))
+  }
+
+  font_range = min_font - max_font
+
+  ceiling((((sample_size*font_range)/max_sample_size) + max_font)*2)/2
 
 }
