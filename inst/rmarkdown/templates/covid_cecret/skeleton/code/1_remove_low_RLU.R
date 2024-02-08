@@ -364,6 +364,7 @@ if(length(older_samples_fp) > 0) {
 }
 
 older_samples_removed <- older_samples %>%
+  filter(sample_name != "") %>%
   filter(sample_name %in% missing_samples) %>%
   pull()
 
