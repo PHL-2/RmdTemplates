@@ -823,7 +823,7 @@ s_toPlot %>%
 Red samples refer to results that will not be reported (controls or no lineage results) \newline
 Orange samples also refer to results that will not be reported (bad or mediocre NextClade QC with <80% 30X coverage) \newline
 The total number of samples with acceptable results for reporting is `r n_samples_report` out of `r nrow(s[grepl("Nasal swab", s$sample_type), ])` nasal samples sequenced. \newline
-Number of samples to send to epidemiologists: `r nrow(epi_report)` \newline
+Number of samples to send to epidemiologists: `r ifelse(require_phi, nrow(epi_report), 0)` \newline
 Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "gisaid_name", "sample_id"])` \newline
 Number of samples to upload to SRA: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])` \newline
 Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])`\newline
