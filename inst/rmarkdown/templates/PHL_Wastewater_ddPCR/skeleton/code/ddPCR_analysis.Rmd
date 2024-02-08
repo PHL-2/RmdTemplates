@@ -140,8 +140,8 @@ d_pre %>%
 if (variance_test) {
   print(paste("Detected high variation; wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
   var_pander <- d_sd %>%
-    select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_threshold = outlier_median, GESD_q) %>%
-    filter(MAD_threshold >=9 | GESD_q <= 0.01) %>%
+    select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median, GESD_q) %>%
+    filter(MAD_from_med >= 9 | GESD_q <= 0.01) %>%
     arrange(Type, Target) %>%
     distinct()
 
