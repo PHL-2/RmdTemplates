@@ -51,13 +51,22 @@ library(pander)
 
 ```{r summary droplet counts check}
 
-if (sum(d_pre$Droplet_count<10000) > 0) {
+
+if (droplet_test) {
   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
   }
 
-if ((sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1, na.rm = T) > 0) | sum(d_sd$outlier_median > 5, na.rm = T) > 0) {
-  print("Detected high variation; please check samples")
-  }
+# if (sum(d_pre$Droplet_count<10000) > 0) {
+#   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
+#   }
+
+if (variance_test) {
+  print(paste("Detected high variation; wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
+}
+
+# if ((sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1, na.rm = T) > 0) | sum(d_sd$outlier_median > 5, na.rm = T) > 0) {
+#   print("Detected high variation; please check samples")
+#   }
 
 ```
 
@@ -96,9 +105,9 @@ d_pre %>%
 
 ## Droplet count
 
-```{r checking droplet count}
+```{r checking droplet count, fig.width=10}
 
-if (sum(d_pre$Droplet_count<10000) > 0) {
+if (droplet_test) {
   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
   pander(
     d_pre %>%
@@ -122,15 +131,17 @@ d_pre %>%
 
 ```
 
+\newpage
+
 ## Variance check
 
 ```{r variance check}
 
-if (any(d_sd$sd_from_mean > 1.3, na.rm = T) | any(d_sd$outlier_median > 7, na.rm = T) | any(d_sd$GESD_q < 0.01)) {
-  print("Detected high variation; please check samples")
+if (variance_test) {
+  print(paste("Detected high variation; wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
   var_pander <- d_sd %>%
     select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median, GESD_q) %>%
-    filter(sd_from_mean > 1.3 | MAD_from_med > 7 | GESD_q < 0.01) %>%
+    filter(MAD_from_med >= 9 | GESD_q <= 0.01) %>%
     arrange(Type, Target) %>%
     distinct()
 
