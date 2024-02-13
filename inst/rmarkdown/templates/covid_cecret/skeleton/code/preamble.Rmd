@@ -8,7 +8,7 @@ install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra"
 
 ```{r manual input ARTIC primer bed file to use}
 
-primer_select <- 1 # set variable as 1 for V3 or 2 for V5.3.2
+primer_select <- 2 # set variable as 1 for V3 or 2 for V5.3.2
 
 artic_primer_scheme <- c("V3", "V5.3.2")[primer_select]
 
@@ -367,7 +367,7 @@ amplicon_depth <- amplicon_fps %>%
   select(-FileName) %>%
   rename(sample_id = "bam") %>%
   mutate(sample_id = gsub(".primertrim.sorted.bam", "", sample_id)) %>%
-  rename_with(function(x) paste0("amp_tile_", x, "_artic_", artic_primer_scheme), -sample_id)
+  rename_with(function(x) paste0("amp_tile_", gsub(".*_", "", gsub("_INSERT$", "", x)), "_artic_", artic_primer_scheme), -sample_id)
 
 ```
 
@@ -662,7 +662,7 @@ nf_artic_version <- profile_software_version %>%
   pull()
 
 if(nf_artic_version != artic_primer_scheme) {
-    stop(simpleError("The Nextflow ARTIC primer set does not match the selected primer set in this RStudio project. Investigate"))
+    stop(simpleError("The primer_set setting in the Nextflow config file does not match the selected primer set in this RStudio project. Investigate!!"))
 }
 
 profile_software_version %>%
@@ -1061,13 +1061,15 @@ ann_geom_values[["nc_qc_scores"]] <- setNames(c(colorblind_pal()(8)[3:8]), nextc
 # create a sample type legend
 sample_type_legend <- s %>%
   select(sample_id, sample_type, plate_coord) %>%
-  mutate(plate_coord = gsub(".*_", "", plate_coord)) %>%
+  mutate(plate_coord = ifelse(is.na(plate_coord), "", gsub(".*_", "", plate_coord))) %>%
+  order_on_other_col(plate_coord, sample_id, decreasing = FALSE) %>%
   {
   ggplot(., aes(y = 1, x = sample_id, fill = sample_type)) +
     geom_tile(color = "black") +
     coord_fixed() +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type),
                                                                         names(ann_geom_values$sample_type_colors))]) +
+    scale_x_discrete(labels = levels(.$plate_coord)) +
     theme_bw() +
     theme(
       strip.text = element_text(size = 12),
@@ -1075,7 +1077,7 @@ sample_type_legend <- s %>%
       panel.grid = element_blank(),
       panel.border = element_blank(),
       axis.title = element_blank(),
-      axis.text = element_blank(),
+      axis.text.y = element_blank(),
       axis.ticks = element_blank(),
       axis.line = element_blank(),
       plot.margin= margin(0, 0, 0, 0, "pt"),
@@ -1187,7 +1189,7 @@ annotation_legend <- rbind(SC2_annotation, ddPCR_annotation) %>%
       axis.text.x = element_text(size = 8),
       legend.position = "bottom"
     ) +
-    labs(x="Position (bp)", y="", fill = "") +
+    labs(x="Genomic position (bp)", y="", fill = "") +
     guides(fill=guide_legend(nrow=1, bycol=TRUE, override.aes = list(size = 0.5)))
 
 slide_window_coverage %>%
@@ -1242,7 +1244,7 @@ slide_window_coverage %>%
       panel.border = element_rect(color = "black", fill = NA, size = 1),
       legend.position = "none"
       ) +
-    labs(x="Genomic coordinates (bp)", y="Sliding window average (X)")
+    labs(x="Genomic position (bp)", y="Sliding window average (X)")
   } %>%
   ggsave(filename = here("data", "figures", paste0(sequencing_date, "_s_gene_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
 
@@ -1333,6 +1335,7 @@ freyja_grouping <- s %>%
   fill(substring_end, .direction = "down") %>%
   ungroup() %>%
   mutate(combined_lineage = stringi::stri_sub(lineages, 1, substring_end)) %>%
+  mutate(combined_lineage = gsub("\\.$", "", combined_lineage)) %>%
   mutate(combined_lineage = factor(combined_lineage, levels = str_sort(unique(combined_lineage), numeric = TRUE))) %>%
   mutate(relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", combined_lineage),
                                       1, relative_abundances))
@@ -1364,7 +1367,11 @@ freyja_sample_type <- freyja_grouping %>%
          variance = var(avg_rel_abund)) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
             total_sd = sqrt(sum(variance))) %>%
-  ungroup()
+  ungroup() %>%
+  group_by(combined_lineage) %>%
+  filter(any(avg_rel_abund > 0.00005)) %>%
+  ungroup() %>%
+  droplevels()
 
 dir.create(here("upload", "freyja"), recursive = TRUE)
 
@@ -1375,7 +1382,6 @@ freyja_sample_type %>%
                                   paste0(round(avg_rel_abund*100, 2), "%"))) %>%
   select(-c(total_sd, avg_rel_abund)) %>%
   pivot_wider(names_from = "sample_type", values_from = "print_rel_abund", values_fill = "") %>%
-  mutate(combined_lineage = gsub("\\.$", "", combined_lineage)) %>%
   filter(!is.na(combined_lineage)) %>%
   arrange(combined_lineage) %>%
   rename(Lineage = "combined_lineage") %>%
