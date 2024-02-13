@@ -37,6 +37,13 @@ library(tidyverse)
 library(pander)
 
 
+if (num_dates == 1) {
+  figheight <- 4.2
+} else {
+  figHeight <- 8.4/num_dates
+}
+
+
 ```
 
 
@@ -105,7 +112,7 @@ d_pre %>%
 
 ## Droplet count
 
-```{r checking droplet count, fig.width=10}
+```{r checking droplet count, eval = droplet_test, fig.width=10}
 
 if (droplet_test) {
   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
@@ -135,12 +142,17 @@ d_pre %>%
 
 ## Variance check
 
-```{r variance check}
+```{r variance check, eval = variance_test}
 
 if (variance_test) {
-  print(paste("Detected high variation; wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
+  if (all_var_check) {
+    print("Detected high variation; wells effected will not affect summarized results so no wells removed")
+  } else {
+    print(paste("Detected high variation; wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
+  }
+
   var_pander <- d_sd %>%
-    select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD = outlier_median, GESD_q) %>%
+    select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median, GESD_q) %>%
     filter(MAD_from_med >=9 | GESD_q <= 0.01) %>%
     arrange(Type, Target) %>%
     distinct()
@@ -148,6 +160,8 @@ if (variance_test) {
   pander(var_pander,
       split.table = 500
   )
+} else {
+  print("Variation nominal")
 }
 
 ```
@@ -156,7 +170,7 @@ if (variance_test) {
 
 ## Number of overall positive droplets per sample
 
-```{r fig.height= 8}
+```{r, fig.height = figHeight}
 
 d %>% 
   group_by(Well,Type, Sample, Process, Spiked, Sample_date) %>%
@@ -186,7 +200,7 @@ d %>%
 
 ## All Data
 
-```{r}
+```{r, fig.height = figHeight}
 
 #All data
 d %>%
@@ -242,7 +256,7 @@ d %>%
 
 ### Experiment controls
 
-```{r Positive and negative control figures}
+```{r Positive and negative control figures, fig.height = figHeight}
 
 #Negative controls
 ##Extraction
@@ -286,7 +300,7 @@ dControls %>%
 
 ### ddPCR controls
 
-```{r}
+```{r, fig.height = figHeight}
 
 ##ddPCR
 dControls %>%
@@ -353,7 +367,7 @@ extraction input volume = 9600 uL
 
 ## Natural MHV in wastewater
 
-```{r unspiked mhv figures}
+```{r unspiked mhv figures, fig.height = figHeight}
 
 if(nrow(dUnspiked)>0) {
 
@@ -401,7 +415,7 @@ if(nrow(dUnspiked)>0) {
 ## Wastewater signal
 
 ### With MHV signal
-```{r waste water signal with MHV}
+```{r waste water signal with MHV, fig.height = figHeight}
 
 d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
@@ -455,7 +469,7 @@ d %>%
 
 ### Without MHV signal
 
-```{r WW signal without MHV}
+```{r WW signal without MHV, fig.height = figHeight}
 
 d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),

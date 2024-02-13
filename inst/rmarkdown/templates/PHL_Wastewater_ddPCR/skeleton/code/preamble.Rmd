@@ -174,17 +174,29 @@ d_sd <- d %>%
 
 variance_test <- any(d_sd$outlier_median >= 9, na.rm = T) | any(d_sd$GESD_q <= 0.01)
 
-wellsToRemove <- d_sd %>%
-  filter(outlier_median >= 9 | GESD_q <= 0.01,
-         grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-         Process == "Concentrated",
-         Spiked == "Spiked",
-         Target == "N2" | Target == "E") %>%
-  group_by(Type, Process, Spiked, Sample_date) %>%
-  filter(outlier_median >= 8) %>%
-  select(Well) %>%
-  distinct() %>%
-  pull()
+if (variance_test) {
+  wellsToRemove <- d_sd %>%
+    filter(outlier_median >= 9 | GESD_q <= 0.01,
+           grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+           Process == "Concentrated",
+           Spiked == "Spiked",
+           Target == "N2" | Target == "E") %>%
+    group_by(Type, Process, Spiked, Sample_date) %>%
+    filter(outlier_median >= 8) %>%
+    select(Well) %>%
+    distinct() %>%
+    pull()
+    
+  all_var <- d_sd %>%
+    filter(outlier_median >= 9 | GESD_q <= 0.01) %>%
+    select(Well) %>%
+    distinct() %>%
+    pull()
+  
+  all_var_check <- any(wellsToRemove %in% all_var_check)
+
+}
+
 
 ```
 
@@ -232,6 +244,11 @@ ww_SC2_conc_result_summarised <- d %>%
 
 
 ```{r data manip}
+
+num_dates <- d %>%
+  pull(Sample_date) %>%
+  unique() %>%
+  length()
 
 dControls <- d %>%
   filter(!grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type) | (grepl(pattern = "SouthWest", x = Type) & Sample_date == as.Date("2023-05-01"))) %>%
