@@ -1,13 +1,14 @@
 
 ```{r only run this chunk once to install packages, include=FALSE, eval=FALSE}
 
-install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx", "ggsci", "reticulate"))
+# vegan package requires fortran compiler; see MacBook setup SOP for how to install
+install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx", "ggsci", "reticulate", "vegan", "ape"))
 
 ```
 
 ```{r manual input ARTIC primer bed file to use}
 
-primer_select <- 1 # set variable as 1 for V3 or 2 for V5.3.2
+primer_select <- 2 # set variable as 1 for V3 or 2 for V5.3.2
 
 artic_primer_scheme <- c("V3", "V5.3.2")[primer_select]
 
@@ -34,6 +35,8 @@ library(patchwork)
 library(zoo)
 library(stringdist)
 library(scales)
+library(vegan)
+library(ape)
 
 ```
 
@@ -354,12 +357,17 @@ write_csv(mapped_read_lengths, actual_read_lengths_fp, append = TRUE)
 
 ```{r load amplicon results, eval = import_data}
 
-amplicon_fp <- here("data", "processed_cecret", "aci", "amplicon_depth.csv")
+amplicon_fps <- list.files(here("data", "processed_cecret", "aci"), pattern = "_amplicon_depth.csv", recursive = TRUE, full.names = TRUE)
 
-amplicon_depth <- read_csv(amplicon_fp) %>%
+amplicon_depth <- amplicon_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_csv(.$FileName, col_names = TRUE)) %>%
+  ungroup() %>%
+  select(-FileName) %>%
   rename(sample_id = "bam") %>%
   mutate(sample_id = gsub(".primertrim.sorted.bam", "", sample_id)) %>%
-  rename_with(function(x) paste0("amp_tile_", x, "_artic_", artic_primer_scheme), -sample_id)
+  rename_with(function(x) paste0("amp_tile_", gsub(".*_", "", gsub("_INSERT$", "", x)), "_artic_", artic_primer_scheme), -sample_id)
 
 ```
 
@@ -397,6 +405,21 @@ coverage <- slide_window_coverage %>%
             mean_coverage = mean(map_per_position)) %>%
   ungroup()
 
+s_gene_coverage <- slide_window_coverage %>%
+  filter(position >= 21563) %>%
+  filter(position <= 25384) %>%
+  group_by(sample_id) %>%
+  summarise(pct_s_gene_coverage_over_30x = sum(map_per_position >= 30)/n(),
+            pct_s_gene_coverage_over_25x = sum(map_per_position >= 25)/n(),
+            pct_s_gene_coverage_over_20x = sum(map_per_position >= 20)/n(),
+            pct_s_gene_coverage_over_15x = sum(map_per_position >= 15)/n(),
+            pct_s_gene_coverage_over_10x = sum(map_per_position >= 10)/n(),
+            pct_s_gene_coverage_over_5x = sum(map_per_position >= 5)/n(),
+            pct_s_gene_coverage_over_1x = sum(map_per_position >= 1)/n(),
+            median_s_gene_coverage = median(map_per_position),
+            mean_s_gene_coverage = mean(map_per_position)) %>%
+  ungroup()
+
 ```
 
 ```{r load samtools coverage data, eval = import_data}
@@ -424,9 +447,10 @@ k2_files_fps <- list.files(here("data", "processed_cecret", "kraken2"), pattern 
 k2_files_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
-  do(read_delim(.$FileName, col_names = FALSE)) %>%
+  do(read_delim(.$FileName,
+                col_names = c("k2_percent", "k2_clade_kmers", "k2_kmers", "k2_rank", "k2_ncbi_taxon_id", "k2_name"),
+                col_types = cols("k2_percent" = col_character()))) %>%
   ungroup() %>%
-  rename(k2_kmers = "X3", k2_rank = "X4", k2_name = "X6") %>%
   mutate(sample_id = gsub(".*/", "", FileName),
          sample_id = gsub("_kraken2_report.txt", "", sample_id),
          k2_name = gsub("^ *", "", k2_name),
@@ -474,6 +498,25 @@ nc_v_fp %>%
   mutate(pipeline = "UPHL-BioNGS-Cecret",
          software = "nextclade",
          version = gsub("\"|,| ", "", version)) %>%
+  select(pipeline, software, version) %>%
+  write_csv(file = software_version_fp, append = TRUE)
+
+nc_dl_fp <- here("data", "processed_cecret", "nextclade", "nextclade-sars.json")
+
+nc_dl_v <- nc_dl_fp %>%
+  read_csv(col_names = FALSE) %>%
+  rename(version = "X1") %>%
+  filter(grepl("updatedAt", version)) %>%
+  unique()
+
+if(nrow(nc_dl_v) > 1) {
+  stop(simpleError("Check the nextclade dataset version"))
+}
+
+nc_dl_v %>%
+  mutate(pipeline = "UPHL-BioNGS-Cecret",
+         software = "nextclade-dataset",
+         version = gsub("updatedAt: |,", "", version)) %>%
   select(pipeline, software, version) %>%
   write_csv(file = software_version_fp, append = TRUE)
 
@@ -552,9 +595,84 @@ cecret_aggregate <- cecret_aggregate %>%
 
 ```
 
+```{r load nextflow cecret profile, eval = import_data}
+
+nf_cecret_profile <- here("data", "processed_cecret", "nextflow.config") %>%
+  read_csv(col_names = FALSE)
+
+profile_write <- data.frame()
+
+open_brack_count <- 0
+record_settings <- FALSE
+record_profile <- FALSE
+
+for(current_line in 1:nrow(nf_cecret_profile)) {
+  
+  if(grepl("^aws \\{$|^docker \\{$", nf_cecret_profile[current_line,])) {
+    open_brack_count <- 0
+    record_settings <- TRUE
+  }
+  
+  if(grepl(paste0("^", cecret_profile, " \\{$"), nf_cecret_profile[current_line,])) {
+    open_brack_count <- 0
+    record_profile <- TRUE
+    profile_write <- rbind(profile_write, data.frame(X1 = "profiles {"))
+  }
+  
+  if(grepl("\\{", nf_cecret_profile[current_line,])) {
+    open_brack_count <- open_brack_count + 1
+  }
+  
+  if(grepl("\\}", nf_cecret_profile[current_line,])) {
+    open_brack_count <- open_brack_count - 1
+  }
+  
+  if(record_settings | record_profile) {
+    if(open_brack_count > 0) {
+      profile_write <- rbind(profile_write, nf_cecret_profile[current_line,])
+    } else if(open_brack_count == 0) {
+      profile_write <- rbind(profile_write, data.frame(X1 = "}"))
+      
+      if(record_profile) {
+        profile_write <- rbind(profile_write, data.frame(X1 = "}"))
+      }
+      
+      record_settings <- FALSE
+      record_profile <- FALSE
+    }
+  }
+}
+  
+profile_write %>%
+  write_csv(file = here("data", paste0(sequencing_date, "_nextflow.config")), col_names = FALSE)
+
+profile_software_version <- profile_write %>%
+  filter(grepl("kraken2_db|primer_set", X1)) %>%
+  separate(col = "X1", into = c("software", "version"), sep = " = ") %>%
+  mutate(pipeline = "UPHL-BioNGS-Cecret",
+         version = gsub("'", "", version),
+         version = gsub("/$", "", version),
+         version = gsub(".*/", "", version)) %>%
+  select(pipeline, software, version)
+
+nf_artic_version <- profile_software_version %>%
+  filter(software == "primer_set") %>%
+  select(version) %>%
+  mutate(version = gsub("ncov_", "", version)) %>%
+  pull()
+
+if(nf_artic_version != artic_primer_scheme) {
+    stop(simpleError("The primer_set setting in the Nextflow config file does not match the selected primer set in this RStudio project. Investigate!!"))
+}
+
+profile_software_version %>%
+  write_csv(file = software_version_fp, append = TRUE)
+
+```
+
 ```{r write cecret results, eval = import_data}
 
-list(samp_reads, cov_stats, coverage, next_clade, freyja, amplicon_depth, samtools_stat) %>%
+list(samp_reads, cov_stats, coverage, s_gene_coverage, next_clade, freyja, amplicon_depth, samtools_stat) %>%
   reduce(merge, by = "sample_id", all = TRUE) %>%
   merge(cecret_aggregate,
         by = c("sample_id", "nextclade_clade", "nextclade_clade_who", "nextclade_qc_overallstatus", "nextclade_qc_overallscore"),
@@ -597,6 +715,8 @@ s <- s_meta %>%
                                  TRUE ~ sample_type)) %>%
   #rearrange the sampletypes by ctrls first
   mutate(sample_type = factor(sample_type, levels = sample_type_lvls)) %>%
+  #order the sample_id by sample type then by plate position
+  mutate(sample_id = factor(sample_id, levels = unique(sample_id[str_order(paste0(as.numeric(sample_type), "-", plate_col, plate_row), decreasing = FALSE, numeric = TRUE)]))) %>%
   droplevels()
 
 #df with samples that have results (including controls)
@@ -677,9 +797,20 @@ if(length(s_upload) > 0) {
     group_by(FileName) %>%
     do(read.delim(.$FileName, header = FALSE)) %>%
     ungroup() %>%
-    select(-c(FileName)) %>%
     #rename the header of the fasta file
     mutate(V1 = gsub("Consensus_|.consensus.*", "", V1)) %>%
+    mutate(is_header = grepl("^>", V1)) %>%
+    group_by(FileName, is_header) %>%
+    mutate(concat_fasta = paste0(V1, collapse = "")) %>%
+    ungroup() %>%
+    # the following lines can be used to check that the fasta file is concatenated correctly
+    #rowwise() %>%
+    #mutate(find_string_position = unlist(gregexpr(V1, concat_fasta))[1]) %>%
+    #mutate(len = nchar(concat_fasta)) %>%
+    select(concat_fasta) %>%
+    unique() %>%
+    #have to manually remove terminal N's for GenBank submission
+    mutate(concat_fasta = gsub("^N*N|N*N$", "", concat_fasta)) %>%
     #this na argument needs to be blank, otherwise it will put strings beginning with the first two letters in quotes
     write_delim(file = fasta_fp, delim = "", col_names = FALSE, na = "")
   
@@ -761,8 +892,8 @@ seqsender <- s_toPlot %>%
   mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "1930 South Broad Street Suite 37, Philadelphia, PA 19145 USA",
                                       orig_lab == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122 USA",
                                       TRUE ~ "Unknown")) %>%
-  mutate(sra_file_path_1 = here("upload", "fastq", paste0(sample_id, "_filtered_R1_001.fastq.gz")),
-         sra_file_path_2 = here("upload", "fastq", paste0(sample_id, "_filtered_R2_001.fastq.gz"))) %>%
+  mutate(sra_file_path_1 = here("upload", "fastq", paste0(sample_id, "_filtered_R1.fastq.gz")),
+         sra_file_path_2 = here("upload", "fastq", paste0(sample_id, "_filtered_R2.fastq.gz"))) %>%
   mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC ", artic_primer_scheme,
                                      " primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length,
                                      " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
@@ -827,7 +958,7 @@ run_check_all_chunk <- any(grepl("Nasal swab", sample_type_lvls))
 #check the csv file for the epi's
 if(have_phi) {
 
-  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
+  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = "_PHL_sequencing_results.csv", recursive = TRUE, full.names = TRUE)
   
   epi_report <- epi_2_upload_fp %>%
     read_csv() %>%
@@ -922,18 +1053,23 @@ ann_geom_values[["alpha"]] <- setNames(c(alpha_select, additional_alphas), sampl
 
 # pick additional ggplot parameters
 ann_geom_values[["linetype"]] <- setNames(c("solid", "twodash", "dotted", "dashed"), c("good", "mediocre", "bad", "control"))
-ann_geom_values[["nc_qc"]] <- setNames(c(brewer.pal(6, "Set3")[c(1, 6, 4)], "#808080"), c("good", "mediocre", "bad", NA))
+ann_geom_values[["nc_qc_status"]] <- setNames(c(brewer.pal(6, "Set3")[c(1, 6, 4)], "#808080"), c("good", "mediocre", "bad", NA))
+
+nextclade_qc_score_lvls <- c("missingData", "mixedSites", "privateMutations", "snpClusters", "stopCodons", "frameShifts")
+ann_geom_values[["nc_qc_scores"]] <- setNames(c(colorblind_pal()(8)[3:8]), nextclade_qc_score_lvls)
 
 # create a sample type legend
 sample_type_legend <- s %>%
-  select(sample_id, sample_type) %>%
-  order_on_other_col(sample_id, sample_type, decreasing = FALSE) %>%
+  select(sample_id, sample_type, plate_coord) %>%
+  mutate(plate_coord = ifelse(is.na(plate_coord), "", gsub(".*_", "", plate_coord))) %>%
+  order_on_other_col(plate_coord, sample_id, decreasing = FALSE) %>%
   {
   ggplot(., aes(y = 1, x = sample_id, fill = sample_type)) +
     geom_tile(color = "black") +
     coord_fixed() +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type),
                                                                         names(ann_geom_values$sample_type_colors))]) +
+    scale_x_discrete(labels = levels(.$plate_coord)) +
     theme_bw() +
     theme(
       strip.text = element_text(size = 12),
@@ -941,7 +1077,7 @@ sample_type_legend <- s %>%
       panel.grid = element_blank(),
       panel.border = element_blank(),
       axis.title = element_blank(),
-      axis.text = element_blank(),
+      axis.text.y = element_blank(),
       axis.ticks = element_blank(),
       axis.line = element_blank(),
       plot.margin= margin(0, 0, 0, 0, "pt"),
@@ -957,90 +1093,59 @@ sample_type_legend <- s %>%
 
 ```{r variant colors}
 
-i <- 1
-ann_geom_values[["variants"]] <- c()
-ann_geom_values[["who_label"]] <- c()
+variant_list <- s %>%
+  select(nextclade_clade_who, pangolin_lineage, pangolin_note, Nextclade_pango) %>%
+  mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
+  mutate(pangolin_note = ifelse(pangolin_note == "Assigned from designation hash.", NA, pangolin_note)) %>%
+  unique() %>%
+  separate_rows(pangolin_note, sep=" ") %>%
+  pivot_longer(cols = c("pangolin_lineage", "pangolin_note", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
+  mutate(variants = gsub("\\(.*", "", variants)) %>%
+  select(-variant_num) %>%
+  filter(!is.na(variants)) %>%
+  filter(variants!="Unassigned") %>%
+  distinct() %>%
+  arrange(nextclade_clade_who, variants) %>%
+  mutate(combined_list = gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", variants))
 
-#loop over the VOCs
-for(who_label in c("Reference", sort(unique(s$nextclade_clade_who)[unique(s$nextclade_clade_who) != "Reference"]))) {
+variant_color <- data.frame(colors = c(calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)],
+                                       few_pal(palette = "Light")(8))) %>%
+  slice_head(n=length(unique(variant_list$combined_list))) %>%
+  bind_cols(lineage = sort(unique(variant_list$combined_list))) %>%
+  left_join(variant_list, by = c("lineage" = "combined_list")) %>%
+  select(-nextclade_clade_who) %>%
+  distinct()
   
-  variant_list <- s %>%
-    filter(nextclade_clade_who == who_label) %>%
-    #is_designated means that the sample was assigned to a reference strain exactly using PANGO algorithm (decision tree) rather than PUSHER
-    #the pangolin_note section here for PUSHER will be 'Assigned from designation hash.' so its useless
-    select(pangolin_lineage, pangolin_note, Nextclade_pango) %>%
-    mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
-    mutate(pangolin_note = ifelse(pangolin_note == "Assigned from designation hash.", NA, pangolin_note)) %>%
-    unique() %>%
-    separate_rows(pangolin_note, sep=" ") %>%
-    pivot_longer(cols = c("pangolin_lineage", "pangolin_note", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
-    mutate(variants = gsub("\\(.*", "", variants)) %>%
-    select(variants) %>%
-    filter(!is.na(variants)) %>%
-    filter(variants!="Unassigned") %>%
-    unique() %>%
-    pull() %>%
-    str_sort(numeric = TRUE, decreasing = FALSE)
-  
-  #get the letters, period, and first number of each variant
-  combined_list <- unique(gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", variant_list))
-  
-  for(combined_variant in combined_list) {
+var_colorgrad <- NULL
+for(var in unique(variant_color$lineage)) {
+  subcolors <- variant_color %>%
+    filter(lineage == var)
+
+  variant_gradient <- colorRampPalette(c(unique(subcolors$colors),
+                                         adjustcolor(unique(subcolors$colors), alpha.f = 0.1)), alpha = TRUE)(nrow(subcolors)) 
     
-    #if a pangolin_lineage ends with a number, get the sub-lineages with that number
-    if(grepl("[0-9]$", combined_variant)) {
-      
-      #make the sublineage regex
-      combined_variant_gsub <- gsub("\\.", "\\\\.", combined_variant)
-      exact_lineage_regex <- paste0("^", combined_variant_gsub, "$")
-      sublineage_regex <- paste0("^", combined_variant_gsub, "\\.")
-      final_sublineage_regex <- paste0(exact_lineage_regex, "|", sublineage_regex)
-      
-      sublineage <- variant_list[grepl(final_sublineage_regex, variant_list)]
-    } else{
-      sublineage <- combined_variant
-    }
-    
-    variant_color <- c(calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)], few_pal(palette = "Light")(8))[i]
-    variant_gradient <- colorRampPalette(c(variant_color, adjustcolor(variant_color, alpha.f = 0.1)), alpha = TRUE)(length(sublineage))
-    names(variant_gradient) <- sublineage
-    
-    who_color <- variant_color
-    names(who_color) <- paste0(who_label, " - ", combined_variant)
+  subcolors <- data.frame(subcolors = variant_gradient) %>%
+    bind_cols(subcolors)
   
-    ann_geom_values[["variants"]] <- c(ann_geom_values[["variants"]], variant_gradient)
-    ann_geom_values[["who_label"]] <- c(ann_geom_values[["who_label"]], who_color)
-  
-  i <- i + 1
-    
-  }
-  
+  var_colorgrad <- var_colorgrad %>%
+    bind_rows(subcolors)
 }
+  
+var_colorgrad<- var_colorgrad %>%
+  left_join(variant_list, by = c("variants", "lineage" = "combined_list"))
 
+ann_geom_values[["variants"]] <- var_colorgrad %>%
+  select(subcolors, variants) %>%
+  distinct() %>%
+  pull(subcolors, name = variants) 
+
+ann_geom_values[["parent_variant"]] <- var_colorgrad %>%
+  select(colors, lineage) %>%
+  distinct() %>%
+  pull(colors, name = "lineage")
+  
 ann_geom_values[["variants"]] <- c("#80808080", "#80808080", ann_geom_values[["variants"]])
 names(ann_geom_values[["variants"]]) <- c(NA, "Unassigned", names(ann_geom_values[["variants"]])[-(1:2)])
-
-#show_col(ann_geom_values[["variants"]])
-
-who_legend <- data.frame(x = 1, y = 1, fill_col = names(ann_geom_values[["who_label"]])) %>%
-  ggplot(aes(x = x, y = y, fill = fill_col)) +
-    geom_bar(stat="identity", alpha = 0) +
-    scale_fill_manual(values = ann_geom_values$who_label) +
-    guides(fill = guide_legend(override.aes = list(alpha=1), reverse=F, order = 1)) + 
-    theme_bw() +
-    theme(
-      strip.text = element_text(size = 12),
-      strip.background = element_blank(),
-      panel.grid = element_blank(),
-      panel.border = element_blank(),
-      axis.title = element_blank(),
-      axis.text = element_blank(),
-      axis.ticks = element_blank(),
-      axis.line = element_blank(),
-      legend.position = c(0, .8),
-      plot.margin= margin(0, 0, 0, 0, "pt")
-    ) +
-    labs(fill = "WHO label", y = "", x = "")
 
 ```
 
@@ -1084,7 +1189,7 @@ annotation_legend <- rbind(SC2_annotation, ddPCR_annotation) %>%
       axis.text.x = element_text(size = 8),
       legend.position = "bottom"
     ) +
-    labs(x="Position (bp)", y="", fill = "") +
+    labs(x="Genomic position (bp)", y="", fill = "") +
     guides(fill=guide_legend(nrow=1, bycol=TRUE, override.aes = list(size = 0.5)))
 
 slide_window_coverage %>%
@@ -1113,6 +1218,36 @@ slide_window_coverage %>%
   } %>%
   ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
 
+slide_window_coverage %>%
+  filter(position >= 21563) %>%
+  filter(position <= 25384) %>%
+  merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
+  mutate(slide_window_100 = ifelse(slide_window_100 <= 1, 1, slide_window_100)) %>%
+  {
+  ggplot(., aes(x = position, y = slide_window_100, fill = sample_type, group = sample_id)) +
+    geom_area(aes(alpha = sample_type), position = "identity") +
+    geom_hline(yintercept = 100, linetype = "dashed", alpha = 0.4) +
+    facet_wrap(~sample_type, ncol = 1, scales = "free_y") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_alpha_manual(values = ann_geom_values$alpha[match(levels(.$sample_type), names(ann_geom_values$alpha))]) + 
+    scale_x_continuous(expand = c(0, 50),
+                       breaks = c(min(.$position),
+                                  labeling::extended(min(.$position),
+                                                     max(.$position),
+                                                     m = 5),
+                                  max(.$position))) + 
+    scale_y_continuous(trans = "log10") + 
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      legend.position = "none"
+      ) +
+    labs(x="Genomic position (bp)", y="Sliding window average (X)")
+  } %>%
+  ggsave(filename = here("data", "figures", paste0(sequencing_date, "_s_gene_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
+
 col2show <- s %>%
   filter(sample_id != "Undetermined") %>%
   filter(!is.na(median_coverage)) %>%
@@ -1127,14 +1262,14 @@ for(col_num in col2show) {
                                                   is.na(nextclade_qc_overallstatus) & isControl ~ "control",
                                                   TRUE ~ nextclade_qc_overallstatus)) %>%
     mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = names(ann_geom_values$linetype))) %>%
-    mutate(who_label = case_when(is.na(Nextclade_pango) & !isControl ~ "no results",
+    mutate(parent_variant = case_when(is.na(Nextclade_pango) & !isControl ~ "no results",
                                  is.na(Nextclade_pango) & isControl ~ "control",
-                                 TRUE ~ paste0(nextclade_clade_who, " - ", gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", Nextclade_pango)))) %>%
-    mutate(who_label = factor(who_label, levels = c(names(ann_geom_values$who_label), "no results", "control"))) %>%
+                                 TRUE ~ gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", Nextclade_pango))) %>%
+    mutate(parent_variant = factor(parent_variant, levels = c(names(ann_geom_values$parent_variant), "no results", "control"))) %>%
     filter(sample_id != "Undetermined") %>%
     filter(plate_col == col_num) %>%
     droplevels() %>%
-    select(sample_id, who_label, nextclade_qc_overallstatus, sample_type)
+    select(sample_id, parent_variant, nextclade_qc_overallstatus, sample_type)
   
   sample_type_label <- setNames(as.character(filtered_samp_name$sample_type), filtered_samp_name$sample_id)
 
@@ -1144,13 +1279,12 @@ for(col_num in col2show) {
     merge(filtered_samp_name, by = "sample_id", all = TRUE) %>%
     droplevels() %>%
     {
-    ggplot(., aes(x = position, y = slide_window_100, group = sample_id, fill = who_label)) +
+    ggplot(., aes(x = position, y = slide_window_100, group = sample_id, fill = parent_variant)) +
       geom_line(aes(linetype = nextclade_qc_overallstatus), color = "black") +
       geom_area(position = "identity") +
       facet_wrap(~sample_id, ncol = 1, scales = "free_y", labeller = labeller(sample_id = sample_type_label)) +
       scale_linetype_manual(values = ann_geom_values$linetype[match(levels(.$nextclade_qc_overallstatus), names(ann_geom_values$linetype))]) +
-      scale_fill_manual(values = c(ann_geom_values$who_label, setNames(c("#808080", "#000000"), c("no results", "control")))[match(levels(.$who_label),
-                                                                                                  c(names(ann_geom_values$who_label), "no results", "control"))]) +
+      scale_fill_manual(values = c(ann_geom_values$parent_variant, setNames(c("#808080", "#000000"), c("no results", "control")))[match(levels(.$parent_variant), c(names(ann_geom_values$parent_variant), "no results", "control"))]) +
       scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
       theme_bw() +
       theme(
@@ -1162,13 +1296,96 @@ for(col_num in col2show) {
         ) +
       labs(x=paste0("Column ", col_num, " samples"),
            y="Sliding window average (X)",
-           fill = "WHO",
+           fill = "Parent\nvariant",
            linetype = "Nextclade Quality") +
       guides(linetype = guide_legend(order = 1), fill = guide_legend(order = 2)) +
     annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
     } %>%
     ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sample_sliding_coverage_100_bp_col", col_num, ".png")), plot = ., width = 11, height = 8)
 }
+
+```
+
+```{r export freyja table}
+
+# this table groups the sublineages with the same parent lineages together and gets the sum of the abundances
+freyja_grouping <- s %>%
+  as.data.frame() %>%
+  select(sample_id, sample_type, freyja_lineages, freyja_abundances) %>%
+  group_by(sample_id) %>%
+  mutate(lineages = list(freyja_lineages),
+         relative_abundances = list(freyja_abundances)) %>%
+  separate_rows(c(lineages, relative_abundances), sep=" ") %>%
+  mutate(lineages = gsub("\\([0-9]*\\)|-like", "", lineages),
+         lineages = ifelse((is.na(lineages) | lineages == "Misc"), "Unresolved", lineages),
+         relative_abundances = as.numeric(relative_abundances),
+         main_lineage = gsub("\\..*", "", lineages)) %>%
+  ungroup() %>%
+  select(-c("freyja_lineages", "freyja_abundances")) %>%
+  arrange(sample_id, relative_abundances, str_rank(lineages, numeric = TRUE)) %>%
+  group_by(sample_id, main_lineage, relative_abundances) %>%
+  #add an extra period to the end to help with matching lineages correctly
+  mutate(lineages = gsub("$", ".", lineages),
+         least_common_substring = attr(adist(lineages, counts = TRUE), "trafos")[, 1],
+         end_match = do.call(rbind, stringi::stri_locate_all_regex(least_common_substring, "^M+"))[, 2],
+         has_lowest_str_length = str_length(lineages) == min(str_length(lineages)),
+         substring_end = ifelse(sum(has_lowest_str_length) == 1 &
+                                grepl("^M+$", least_common_substring), end_match, NA),
+         substring_end = ifelse(all(is.na(substring_end)), min(end_match), substring_end)) %>%
+  fill(substring_end, .direction = "down") %>%
+  ungroup() %>%
+  mutate(combined_lineage = stringi::stri_sub(lineages, 1, substring_end)) %>%
+  mutate(combined_lineage = gsub("\\.$", "", combined_lineage)) %>%
+  mutate(combined_lineage = factor(combined_lineage, levels = str_sort(unique(combined_lineage), numeric = TRUE))) %>%
+  mutate(relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", combined_lineage),
+                                      1, relative_abundances))
+
+freyja_matrix <- freyja_grouping %>%
+  complete(nesting(sample_id, sample_type), combined_lineage, fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, combined_lineage) %>%
+  summarize(relative_abundances = sum(relative_abundances)) %>%
+  ungroup() %>%
+  pivot_wider(names_from = "combined_lineage", values_from = "relative_abundances") %>%
+  column_to_rownames("sample_id")
+
+# this table groups sample type numbers together
+freyja_sample_type <- freyja_grouping %>%
+  filter(sample_id %in% s_toPlot$sample_id) %>%
+  droplevels() %>%
+  complete(nesting(sample_id, sample_type), nesting(combined_lineage, main_lineage), fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, sample_type, combined_lineage, main_lineage) %>%
+  summarize(relative_abundances = sum(relative_abundances)) %>%
+  ungroup() %>%
+  filter(!is.na(relative_abundances)) %>%
+  group_by(sample_type) %>%
+  mutate(total_samples = n_distinct(sample_id)) %>%
+  ungroup() %>%
+  # to calculate the total standard deviation of a combined distribution,
+  # get the total variance and square root it
+  group_by(sample_type, combined_lineage, main_lineage) %>%
+  mutate(avg_rel_abund = relative_abundances/total_samples,
+         variance = var(avg_rel_abund)) %>%
+  summarize(avg_rel_abund = sum(avg_rel_abund),
+            total_sd = sqrt(sum(variance))) %>%
+  ungroup() %>%
+  group_by(combined_lineage) %>%
+  filter(any(avg_rel_abund > 0.00005)) %>%
+  ungroup() %>%
+  droplevels()
+
+dir.create(here("upload", "freyja"), recursive = TRUE)
+
+freyja_sample_type %>%
+  mutate(print_rel_abund = ifelse(!is.na(total_sd),
+                                  paste0(round(avg_rel_abund*100, 2), "% +/- ",
+                                         round(total_sd*100, 2), "%"),
+                                  paste0(round(avg_rel_abund*100, 2), "%"))) %>%
+  select(-c(total_sd, avg_rel_abund)) %>%
+  pivot_wider(names_from = "sample_type", values_from = "print_rel_abund", values_fill = "") %>%
+  filter(!is.na(combined_lineage)) %>%
+  arrange(combined_lineage) %>%
+  rename(Lineage = "combined_lineage") %>%
+  write_csv(here("upload", "freyja", paste0(project_name, "_freyja_results.csv")))
 
 ```
 

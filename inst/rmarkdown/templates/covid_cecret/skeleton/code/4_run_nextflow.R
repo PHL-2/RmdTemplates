@@ -56,10 +56,11 @@ tryCatch(
 submit_screen_job(message2display = "Demultiplex with BCLConvert",
                   ec2_login = ec2_hostname,
                   screen_session_name = "demux",
-                  command2run = paste("nextflow run nf-core/demultiplex",
+                  command2run = paste("cd ~/.tmp_screen/;",
+                                      "nextflow run nf-core/demultiplex",
                                       "-c ~/.nextflow/config",
                                       "-profile", demux_profile,
-                                      "-bucket-dir", paste0(s3_nf_work_bucket, "/demux_", sequencing_date),
+                                      "-bucket-dir", paste0(s3_nextflow_work_bucket, "/demux_", sequencing_date),
                                       "-resume",
                                       "--input", paste0(s3_run_bucket, "/", sequencing_date, "/", sequencing_date, "_nf_demux_samplesheet.csv"),
                                       "--outdir", paste0(s3_fastq_bucket, "/", sequencing_date, "/processed_bclconvert")))
@@ -78,6 +79,8 @@ fastq_file_sizes <- system2("aws", c("s3 ls",
   as.data.frame() %>%
   `colnames<-`(c("date", "time", "bytes", "filename")) %>%
   select(bytes, filename) %>%
+  filter(!grepl("/Alignment_", filename)) %>%
+  filter(!grepl("/Fastq/", filename)) %>%
   mutate(sequencing_folder = gsub(".*processed_bclconvert/", "", filename),
          sequencing_folder = gsub("/.*", "", sequencing_folder),
          filename = gsub(".*/", "", filename),
@@ -92,13 +95,42 @@ if(undetermined_bytes/sum(fastq_file_sizes$bytes) > 0.5) {
   stop(simpleError("Something might've went wrong with the demultiplexing!\nThe unassigned reads makes up more than 50% of the total reads!"))
 }
 
+# Download most recent Nextclade dataset
+submit_screen_job(message2display = "Download Nextclade SARS-CoV-2 data",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = "nextclade-dl",
+                  command2run = paste("mkdir -p ~/.local/bin/;",
+                                      "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
+                                      "chmod +x ~/.local/bin/nextclade;",
+                                      "nextclade --version;",
+                                      "nextclade dataset list --name sars-cov-2 --json > ~/nextclade-sars.json;",
+                                      "nextclade dataset get --name sars-cov-2 --output-zip ~/sars.zip;",
+                                      "aws s3 cp ~/nextclade-sars.json", paste0(s3_reference_bucket, "/nextclade/nextclade-sars.json;"),
+                                      "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
+                                      "rm ~/nextclade-sars.json ~/sars.zip"))
+
+check_screen_job(message2display = "Checking Nextclade download job",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = "nextclade-dl")
+
+# Update the Cecret pipeline; this should be done as often as possible as it also updates the freyja data used for assignment
+submit_screen_job(message2display = "Update Cecret pipeline",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = "update-cecret",
+                  command2run = "nextflow pull UPHL-BioNGS/Cecret -r master")
+
+check_screen_job(message2display = "Checking Cecret update",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = "update-cecret")
+
 # Cecret pipeline
 submit_screen_job(message2display = "Process data through Cecret pipeline",
                   ec2_login = ec2_hostname,
                   screen_session_name = "cecret",
-                  command2run = paste("nextflow run UPHL-BioNGS/Cecret",
+                  command2run = paste("cd ~/.tmp_screen/;",
+                                      "nextflow run UPHL-BioNGS/Cecret",
                                       "-profile", cecret_profile,
-                                      "-bucket-dir", paste0(s3_nf_work_bucket, "/cecret_", sequencing_date),
+                                      "-bucket-dir", paste0(s3_nextflow_work_bucket, "/cecret_", sequencing_date),
                                       "-r master",
                                       "-resume",
                                       "--reads", paste0(s3_fastq_bucket, "/", sequencing_date, "/processed_bclconvert/", unique(fastq_file_sizes$sequencing_folder)),
@@ -107,9 +139,9 @@ submit_screen_job(message2display = "Process data through Cecret pipeline",
 check_screen_job(message2display = "Checking Cecret job",
                  ec2_login = ec2_hostname,
                  screen_session_name = "cecret")
+rstudioapi::executeCommand('activateConsole')
 
 # Download BCLConvert files
-rstudioapi::executeCommand('activateConsole')
 system2("aws", c("s3 cp",
                  paste0(s3_fastq_bucket, "/", sequencing_date),
                  here("data"),
@@ -132,10 +164,19 @@ system2("aws", c("s3 cp",
                  "--include '*aggregated-freyja.tsv'",
                  "--include '*_kraken2_report.txt'",
                  "--include '*snp-dists.txt'",
-                 "--include '*amplicon_depth.csv'",
+                 "--include '*_amplicon_depth.csv'",
                  "--include '*nextclade.tsv'",
                  "--include '*nextclade.json'",
                  "--include '*.stats.txt'",
                  "--include '*.cov.txt'",
                  "--include '*.depth.txt'",
                  "--include '*cecret_results.csv'"))
+
+# Download Nextflow config file for profile (use terminal because of proxy login issue)
+run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"), here("data", "processed_cecret", "nextflow.config")))
+rstudioapi::executeCommand('activateConsole')
+
+# Download Nextclade dataset
+system2("aws", c("s3 cp",
+                 paste0(s3_reference_bucket, "/nextclade/nextclade-sars.json"),
+                 here("data", "processed_cecret", "nextclade/")))
