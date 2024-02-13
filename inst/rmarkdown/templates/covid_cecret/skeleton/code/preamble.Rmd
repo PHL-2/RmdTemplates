@@ -367,7 +367,7 @@ amplicon_depth <- amplicon_fps %>%
   select(-FileName) %>%
   rename(sample_id = "bam") %>%
   mutate(sample_id = gsub(".primertrim.sorted.bam", "", sample_id)) %>%
-  rename_with(function(x) paste0("amp_tile_", x, "_artic_", artic_primer_scheme), -sample_id)
+  rename_with(function(x) paste0("amp_tile_", gsub(".*_", "", gsub("_INSERT$", "", x)), "_artic_", artic_primer_scheme), -sample_id)
 
 ```
 
@@ -1189,7 +1189,7 @@ annotation_legend <- rbind(SC2_annotation, ddPCR_annotation) %>%
       axis.text.x = element_text(size = 8),
       legend.position = "bottom"
     ) +
-    labs(x="Position (bp)", y="", fill = "") +
+    labs(x="Genomic position (bp)", y="", fill = "") +
     guides(fill=guide_legend(nrow=1, bycol=TRUE, override.aes = list(size = 0.5)))
 
 slide_window_coverage %>%
@@ -1244,7 +1244,7 @@ slide_window_coverage %>%
       panel.border = element_rect(color = "black", fill = NA, size = 1),
       legend.position = "none"
       ) +
-    labs(x="Genomic coordinates (bp)", y="Sliding window average (X)")
+    labs(x="Genomic position (bp)", y="Sliding window average (X)")
   } %>%
   ggsave(filename = here("data", "figures", paste0(sequencing_date, "_s_gene_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
 

@@ -687,106 +687,6 @@ k2 %>%
 
 ```
 
-## SNPs compared to reference strain
-
-```{r snpdists, fig.height=8, fig.width=8}
-
-snp_dist_reorder <- snpdists %>%
-  rename(subject = "sample_id", query = "compared_to") %>%
-  merge(select(s, sample_id, sample_type, plate_coord, plate_col, plate_row), by.x = "subject", by.y = "sample_id", all.x = TRUE) %>%
-  rename_with( ~ paste0("subject_", .x), .cols = c(sample_type, plate_coord, plate_col, plate_row)) %>%
-  mutate(subject_plate_coord = gsub(".*_", "", subject_plate_coord)) %>%
-  merge(select(s, sample_id, sample_type), by.x = "query", by.y = "sample_id", all.x = TRUE) %>%
-  rename(query_sample_type = "sample_type") %>%
-  mutate(subject_sample_type = ifelse(is.na(subject_sample_type), "Reference", as.character(subject_sample_type)),
-         subject_sample_type = factor(subject_sample_type, levels = c("Reference", "Mock DNA positive control", levels(s$sample_type)[!grepl("^Mock", levels(s$sample_type))])),
-         query_sample_type = ifelse(is.na(query_sample_type), "Reference", as.character(query_sample_type)),
-         query_sample_type = factor(query_sample_type, levels = c("Reference",  "Mock DNA positive control", levels(s$sample_type)[!grepl("^Mock", levels(s$sample_type))]))) %>%
-  group_by(subject) %>%
-  mutate(reference_snps = ifelse(query == "MN908947.3", snps, NA)) %>%
-  fill(reference_snps, .direction = "downup") %>%
-  ungroup() %>%
-  order_on_other_col(subject, reference_snps) %>%
-  mutate(query = factor(query, levels = rev(levels(subject))))
-
-snp_dists_y_legend <- snp_dist_reorder %>%
-  select(subject, subject_sample_type, subject_plate_coord) %>%
-  mutate(subject_plate_coord = ifelse(is.na(subject_plate_coord), "", gsub(".*_", "", subject_plate_coord))) %>%
-  unique() %>%
-  arrange(subject) %>%
-  {
-  ggplot(., aes(x = 1, y = subject, fill = subject_sample_type)) +
-    geom_tile(color = "black") +
-    coord_fixed() +
-    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$subject_sample_type),
-                                                                        names(ann_geom_values$sample_type_colors))]) +
-    scale_y_discrete(labels = .$subject_plate_coord) +
-    theme_bw() +
-    theme(
-      strip.text = element_text(size = 12),
-      strip.background = element_blank(),
-      panel.grid = element_blank(),
-      panel.border = element_blank(),
-      axis.title = element_blank(),
-      axis.text.x = element_blank(),
-      axis.text.y = element_text(size = convert_sample_size_2_font_size(nrow(s), max_font = 15)),
-      axis.ticks = element_blank(),
-      axis.line = element_blank(),
-      plot.margin= margin(0, 0, 0, 0, "pt"),
-      legend.position = "bottom"
-    ) +
-    labs(y = "", x = "", fill = "") + 
-    guides(fill = FALSE)
-  }
-
-snp_dists_x_legend <- snp_dist_reorder %>%
-  select(query, query_sample_type) %>%
-  unique() %>%
-  {
-  ggplot(., aes(y = 1, x = query, fill = query_sample_type)) +
-    geom_tile(color = "black") +
-    coord_fixed() +
-    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$query_sample_type),
-                                                                        names(ann_geom_values$sample_type_colors))],
-                      ) +
-    theme_bw() +
-    theme(
-      strip.text = element_text(size = 12),
-      strip.background = element_blank(),
-      panel.grid = element_blank(),
-      panel.border = element_blank(),
-      axis.title = element_blank(),
-      axis.text = element_blank(),
-      axis.ticks = element_blank(),
-      axis.line = element_blank(),
-      plot.margin= margin(0, 0, 0, 0, "pt"),
-      legend.position = "top"
-    ) +
-    labs(y = "", x = "", fill = "") + 
-    guides(fill = guide_legend(override.aes = list(size = 2)))
-  }
-
-snp_dist_reorder %>%
-  {
-  plot_spacer() +
-  snp_dists_x_legend +
-  snp_dists_y_legend +
-  ggplot(., aes(x=query, y=subject)) +
-    geom_tile(aes(fill = snps), color = "black") +
-    coord_equal() +
-    scale_fill_gradientn(colors = rev(brewer.pal(11, "Spectral")[1:6])) +
-    theme_bw() +
-    theme(panel.grid = element_blank(),
-          panel.border = element_blank(),
-          axis.ticks = element_blank(),
-          axis.text = element_blank(),
-          axis.title = element_blank(),
-          plot.margin= margin(0, 0, 0, 0, "pt")) +
-    labs(fill = "SNPs", x = "", y = "")
-  }
-
-```
-
 ## Coverage
 
 ### Number of reads mapped to reference SARS-CoV-2 genome
@@ -1009,6 +909,108 @@ knitr::include_graphics(here("data", "figures", paste0(sequencing_date, "_s_gene
 
 \elandscape
 
+## SNPs compared to reference strain
+
+```{r snpdists, fig.height=8, fig.width=8}
+
+snp_dist_reorder <- snpdists %>%
+  rename(subject = "sample_id", query = "compared_to") %>%
+  merge(select(s, sample_id, sample_type, plate_coord, plate_col, plate_row), by.x = "subject", by.y = "sample_id", all.x = TRUE) %>%
+  filter(!grepl("Poor", sample_type)) %>%
+  rename_with( ~ paste0("subject_", .x), .cols = c(sample_type, plate_coord, plate_col, plate_row)) %>%
+  mutate(subject_plate_coord = gsub(".*_", "", subject_plate_coord)) %>%
+  merge(select(s, sample_id, sample_type), by.x = "query", by.y = "sample_id", all.x = TRUE) %>%
+  filter(!grepl("Poor", sample_type)) %>%
+  rename(query_sample_type = "sample_type") %>%
+  mutate(subject_sample_type = ifelse(is.na(subject_sample_type), "Reference", as.character(subject_sample_type)),
+         subject_sample_type = factor(subject_sample_type, levels = c("Reference", "Mock DNA positive control", levels(s$sample_type)[!grepl("^Mock", levels(s$sample_type))])),
+         query_sample_type = ifelse(is.na(query_sample_type), "Reference", as.character(query_sample_type)),
+         query_sample_type = factor(query_sample_type, levels = c("Reference",  "Mock DNA positive control", levels(s$sample_type)[!grepl("^Mock", levels(s$sample_type))]))) %>%
+  group_by(subject) %>%
+  mutate(reference_snps = ifelse(query == "MN908947.3", snps, NA)) %>%
+  fill(reference_snps, .direction = "downup") %>%
+  ungroup() %>%
+  order_on_other_col(subject, reference_snps) %>%
+  mutate(query = factor(query, levels = rev(levels(subject))))
+
+snp_dists_y_legend <- snp_dist_reorder %>%
+  select(subject, subject_sample_type, subject_plate_coord) %>%
+  mutate(subject_plate_coord = ifelse(is.na(subject_plate_coord), "", gsub(".*_", "", subject_plate_coord))) %>%
+  unique() %>%
+  arrange(subject) %>%
+  {
+  ggplot(., aes(x = 1, y = subject, fill = subject_sample_type)) +
+    geom_tile(color = "black") +
+    coord_fixed() +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$subject_sample_type),
+                                                                        names(ann_geom_values$sample_type_colors))]) +
+    scale_y_discrete(labels = .$subject_plate_coord) +
+    theme_bw() +
+    theme(
+      strip.text = element_text(size = 12),
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_text(size = convert_sample_size_2_font_size(nrow(s), max_font = 15)),
+      axis.ticks = element_blank(),
+      axis.line = element_blank(),
+      plot.margin= margin(0, 0, 0, 0, "pt"),
+      legend.position = "bottom"
+    ) +
+    labs(y = "", x = "", fill = "") + 
+    guides(fill = FALSE)
+  }
+
+snp_dists_x_legend <- snp_dist_reorder %>%
+  select(query, query_sample_type) %>%
+  unique() %>%
+  {
+  ggplot(., aes(y = 1, x = query, fill = query_sample_type)) +
+    geom_tile(color = "black") +
+    coord_fixed() +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$query_sample_type),
+                                                                        names(ann_geom_values$sample_type_colors))],
+                      ) +
+    theme_bw() +
+    theme(
+      strip.text = element_text(size = 12),
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.line = element_blank(),
+      plot.margin= margin(0, 0, 0, 0, "pt"),
+      legend.position = "top"
+    ) +
+    labs(y = "", x = "", fill = "") + 
+    guides(fill = guide_legend(override.aes = list(size = 2)))
+  }
+
+snp_dist_reorder %>%
+  {
+  plot_spacer() +
+  snp_dists_x_legend +
+  snp_dists_y_legend +
+  ggplot(., aes(x=query, y=subject)) +
+    geom_tile(aes(fill = snps), color = "black") +
+    coord_equal() +
+    scale_fill_gradientn(colors = rev(brewer.pal(11, "Spectral")[1:6])) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.ticks = element_blank(),
+          axis.text = element_blank(),
+          axis.title = element_blank(),
+          plot.margin= margin(0, 0, 0, 0, "pt")) +
+    labs(fill = "SNPs", x = "", y = "")
+  }
+
+```
+
 ## Freyja results
 
 ### Heatmap
@@ -1155,7 +1157,7 @@ freyja_sample_type %>%
 
 ```
 
-### Freyja by sample type
+### Freyja table by sample type
 
 Relative lineage abundances within each sample type. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample type and getting the square root \newline
 Only lineages with abundance >0.01% in at least one sample type are kept
@@ -1195,6 +1197,8 @@ freyja_sample_type %>%
   }
 
 ```
+
+\newpage
 
 ### Freyja summarized
 
