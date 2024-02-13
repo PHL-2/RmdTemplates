@@ -131,8 +131,11 @@ if(run_uploaded_2_basespace) {
     list(run_stats = .) %>%
     as.data.frame() %>%
     filter(grepl("SequencingStatsCompact.ClusterDensity", run_stats)) %>%
-    mutate(run_stats = gsub(".*\\| |e.*", "", run_stats),
-           run_stats = as.numeric(run_stats)*1000) %>%
+    # cluster density seems to be reported in the millions. If there is no scientific notation, divide by 1000
+    mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+           run_stats = ifelse(grepl("e", run_stats),
+                              as.numeric(gsub("e.*", "", run_stats))*1000,
+                              as.numeric(run_stats)/1000)) %>%
     pull()
 
   run_q30 <- run_stats %>%

@@ -8,9 +8,18 @@ library(openxlsx)
 #This Rscript filters out low RLU values from the metadata sheet received from the epidemiologists
 #Send this filtered sheet to the epidemiologists and scientists
 
-###################################################
+##############
+# Manual input
+##############
+
+missing_samples <- c("")
+
+# number of unspecified environmental swabs to add to plate
+enviro_number <- 10
+
+################
 # Load functions
-###################################################
+################
 
 #this file needs to sit in a [aux_files/functions] directory path above this project directory
 tryCatch(
@@ -22,9 +31,9 @@ tryCatch(
   }
 )
 
-###################################################
+#############
 # Load config
-###################################################
+#############
 
 #this file needs to sit in a [aux_files/config] directory path above this project directory
 tryCatch(
@@ -71,9 +80,9 @@ RLU_data <- read_csv(RLU_fp) %>%
   #filter rows where sample_id is NA
   filter(!is.na(SPECIMEN_NUMBER))
 
-###################################################
+#################
 # Get HC1 samples
-###################################################
+#################
 
 HC1_samples <- read_csv(RLU_fp) %>%
   filter(Test == "POCT 4 Plex Sars-CoV-2") %>%
@@ -191,23 +200,9 @@ if(length(epi_sample_not_found) > 0) {
                          "Check these samples on Harvest", sep = "\n")))
 }
 
-samples_removed <- PHL_data %>%
-  filter(SPECIMEN_NUMBER != "") %>%
-  filter(RLU < 1000 | SPECIMEN_NUMBER %in% c(MEO_samples)) %>%
-  select(SPECIMEN_NUMBER) %>%
-  pull()
-
-message("\nNumber of samples removed: ")
-message(length(samples_removed))
-
-##############################################################################
-# Write samples to Excel to send back to epidemiologist and wet lab scientists
-##############################################################################
-
-filtered_PHL_data <- PHL_data %>%
-  #remove low RLU samples
-  filter(RLU >= 1000 | is.na(RLU)) %>%
-  filter(!SPECIMEN_NUMBER %in% samples_removed)
+#####################
+# Load Temple samples
+#####################
 
 potential_ct_col_names <- c("ct value", "CT value", "CT values", "CTvalue", "CTvalues",
                             "ct values", "ctvalue", "ctvalues")
@@ -227,7 +222,37 @@ if(is.null(TU_data)) {
     as.data.frame()
 }
 
-excel_data <- list(PHL = filtered_PHL_data, Temple = TU_data)
+################
+# Filter samples
+################
+
+PHL_samples_removed <- PHL_data %>%
+  filter(SPECIMEN_NUMBER != "") %>%
+  filter(RLU < 1000 | SPECIMEN_NUMBER %in% c(MEO_samples, missing_samples)) %>%
+  select(SPECIMEN_NUMBER) %>%
+  pull()
+
+filtered_PHL_data <- PHL_data %>%
+  #remove low RLU samples
+  filter(RLU >= 1000 | is.na(RLU)) %>%
+  filter(!SPECIMEN_NUMBER %in% PHL_samples_removed)
+
+TU_samples_removed <- TU_data %>%
+  filter(SPECIMEN_NUMBER != "") %>%
+  filter(`ct value` > 33 | SPECIMEN_NUMBER %in% c(missing_samples)) %>%
+  select(SPECIMEN_NUMBER) %>%
+  pull()
+
+filtered_TU_data <- TU_data %>%
+  #remove low RLU samples
+  filter(`ct value` <= 33 | is.na(`ct value`)) %>%
+  filter(!SPECIMEN_NUMBER %in% TU_samples_removed)
+
+##############################################################################
+# Write samples to Excel to send back to epidemiologist and wet lab scientists
+##############################################################################
+
+excel_data <- list(PHL = filtered_PHL_data, Temple = filtered_TU_data)
 
 other_sheets <- lapply(PHL_fp, excel_sheets) %>%
   unlist() %>%
@@ -265,9 +290,9 @@ for(sheet_name in other_sheets) {
 
 write.xlsx(excel_data, file = gsub(".xlsx$", "_filtered.xlsx", PHL_fp[1]))
 
-################################################################################
-# Make a preliminary platemap for scientists (no environmental samples included)
-################################################################################
+#########################################################################################
+# Make a preliminary platemap for scientists with environmental samples and rerun samples
+#########################################################################################
 
 dir.create(here("metadata", "for_scientists"))
 
@@ -281,7 +306,7 @@ PHL_samples <- filtered_PHL_data %>%
   rename(sample_name = "SPECIMEN_NUMBER") %>%
   arrange(desc(RLU))
 
-TU_samples <- TU_data %>%
+TU_samples <- filtered_TU_data %>%
   rename(sample_name = "SPECIMEN_NUMBER") %>%
   arrange(`ct value`)
 
@@ -311,7 +336,7 @@ if(length(environmental_samples_fp) > 0) {
     rename(sample_name = 1, environmental_site = 2) %>%
     select(sample_name, environmental_site)
 } else {
-  enviro_samples <- data.frame(sample_name = paste0("ENV", 1:11), environmental_site = paste0("ENV", 1:11))
+  enviro_samples <- data.frame(sample_name = paste0("ENV", 1:enviro_number), environmental_site = paste0("ENV", 1:enviro_number))
   message("\nEnvironmental swab file was not found")
   Sys.sleep(5)
 }
@@ -330,11 +355,36 @@ if(length(older_samples_fp) > 0) {
     rename(sample_name = "SPECIMEN_NUMBER") %>%
     mutate(PHL_sample = grepl("^H", sample_name)) %>%
     arrange(-PHL_sample, sample_name) %>%
-    select(sample_name)
+    select(sample_name) %>%
+    filter(sample_name != "") %>%
+    filter(!is.na(sample_name))
 
 } else {
   older_samples <- data.frame(sample_name = "")
 }
+
+older_samples_removed <- older_samples %>%
+  filter(sample_name != "") %>%
+  filter(sample_name %in% missing_samples) %>%
+  pull()
+
+older_samples <- older_samples %>%
+  filter(!sample_name %in% older_samples_removed)
+
+########################
+# Report missing samples
+########################
+
+message("\nNumber of samples removed:")
+message(length(PHL_samples_removed)+length(TU_samples_removed)+length(older_samples_removed))
+message("\nNew samples removed:")
+message(paste(c(PHL_samples_removed, TU_samples_removed), collapse = ", "))
+message("\nRerun samples removed:")
+message(paste(c(older_samples_removed), collapse = ", "))
+
+#################
+# Combine samples
+#################
 
 combined_list <- select(PHL_samples, sample_name) %>%
   rbind(select(TU_samples, sample_name)) %>%
@@ -345,11 +395,11 @@ combined_list <- select(PHL_samples, sample_name) %>%
   #put samples in groups of 8
   mutate(grp = (row_number() - 1) %/% 8)
 
-combined_list_first_half <- data.frame(sample_name = "NC", grp = 0) %>%
+combined_list_first_half <- data.frame(sample_name = "NC-pre-extract", grp = 0) %>%
   rbind(combined_list) %>%
   filter(grp < 7)
 
-combined_list_second_half <- data.frame(sample_name = "NC", grp = 7) %>%
+combined_list_second_half <- data.frame(sample_name = "NC-pre-extract", grp = 7) %>%
   rbind(combined_list) %>%
   filter(grp >= 7)
 
@@ -361,13 +411,13 @@ plate_view <- combined_list_first_half %>%
   rbind(combined_list_second_half) %>%
   filter(sample_name != "") %>%
   group_by(grp) %>%
-  group_modify(~ add_row(.x, sample_name = "NC")) %>%
+  group_modify(~ add_row(.x, sample_name = "NC-pre-extract")) %>%
   ungroup() %>%
   select(-grp) %>%
   mutate(number = cumsum(duplicated(sample_name)) + 1) %>%
-  mutate(sample_name = ifelse(sample_name == "NC", paste0(sample_name, number), sample_name)) %>%
+  mutate(sample_name = ifelse(sample_name == "NC-pre-extract", paste0(sample_name, number), sample_name)) %>%
   select(-number) %>%
-  rbind(data.frame(sample_name = c("BLANK", "PC"))) %>%
+  rbind(data.frame(sample_name = c("BLANK", "PC", "NC-pre-cDNA", "NC-pre-ARTIC", "NC-pre-library"))) %>%
   mutate(sample_order = row_number()) %>%
   merge(empty_plate, by = "sample_order", all = TRUE) %>%
   mutate(sample_name = case_when(sample_order == 96 ~ "NC-corner",

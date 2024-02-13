@@ -153,7 +153,11 @@ if (variance_test) {
 
   var_pander <- d_sd %>%
     select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median, GESD_q) %>%
+<<<<<<< HEAD
     filter(MAD_from_med >=9 | GESD_q <= 0.01) %>%
+=======
+    filter(MAD_from_med >= 9 | GESD_q <= 0.01) %>%
+>>>>>>> 7e981016ed5d27918d8d479cda64993c7451cdee
     arrange(Type, Target) %>%
     distinct()
 

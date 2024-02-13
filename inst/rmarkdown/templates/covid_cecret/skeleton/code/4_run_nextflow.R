@@ -79,6 +79,8 @@ fastq_file_sizes <- system2("aws", c("s3 ls",
   as.data.frame() %>%
   `colnames<-`(c("date", "time", "bytes", "filename")) %>%
   select(bytes, filename) %>%
+  filter(!grepl("/Alignment_", filename)) %>%
+  filter(!grepl("/Fastq/", filename)) %>%
   mutate(sequencing_folder = gsub(".*processed_bclconvert/", "", filename),
          sequencing_folder = gsub("/.*", "", sequencing_folder),
          filename = gsub(".*/", "", filename),
@@ -137,6 +139,7 @@ submit_screen_job(message2display = "Process data through Cecret pipeline",
 check_screen_job(message2display = "Checking Cecret job",
                  ec2_login = ec2_hostname,
                  screen_session_name = "cecret")
+rstudioapi::executeCommand('activateConsole')
 
 # Download BCLConvert files
 system2("aws", c("s3 cp",
