@@ -27,7 +27,7 @@ library(stringdist)
 #application to run on basespace
 app2run <- "DRAGEN COVID Lineage"
 
-primer_select <- 1 # set variable as 1 for V3, 2 for V4, 3 for V4.1, 4 for V5.3.2
+primer_select <- 2 # set variable as 1 for V3, 2 for V5.3.2
 
 # minimum acceptable number of reads
 min_reads <- 1000000
@@ -37,7 +37,7 @@ min_reads <- 1000000
 ```{r DRAGEN COVID Lineage App options and project parameters}
 
 #using the options for older DRAGEN COVID Lineage app
-artic_primer_scheme <- c("ncov2019", "articv4", "articv4.1")[primer_select]
+artic_primer_scheme <- c("ncov2019", "articv5.3.2")[primer_select]
 
 #the code below are the new options for DRAGEN COVID Lineage App version 4+; this version is not used because parts of this new pipeline is broken
 #these options can be used with the preset-id option for the bs_cli_4_launch_app.sh script
