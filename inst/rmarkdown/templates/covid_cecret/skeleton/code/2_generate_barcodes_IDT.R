@@ -551,6 +551,10 @@ metadata_sheet <- metadata_sheet %>%
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
                                         TRUE ~ environmental_site))
 
+if(any(grepl("Nasal swab", unique(metadata_sheet$sample_type))) & any(grepl("Wastewater", unique(metadata_sheet$sample_type)))) {
+  stop(simpleError("This metadata sheet has Nasal swab and Wastewater sample types! Rewrite this template to process the same sample types"))
+}
+
 for(x in fill_in_columns) {
   if(any(is.na(metadata_sheet[[x]]))) {
     stop(simpleError(paste0("\n\nWas there a new sample included in this run?\n",
