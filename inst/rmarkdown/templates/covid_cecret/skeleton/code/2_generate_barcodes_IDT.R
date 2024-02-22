@@ -170,14 +170,18 @@ if(run_uploaded_2_basespace) {
     submit_screen_job(message2display = "Download sequencing run from BaseSpace onto EC2 instance",
                       ec2_login = ec2_hostname,
                       screen_session_name = "basespace-run-download",
-                      command2run = paste("bs download runs --id", bs_run_id, "--output", sequencing_run_fp))
+                      command2run = paste("bs download runs --id", bs_run_id, "--output", sequencing_run_fp)
+                      )
 
     check_screen_job(message2display = "Checking BaseSpace download job",
                      ec2_login = ec2_hostname,
                      screen_session_name = "basespace-run-download")
 
     # Download the SampleSheet from EC2 instance
-    run_in_terminal(paste("scp", paste0(ec2_hostname, ":", sequencing_run_fp, "SampleSheet.csv"), here("metadata", "munge")))
+    run_in_terminal(paste("scp",
+                          paste0(ec2_hostname, ":", sequencing_run_fp, "SampleSheet.csv"),
+                          here("metadata", "munge"))
+                    )
 
     rstudioapi::executeCommand('activateConsole')
 

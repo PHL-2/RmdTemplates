@@ -108,7 +108,8 @@ if(run_uploaded_2_basespace) {
                                         "--record-size=1K",
                                         "-cC", sequencing_run_fp, ". |",
                                         "gzip -n >", paste0(ec2_tmp_fp, sequencing_run, ".tar.gz;"),
-                                        "echo ']\nTar completed!'"))
+                                        "echo ']\nTar completed!'")
+                    )
 
   check_screen_job(message2display = "Checking tar job",
                    ec2_login = ec2_hostname,
@@ -120,7 +121,8 @@ if(run_uploaded_2_basespace) {
                     screen_session_name = "sequencing-checksum",
                     command2run = paste0("cd ", ec2_tmp_fp, ";",
                                          "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, sequencing_run, ".md5;",
-                                         "cat ", ec2_tmp_fp, sequencing_run, ".md5"))
+                                         "cat ", ec2_tmp_fp, sequencing_run, ".md5")
+                    )
 
   check_screen_job(message2display = "Checking md5 job",
                    ec2_login = ec2_hostname,
@@ -137,7 +139,8 @@ if(run_uploaded_2_basespace) {
                                         "--recursive",
                                         "--exclude '*'",
                                         paste0("--include '", sequencing_run, ".md5'"),
-                                        paste0("--include '", sequencing_run, ".tar.gz'")))
+                                        paste0("--include '", sequencing_run, ".tar.gz'"))
+                    )
 
   check_screen_job(message2display = "Checking run upload job",
                    ec2_login = ec2_hostname,
@@ -217,7 +220,8 @@ if(run_uploaded_2_basespace) {
                     screen_session_name = "delete-run",
                     command2run = paste0("rm -rf ", ec2_tmp_fp, ";",
                                          "echo Here are your files and directories at home:;",
-                                         "ls -GF"))
+                                         "ls -GF")
+                    )
 
   check_screen_job(message2display = "Checking delete job",
                    ec2_login = ec2_hostname,

@@ -271,7 +271,8 @@ if(all(grepl("^EPI_ISL_0$", seqsender$gisaid_accession)) | all(is.na(seqsender$g
                         "--metadata", here("gisaid", paste0(project_name, "_gisaid.csv")),
                         "--fasta", here("gisaid", paste0(project_name, "_gisaid.fsa")),
                         "--frameshift", "catch_novel",
-                        "--log", gs_log))
+                        "--log", gs_log)
+                  )
   
 }
 rstudioapi::executeCommand('activateConsole')

@@ -63,7 +63,8 @@ submit_screen_job(message2display = "Demultiplex with BCLConvert",
                                       "-bucket-dir", paste0(s3_nextflow_work_bucket, "/demux_", sequencing_date),
                                       "-resume",
                                       "--input", paste0(s3_run_bucket, "/", sequencing_date, "/", sequencing_date, "_nf_demux_samplesheet.csv"),
-                                      "--outdir", paste0(s3_fastq_bucket, "/", sequencing_date, "/processed_bclconvert")))
+                                      "--outdir", paste0(s3_fastq_bucket, "/", sequencing_date, "/processed_bclconvert"))
+                  )
 
 check_screen_job(message2display = "Checking BCLConvert job",
                  ec2_login = ec2_hostname,
@@ -107,7 +108,8 @@ submit_screen_job(message2display = "Download Nextclade SARS-CoV-2 data",
                                       "nextclade dataset get --name sars-cov-2 --output-zip ~/sars.zip;",
                                       "aws s3 cp ~/nextclade-sars.json", paste0(s3_reference_bucket, "/nextclade/nextclade-sars.json;"),
                                       "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
-                                      "rm ~/nextclade-sars.json ~/sars.zip"))
+                                      "rm ~/nextclade-sars.json ~/sars.zip")
+                  )
 
 check_screen_job(message2display = "Checking Nextclade download job",
                  ec2_login = ec2_hostname,
@@ -117,7 +119,8 @@ check_screen_job(message2display = "Checking Nextclade download job",
 submit_screen_job(message2display = "Update Cecret pipeline",
                   ec2_login = ec2_hostname,
                   screen_session_name = "update-cecret",
-                  command2run = "nextflow pull UPHL-BioNGS/Cecret -r master")
+                  command2run = "nextflow pull UPHL-BioNGS/Cecret -r master"
+                  )
 
 check_screen_job(message2display = "Checking Cecret update",
                  ec2_login = ec2_hostname,
@@ -134,7 +137,8 @@ submit_screen_job(message2display = "Process data through Cecret pipeline",
                                       "-r master",
                                       "-resume",
                                       "--reads", paste0(s3_fastq_bucket, "/", sequencing_date, "/processed_bclconvert/", unique(fastq_file_sizes$sequencing_folder)),
-                                      "--outdir", paste0(s3_nextflow_output_bucket, "/cecret/", sequencing_date, "_COVIDSeq/processed_cecret")))
+                                      "--outdir", paste0(s3_nextflow_output_bucket, "/cecret/", sequencing_date, "_COVIDSeq/processed_cecret"))
+                  )
 
 check_screen_job(message2display = "Checking Cecret job",
                  ec2_login = ec2_hostname,
@@ -173,7 +177,11 @@ system2("aws", c("s3 cp",
                  "--include '*cecret_results.csv'"))
 
 # Download Nextflow config file for profile (use terminal because of proxy login issue)
-run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"), here("data", "processed_cecret", "nextflow.config")))
+run_in_terminal(paste("scp",
+                      paste0(ec2_hostname, ":~/.nextflow/config"),
+                      here("data", "processed_cecret", "nextflow.config"))
+                )
+
 rstudioapi::executeCommand('activateConsole')
 
 # Download Nextclade dataset

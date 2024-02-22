@@ -1586,7 +1586,7 @@ Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_seqs
 Number of samples to upload to SRA: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])` \newline
 Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])`\newline
 
-`r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge There are samples that didn't go through the pipeline correctly!! Just delete the project on BaseSpace and rerun. Or create a new RStudio project with a different name}")}`
+`r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge These non-control samples that didn't go through the pipeline correctly!! Try rerunning them through the pipeline again!}")}`
 
 ```{r trimmed reads, echo=FALSE}
 
