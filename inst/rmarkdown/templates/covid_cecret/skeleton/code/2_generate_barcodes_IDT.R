@@ -114,8 +114,8 @@ if(run_uploaded_2_basespace) {
     filter(grepl(paste0("^", sequencing_folder_regex), Name))
 
   if(nrow(bs_run) > 1) {
-    warning(simpleWarning(paste0("There are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
-                                 "Currently, you are pulling the sequencing run from the ", sequencer_type)))
+    warning(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
+                                 "Currently, you are pulling the sequencing run from the ", sequencer_type, "\n\n")))
 
     #these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
     sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
@@ -126,10 +126,12 @@ if(run_uploaded_2_basespace) {
     bs_run <- bs_run %>%
       filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
 
-  } else if (nrow(bs_run) == 0) {
-    stop(simpleError(paste0("There is no sequencing run on BaseSpace with date ", sequencing_date,
-                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run\n",
-                            "Otherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
+  }
+  if (nrow(bs_run) == 0) {
+    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace matching this pattern: ", intended_sequencing_folder_regex,
+                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
+                            "\nThe sequencer type could also be wrong: ", sequencer_type,
+                            "\nOtherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
   }
 
   bs_run_id <- bs_run %>%
@@ -232,7 +234,7 @@ instrument_type <- samp_sh_header$instrument_type
 
 if(instrument_type != sequencer_type) {
   warning(simpleWarning(paste0("Instrument type in SampleSheet.csv does not match the intended sequencer type in this Rscript (MiSeq or NextSeq)\n",
-                               "Be sure to change this variable if there is more than 1 sequencing run with the same date!")))
+                               "Be sure to change this variable if there is more than 1 sequencing run with the same date!\n")))
 }
 
 if(!read_length %in% c(76, 151)) {

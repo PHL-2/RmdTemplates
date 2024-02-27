@@ -84,9 +84,10 @@ if(run_uploaded_2_basespace) {
     filter(grepl(paste0("^", sequencing_folder_regex), Name))
 
   if(nrow(bs_run) > 1) {
-    warning(simpleWarning(paste0("There are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
-                                 "Currently, you are pulling the sequencing run from the ", sequencer_type)))
+    warning(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
+                                 "Currently, you are pulling the sequencing run from the ", sequencer_type, "\n\n")))
 
+    #these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
     sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
                                  sequencer_type == "NextSeq" ~ "VH")
 
@@ -95,10 +96,12 @@ if(run_uploaded_2_basespace) {
     bs_run <- bs_run %>%
       filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
 
-  } else if (nrow(bs_run) == 0) {
-    stop(simpleError(paste0("There is no sequencing run on BaseSpace with date ", sequencing_date,
-                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run\n",
-                            "Otherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
+  }
+  if (nrow(bs_run) == 0) {
+    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace matching this pattern: ", intended_sequencing_folder_regex,
+                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
+                            "\nThe sequencer type could also be wrong: ", sequencer_type,
+                            "\nOtherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
   }
 
   bs_run_id <- bs_run %>%
@@ -231,7 +234,9 @@ message("Uploading samplesheets to AWS S3")
 s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samplesheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 
-if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet), ignore.case = TRUE))) {
+if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet), ignore.case = TRUE)) |
+   length(s3_cp_samplesheet) == 0 |
+   length(s3_cp_nf_demux_samplesheet) == 0) {
   stop(simpleError("Local upload of sample sheets to s3 bucket failed"))
 }
 
