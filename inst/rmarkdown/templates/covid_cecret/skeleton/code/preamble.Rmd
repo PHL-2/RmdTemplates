@@ -506,8 +506,12 @@ nc_dl_fp <- here("data", "processed_cecret", "nextclade", "nextclade-sars.json")
 nc_dl_v <- nc_dl_fp %>%
   read_csv(col_names = FALSE) %>%
   rename(version = "X1") %>%
+  mutate(find_version = ifelse(grepl("version: \\{", version), TRUE, NA)) %>%
+  fill(find_version, .direction = "down") %>%
+  filter(find_version) %>%
   filter(grepl("updatedAt", version)) %>%
-  unique()
+  unique() %>%
+  select(version)
 
 if(nrow(nc_dl_v) > 1) {
   stop(simpleError("Check the nextclade dataset version"))

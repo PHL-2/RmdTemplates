@@ -157,7 +157,7 @@ submit_screen_job(message2display = "Process data through Cecret pipeline",
                                       "-r master",
                                       "-resume",
                                       "--reads", paste(fastq_path, unique(fastq_file_sizes$sequencing_folder), sep = "/"),
-                                      "--outdir", paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_COVIDSeq"), "processed_cecret", sep = "/"))
+                                      "--outdir", paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_COVIDSeq"), sequencer_type, "processed_cecret", sep = "/"))
                   )
 
 check_screen_job(message2display = "Checking Cecret job",
@@ -179,7 +179,7 @@ system2("aws", c("s3 cp",
 
 # Download Cecret files
 system2("aws", c("s3 cp",
-                 paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_COVIDSeq"), sep = "/"),
+                 paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_COVIDSeq"), sequencer_type, sep = "/"),
                  here("data"),
                  "--recursive",
                  "--exclude '*'",

@@ -314,7 +314,7 @@ TU_samples <- filtered_TU_data %>%
 if(file.exists(shared_drive_fp)) {
 
   shared_environ_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing Action plan updated", "Enviromental_samples"),
-                                      pattern = "^[0-9]*-[0-9]*-[0-9]*", full.names = TRUE))
+                                      pattern = "^[0-9]*-[0-9]*-[0-9]*", full.names = TRUE, recursive = TRUE))
 
   environmental_file_date <- as.Date(gsub("_.*", "", basename(shared_environ_fp)))
 

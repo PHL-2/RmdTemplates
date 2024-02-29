@@ -1011,6 +1011,8 @@ snp_dist_reorder %>%
 
 ```
 
+\newpage
+
 ## Freyja results
 
 ### Heatmap
