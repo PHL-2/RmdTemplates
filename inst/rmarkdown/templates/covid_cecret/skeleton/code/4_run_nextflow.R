@@ -110,16 +110,17 @@ fastq_file_sizes <- system2("aws", c("s3 ls", bclconvert_output_path,
          bytes = as.numeric(bytes)) %>%
   filter(grepl(intended_sequencing_folder_regex, sequencing_folder))
 
-if(nrow(fastq_file_sizes) > 1) {
-  stop(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
-                            "Currently, you are pulling the sequencing run from the ", sequencer_type)))
-}
 if(nrow(fastq_file_sizes) == 0) {
   stop(simpleError(paste0("\nThere were no FastQ files found at path ", bclconvert_output_path,
                           "\nCheck to see if there was an issue with the demultiplexing of the run\n")))
 }
 
 instrument_run_id <- unique(fastq_file_sizes$sequencing_folder)
+
+if(length(instrument_run_id) > 1) {
+  stop(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
+                            "Currently, you are pulling the sequencing run from the ", sequencer_type)))
+}
 
 undetermined_bytes <- fastq_file_sizes %>%
   filter(grepl("Undetermined", filename)) %>%
