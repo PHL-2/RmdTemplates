@@ -17,6 +17,13 @@ missing_samples <- c("")
 # number of unspecified environmental swabs to add to plate
 enviro_number <- 10
 
+# set this to FALSE to not copy the platemap to the shared drive (such as when rerunning this script with updated extra metadata info)
+copy_platemap <- TRUE
+
+sample_type_acronym <- "NS" #use NS for nasal swabs
+
+prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
+
 ################
 # Load functions
 ################
@@ -434,17 +441,22 @@ write_csv(plate_view, file = here("metadata", "for_scientists", paste0(format(Sy
 plate_map_local_fp <- here("metadata", "for_scientists", paste0(format(Sys.time(), "%Y%m%d"), "_combined_samples_plate_map.csv"))
 write_csv(real_plate_view, file = plate_map_local_fp)
 
-if(file.exists(shared_drive_fp)) {
+if(copy_platemap) {
 
-  plate_map_cp_fp <- file.path(shared_drive_fp, "Sequencing Action plan updated", "Plate Maps",
-                               paste0(format(Sys.time(), "%Y-%m-%d"), "_Plate_Map.csv"))
+  if(file.exists(shared_drive_fp)) {
 
-  file.copy(plate_map_local_fp, plate_map_cp_fp, overwrite = TRUE)
+    plate_map_cp_fp <- file.path(shared_drive_fp, "Sequencing Action plan updated", "Plate Maps",
+                                 paste(format(Sys.time(), "%Y-%m-%d"), sample_type_acronym, prj_description, "Plate_Map.csv", sep = "_"))
+    file.copy(plate_map_local_fp, plate_map_cp_fp, overwrite = TRUE)
 
-} else{
+  } else{
 
-  message("\nCould not access shared drive path. Plate map not copied")
-  Sys.sleep(5)
+    message("\n*****")
+    message("Could not access shared drive path. Plate map not copied")
+    message("*****")
+    Sys.sleep(5)
+
+  }
 
 }
 
