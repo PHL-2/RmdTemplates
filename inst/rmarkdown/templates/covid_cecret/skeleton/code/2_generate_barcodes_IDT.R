@@ -33,10 +33,11 @@ phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death"
 #file location of the nextera udi indices
 barcode_fp <- file.path(dirname(here()), "aux_files", "metadata_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
-if(sequencing_date == "" | prj_description == "") {
-  stop (simpleError(paste0("Please fill in the correct sequencing date or short project description in ", here("code"), "/2_generate_barcodes_IDT.R")))
-} else if (is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
-  stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
+if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
+  stop(simpleError(paste0("Please use the 'YYYY-MM-DD' format for this RStudio project date. This date should correspond to the desired sequencing run date")))
+}
+if (prj_description == "") {
+  stop (simpleError(paste0("The project description variable in ", here("code"), "/2_generate_barcodes_IDT.R is empty. Make sure it is set to the correct project workflow")))
 }
 
 ###################################################
@@ -233,9 +234,17 @@ samp_sh_header <- data.frame(X1 = unlist(run_sample_sheet$Header)) %>%
 instrument_type <- samp_sh_header$instrument_type
 
 if(instrument_type != sequencer_type) {
-  warning(simpleWarning(paste0("Instrument type in SampleSheet.csv does not match the intended sequencer type in this Rscript (MiSeq or NextSeq)\n",
-                               "Be sure to change this variable if there is more than 1 sequencing run with the same date!\n")))
+  message("\n*****")
+  message("The downloaded SampleSheet.csv for this run on ", sequencing_date, " has the instrument set as the ", instrument_type)
+  message("The rest of this script will continue and processing this project as a ", instrument_type, " run")
+  message("If this was not the correct sequencer used for this project, double check the sequencing date or select the appropriate sequencer_type in this Rscript")
+  message("*****")
+
+  Sys.sleep(10)
 }
+
+instrument_regex <- case_when(instrument_type == "MiSeq" ~ "M",
+                              instrument_type == "NextSeq" ~ "VH")
 
 if(!read_length %in% c(76, 151)) {
   stop(simpleError("The read length is not 76 or 151 bp. Check the sample sheet from the sequencing run folder"))
@@ -462,7 +471,7 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
   #merge the metadata
   merge(PHL_TU_merge, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
-  mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", idt_plate_coord, "-", gsub("-", "", sequencing_date)))) %>%
+  mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date)))) %>%
   select(sample_id, everything()) %>%
   arrange(plate, plate_col, plate_row) %>%
   mutate(sequencing_date = sequencing_date) %>%
@@ -567,7 +576,7 @@ metadata_sheet <- metadata_sheet %>%
                                      sample_type == "Wastewater" ~ "jose.lojo@phila.gov",
                                      !is.na(sample_type) ~ "jasmine.schell@phila.gov",
                                      TRUE ~ NA)) %>%
-  mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(plate_row, plate_col),
+  mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
                                         TRUE ~ environmental_site))
 
@@ -613,9 +622,11 @@ if(ncol(epi_sample_not_found > 0)) {
   #throw error
   if(length(epi_sample_not_found) > 0) {
 
-    message("\nThese samples were found in the epidemiologists metadata sheet but not in our sample sheet. Something might be wrong!")
+    message("\n*****")
+    message("These samples were found in the epidemiologists metadata sheet but not in our sample sheet. Something might be wrong!")
     message("Check email to see if these samples could not be located by the receiving department")
     message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check:")
+    message("*****")
 
     stop(simpleError(paste0(epi_sample_not_found, collapse = ", ")))
   }
@@ -633,8 +644,10 @@ missing_sample_date <- missing_metadata_non_ctrl_samples %>%
 
 #throw error
 if(length(missing_sample_date) > 0) {
-  message("\nThese non-control samples are in the sample sheet but are missing a collection date!")
+  message("\n*****")
+  message("These non-control samples are in the sample sheet but are missing a collection date!")
   message("Something must be wrong:")
+  message("*****")
 
   stop(simpleError(paste0(missing_sample_date, collapse = ", ")))
 }
@@ -653,10 +666,12 @@ missing_metadata_samples <- rbind(missing_sample_RLU, missing_sample_CT)
 
 #show warning
 if(nrow(missing_metadata_samples) > 0){
-  message("\nThese non-control samples are in the sample sheet but are missing RLU or CT values")
+  message("\n*****")
+  message("These non-control samples are in the sample sheet but are missing RLU or CT values")
   message("They may also be GeneXpert samples. These samples should be double checked:")
-
   message(paste0(pull(missing_metadata_samples), collapse = ", "))
+  message("*****")
+
   Sys.sleep(5)
 }
 
@@ -749,7 +764,7 @@ samp_sheet_2_write <- metadata_sheet %>%
   select(sample_id, index, index2) %>%
   rename(Sample_ID = "sample_id")
 
-sample_sheet_fn <- paste(sequencing_date, instrument_type, sample_type_acronym, "SampleSheet_v2.csv", sep = "_")
+sample_sheet_fn <- paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, "SampleSheet_v2.csv", sep = "_")
 
 sample_sheet_fp <- here("metadata", "munge", sample_sheet_fn)
 

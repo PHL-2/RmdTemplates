@@ -59,16 +59,21 @@ if(length(sample_sheet_fn) > 1) {
   stop(simpleError("There are more than 2 sample sheets detected!! Please delete the incorrect one"))
 }
 
-sequencer_type <- gsub("^[0-9-]*_(.*Seq)_.*", "\\1", sample_sheet_fn)
+sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq)_.*", "\\1", sample_sheet_fn)
 
 sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
                              sequencer_type == "NextSeq" ~ "VH")
 
 intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
 
-sample_type_acronym <- gsub("^[0-9-]*_.*Seq_|_SampleSheet.*", "", sample_sheet_fn)
+sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
 
-fastq_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, "processed_bclconvert", sep = "/")
+prj_description <- gsub(paste0("^[0-9-]*_.*", sample_type_acronym, "_|_.*"), "", sample_sheet_fn)
+
+nf_demux_samplesheet_path <- paste(s3_run_bucket, sequencing_date,
+                                   tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_demux_samplesheet.csv", sep = "_")), sep = "/")
+
+bclconvert_output_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sep = "/")
 
 # Demultiplexing
 submit_screen_job(message2display = "Demultiplex with BCLConvert",
@@ -80,10 +85,8 @@ submit_screen_job(message2display = "Demultiplex with BCLConvert",
                                       "-profile", demux_profile,
                                       "-bucket-dir", paste0(s3_nextflow_work_bucket, "/demux_", sample_type_acronym, "_", sequencing_date),
                                       "-resume",
-                                      "--input", paste(s3_run_bucket, sequencing_date,
-                                                       tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, "nf_demux_samplesheet.csv", sep = "_")),
-                                                       sep = "/"),
-                                      "--outdir", fastq_path)
+                                      "--input", nf_demux_samplesheet_path,
+                                      "--outdir", bclconvert_output_path)
                   )
 
 check_screen_job(message2display = "Checking BCLConvert job",
@@ -91,7 +94,7 @@ check_screen_job(message2display = "Checking BCLConvert job",
                  screen_session_name = "demux")
 
 # Checking the demultiplexing results
-fastq_file_sizes <- system2("aws", c("s3 ls", fastq_path,
+fastq_file_sizes <- system2("aws", c("s3 ls", bclconvert_output_path,
                                      "--recursive",
                                      "| grep 'R1_001.fastq.gz$'"), stdout = TRUE) %>%
   str_split("\\s+") %>%
@@ -107,6 +110,17 @@ fastq_file_sizes <- system2("aws", c("s3 ls", fastq_path,
          bytes = as.numeric(bytes)) %>%
   filter(grepl(intended_sequencing_folder_regex, sequencing_folder))
 
+if(nrow(fastq_file_sizes) > 1) {
+  stop(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
+                            "Currently, you are pulling the sequencing run from the ", sequencer_type)))
+}
+if(nrow(fastq_file_sizes) == 0) {
+  stop(simpleError(paste0("\nThere were no FastQ files found at path ", bclconvert_output_path,
+                          "\nCheck to see if there was an issue with the demultiplexing of the run\n")))
+}
+
+instrument_run_id <- unique(fastq_file_sizes$sequencing_folder)
+
 undetermined_bytes <- fastq_file_sizes %>%
   filter(grepl("Undetermined", filename)) %>%
   select(bytes) %>%
@@ -115,6 +129,18 @@ undetermined_bytes <- fastq_file_sizes %>%
 if(undetermined_bytes/sum(fastq_file_sizes$bytes) > 0.5) {
   stop(simpleError("Something might've went wrong with the demultiplexing!\nThe unassigned reads makes up more than 50% of the total reads!"))
 }
+
+fastq_path <- paste(bclconvert_output_path, instrument_run_id, sep = "/")
+
+# If samples for the same project are split across two different runs, move the fastq files to a new bucket path before running the workflow
+# system2("aws", c("s3 mv",
+#                  fastq_path,
+#                  paste(bclconvert_output_path, "fastq-files", sep = "/"),
+#                  "--recursive",
+#                  "--exclude '*'",
+#                  "--include '*_R[12]_001.fastq.gz'"))
+#
+# fastq_path <- paste(bclconvert_output_path, "fastq-files", sep = "/")
 
 # Download most recent Nextclade dataset
 submit_screen_job(message2display = "Download Nextclade SARS-CoV-2 data",
@@ -146,6 +172,8 @@ check_screen_job(message2display = "Checking Cecret update",
                  ec2_login = ec2_hostname,
                  screen_session_name = "update-cecret")
 
+workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sep = "/")
+
 # Cecret pipeline
 submit_screen_job(message2display = "Process data through Cecret pipeline",
                   ec2_login = ec2_hostname,
@@ -156,8 +184,8 @@ submit_screen_job(message2display = "Process data through Cecret pipeline",
                                       "-bucket-dir", paste0(s3_nextflow_work_bucket, "/cecret_", sample_type_acronym, "_", sequencing_date),
                                       "-r master",
                                       "-resume",
-                                      "--reads", paste(fastq_path, unique(fastq_file_sizes$sequencing_folder), sep = "/"),
-                                      "--outdir", paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_COVIDSeq"), sequencer_type, "processed_cecret", sep = "/"))
+                                      "--reads", fastq_path,
+                                      "--outdir", paste(workflow_output_fp, "processed_cecret", sep = "/"))
                   )
 
 check_screen_job(message2display = "Checking Cecret job",
@@ -167,7 +195,7 @@ rstudioapi::executeCommand('activateConsole')
 
 # Download BCLConvert files
 system2("aws", c("s3 cp",
-                 paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, sep = "/"),
+                 paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, sep = "/"),
                  here("data"),
                  "--recursive",
                  "--exclude '*'",
@@ -179,7 +207,7 @@ system2("aws", c("s3 cp",
 
 # Download Cecret files
 system2("aws", c("s3 cp",
-                 paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_COVIDSeq"), sequencer_type, sep = "/"),
+                 workflow_output_fp,
                  here("data"),
                  "--recursive",
                  "--exclude '*'",

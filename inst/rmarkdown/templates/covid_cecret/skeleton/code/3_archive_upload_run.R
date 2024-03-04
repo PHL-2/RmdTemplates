@@ -62,9 +62,11 @@ if(length(sample_sheet_fn) > 1) {
   stop(simpleError("There are more than 2 sample sheets detected!! Please delete the incorrect one"))
 }
 
-sequencer_type <- gsub("^[0-9-]*_(.*Seq)_.*", "\\1", sample_sheet_fn)
+sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq)_.*", "\\1", sample_sheet_fn)
 
-sample_type_acronym <- gsub("^[0-9-]*_.*Seq_|_SampleSheet.*", "", sample_sheet_fn)
+sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
+
+prj_description <- gsub(paste0("^[0-9-]*_.*", sample_type_acronym, "_|_.*"), "", sample_sheet_fn)
 
 s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
@@ -224,7 +226,7 @@ nf_demux_samplesheet <- data.frame(
 )
 
 nf_demux_samplesheet_fp <- here("metadata", "munge",
-                                tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, "nf_demux_samplesheet.csv", sep = "_")))
+                                tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_demux_samplesheet.csv", sep = "_")))
 
 nf_demux_samplesheet %>%
   write.csv(file = nf_demux_samplesheet_fp,
