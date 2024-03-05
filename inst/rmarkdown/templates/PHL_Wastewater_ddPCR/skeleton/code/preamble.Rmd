@@ -105,6 +105,8 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
       names_sep = " ",
       values_to = "value"
      ) %>%
+    mutate(SampleType = ifelse(grepl(pattern = "SC2", x = Sample), "PosCtrl",
+                                    ifelse(Sample == "PBS" | Sample == "oldWW" | Sample == "ddPCR-H2O", "NegCtrl", "Unknown"))) %>%
     select(Well, Sample, Spiked, SampleType, Sample_date, Extra, Target, secondary, value, Droplets) %>%
     pivot_wider(
       id_cols = c("Well", "Sample", "Spiked", "SampleType","Sample_date", "Extra", "Target", "Droplets"),
@@ -185,12 +187,11 @@ signal_check <- d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
          Process == "Concentrated",
          Spiked == "Spiked",
-         !(Well %in% wellsToRemove),
          ) %>%
   select(Positives) %>%
-  pull() %>%
-  any(.<10)
-  
+  pull()
+
+signal_check <- any(signal_check < 10)
 
 if (variance_test | signal_check) {
   wellsToRemove <- d_sd %>%
@@ -214,10 +215,6 @@ if (variance_test | signal_check) {
   
   all_var_check <- any(wellsToRemove %in% all_var)
 
-}
-
-if (signal_check) {
-  
 }
 
 
@@ -449,7 +446,7 @@ ww_SC2_conc_result <- d %>%
          stock_conc_GC1L = stock_conc_GCuL*1000*1000
     ) %>%
   ungroup() %>%
-  select(Type, Target, Sample_date, stock_conc_GCuL, stock_conc_GC1L) %>%
+  select(Well, Type, Target, Sample_date, stock_conc_GCuL, stock_conc_GC1L) %>%
   arrange(Sample_date, Type, Target)
 
 ```

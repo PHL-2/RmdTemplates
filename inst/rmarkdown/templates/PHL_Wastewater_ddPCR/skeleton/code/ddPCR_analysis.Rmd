@@ -70,9 +70,10 @@ if (variance_test | signal_check) {
   } else {
     if (signal_check) {
       print("Detected wells with no signal")
-    } else(
+    } 
+    if(variance_test) {
       print("Detected wells with high variation")
-    )
+    }
     print(paste("Wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
   }
 }
@@ -154,16 +155,17 @@ if (variance_test | signal_check) {
   } else {
     if (signal_check) {
       print("Detected wells with no signal")
-    } else(
+    } 
+    if(variance_test) {
       print("Detected wells with high variation")
-    )
+    }
     print(paste("Wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
   }
 
   var_pander <- d_sd %>%
     select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median, GESD_q
            ) %>%
-    filter(MAD_from_med >=9 | GESD_q <= 0.01
+    filter(MAD_from_med >=7 | GESD_q <= 0.05
            ) %>%
     arrange(Type, Target) %>%
     distinct()
