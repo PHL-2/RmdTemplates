@@ -55,6 +55,19 @@ tryCatch(
 # Tar the sequencing folder and upload to S3
 ############################################
 
+# If this sample sheet is missing, get it from AWS S3 bucket
+sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = "SampleSheet_v2.csv")
+
+if(length(sample_sheet_fn) > 1) {
+  stop(simpleError("There are more than 2 sample sheets detected!! Please delete the incorrect one"))
+}
+
+sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq)_.*", "\\1", sample_sheet_fn)
+
+sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
+
+prj_description <- gsub(paste0("^[0-9-]*_.*", sample_type_acronym, "_|_.*"), "", sample_sheet_fn)
+
 s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
 system2("aws", c("sso login"))
@@ -72,6 +85,27 @@ if(run_uploaded_2_basespace) {
     slice(-1) %>%
     filter(grepl(paste0("^", sequencing_folder_regex), Name))
 
+  if(nrow(bs_run) > 1) {
+    warning(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
+                                 "Currently, you are pulling the sequencing run from the ", sequencer_type, "\n\n")))
+
+    #these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
+    sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
+                                 sequencer_type == "NextSeq" ~ "VH")
+
+    intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+
+    bs_run <- bs_run %>%
+      filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
+
+  }
+  if (nrow(bs_run) == 0) {
+    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace matching this pattern: ", intended_sequencing_folder_regex,
+                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
+                            "\nThe sequencer type could also be wrong: ", sequencer_type,
+                            "\nOtherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
+  }
+
   bs_run_id <- bs_run %>%
     select(Id) %>%
     pull()
@@ -79,14 +113,6 @@ if(run_uploaded_2_basespace) {
   sequencing_run <- bs_run %>%
     select(Name) %>%
     pull()
-
-  if(length(bs_run_id) > 1 | length(sequencing_run) > 1) {
-    stop(simpleError("There were two sequencing runs that matched this date. Investigate!"))
-  } else if (length(bs_run_id) == 0 | length(sequencing_run) == 0) {
-    stop(simpleError(paste0("There is no sequencing run on BaseSpace with date ", sequencing_date,
-                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run\n",
-                            "Otherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
-  }
 
   sequencing_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
 
@@ -108,7 +134,8 @@ if(run_uploaded_2_basespace) {
                                         "--record-size=1K",
                                         "-cC", sequencing_run_fp, ". |",
                                         "gzip -n >", paste0(ec2_tmp_fp, sequencing_run, ".tar.gz;"),
-                                        "echo ']\nTar completed!'"))
+                                        "echo ']\nTar completed!'")
+                    )
 
   check_screen_job(message2display = "Checking tar job",
                    ec2_login = ec2_hostname,
@@ -120,7 +147,8 @@ if(run_uploaded_2_basespace) {
                     screen_session_name = "sequencing-checksum",
                     command2run = paste0("cd ", ec2_tmp_fp, ";",
                                          "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, sequencing_run, ".md5;",
-                                         "cat ", ec2_tmp_fp, sequencing_run, ".md5"))
+                                         "cat ", ec2_tmp_fp, sequencing_run, ".md5")
+                    )
 
   check_screen_job(message2display = "Checking md5 job",
                    ec2_login = ec2_hostname,
@@ -137,7 +165,8 @@ if(run_uploaded_2_basespace) {
                                         "--recursive",
                                         "--exclude '*'",
                                         paste0("--include '", sequencing_run, ".md5'"),
-                                        paste0("--include '", sequencing_run, ".tar.gz'")))
+                                        paste0("--include '", sequencing_run, ".tar.gz'"))
+                    )
 
   check_screen_job(message2display = "Checking run upload job",
                    ec2_login = ec2_hostname,
@@ -187,7 +216,6 @@ if(run_uploaded_2_basespace) {
 
 }
 
-sample_sheet_fn <- paste0(sequencing_date, "_SampleSheet_v2.csv")
 sample_sheet_fp <- here("metadata", "munge", sample_sheet_fn)
 
 nf_demux_samplesheet <- data.frame(
@@ -197,7 +225,8 @@ nf_demux_samplesheet <- data.frame(
   flowcell = paste0(s3_run_bucket_fp, sequencing_run, ".tar.gz")
 )
 
-nf_demux_samplesheet_fp <- here("metadata", "munge", paste0(sequencing_date, "_nf_demux_samplesheet.csv"))
+nf_demux_samplesheet_fp <- here("metadata", "munge",
+                                tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_demux_samplesheet.csv", sep = "_")))
 
 nf_demux_samplesheet %>%
   write.csv(file = nf_demux_samplesheet_fp,
@@ -207,7 +236,9 @@ message("Uploading samplesheets to AWS S3")
 s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samplesheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 
-if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet), ignore.case = TRUE))) {
+if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet), ignore.case = TRUE)) |
+   length(s3_cp_samplesheet) == 0 |
+   length(s3_cp_nf_demux_samplesheet) == 0) {
   stop(simpleError("Local upload of sample sheets to s3 bucket failed"))
 }
 
@@ -217,7 +248,8 @@ if(run_uploaded_2_basespace) {
                     screen_session_name = "delete-run",
                     command2run = paste0("rm -rf ", ec2_tmp_fp, ";",
                                          "echo Here are your files and directories at home:;",
-                                         "ls -GF"))
+                                         "ls -GF")
+                    )
 
   check_screen_job(message2display = "Checking delete job",
                    ec2_login = ec2_hostname,
