@@ -36,10 +36,6 @@ knitr::opts_chunk$set(
 library(tidyverse)
 library(pander)
 
-
-
-
-
 ```
 
 
@@ -124,7 +120,8 @@ if (droplet_test) {
   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
   pander(
     d_pre %>%
-      filter(Droplet_count< 10000) %>%
+      filter(Droplet_count< 10000,
+             Target == "N2") %>%
       select(Well, Sample, Type, Process, Spiked, Sample_date, Droplet_count),
       split.table = 500
     ) 
@@ -165,7 +162,7 @@ if (variance_test | signal_check) {
   var_pander <- d_sd %>%
     select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median, GESD_q
            ) %>%
-    filter(MAD_from_med >=7 | GESD_q <= 0.05
+    filter(MAD_from_med >=7 | GESD_q <= 0.01
            ) %>%
     arrange(Type, Target) %>%
     distinct()
