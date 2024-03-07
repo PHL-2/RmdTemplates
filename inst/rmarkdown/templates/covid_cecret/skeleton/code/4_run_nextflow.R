@@ -192,6 +192,7 @@ submit_screen_job(message2display = "Process data through Cecret pipeline",
 check_screen_job(message2display = "Checking Cecret job",
                  ec2_login = ec2_hostname,
                  screen_session_name = "cecret")
+
 rstudioapi::executeCommand('activateConsole')
 
 # Download BCLConvert files
