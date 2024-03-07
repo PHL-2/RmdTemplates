@@ -40,7 +40,7 @@ dInit_controls<- data.frame(Type = c("MHV", "E", "N2"),
 
 ```
 
-```{r finding most recent data}
+```{r finding most recent data, eval = useExportFolder}
 
 project_name <- basename(here())
 run_date <- as.Date(gsub("_.*", "", project_name))
@@ -65,9 +65,18 @@ if(run_date != dat_date) {
 ```
 
 
+```{r saving data to rstudio metadata folder (for github upload), eval = useExportFolder}
+
+file.copy(run_dat_fp, to = here())
+
+```
+
+
 ```{r Reading ddPCR file and selecting useful columns}
 
-d_pre <- read_csv(file = run_dat_fp) 
+copy_path <- list.files(path = here(), pattern = "Analyzed.csv")
+
+d_pre <- read_csv(file.path(here(), copy_path))
 
 if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
   d_pre <- d_pre %>%
@@ -84,7 +93,8 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
           Process = droplevels(factor(Process, level = c("Concentrated", "Unconcentrated", "Non-processed", "Unspiked","Dilution", "Frozen", "QuickExtract"))),
           `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
           Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
-          Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d"))
+          Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d")),
+          SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType)
     )
 } else {
   d_pre <- d_pre %>%
@@ -95,9 +105,11 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
       names_sep = " ",
       values_to = "value"
      ) %>%
-    select(Well, Sample, Spiked, Sample_date, Extra, Target, secondary, value, Droplets) %>%
+    mutate(SampleType = ifelse(grepl(pattern = "SC2", x = Sample), "PosCtrl",
+                                    ifelse(Sample == "PBS" | Sample == "oldWW" | Sample == "ddPCR-H2O", "NegCtrl", "Unknown"))) %>%
+    select(Well, Sample, Spiked, SampleType, Sample_date, Extra, Target, secondary, value, Droplets) %>%
     pivot_wider(
-      id_cols = c("Well", "Sample", "Spiked", "Sample_date", "Extra", "Target", "Droplets"),
+      id_cols = c("Well", "Sample", "Spiked", "SampleType","Sample_date", "Extra", "Target", "Droplets"),
       names_from = "secondary",
       values_from = "value"
     ) %>%
@@ -114,18 +126,15 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
           Process = droplevels(factor(Process, level = c("Concentrated", "Unconcentrated", "Non-processed", "Unspiked","Dilution", "Frozen", "QuickExtract"))),
           `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
           Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
-          Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d"))
+          Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d")),
+          SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType)
     )
 }
 
 ```
 
 
-```{r saving data to rstudio metadata folder (for github upload)}
 
-file.copy(run_dat_fp, to = here())
-
-```
 
 
 ```{r filter low droplet data}
@@ -136,8 +145,6 @@ d <- d_pre %>%
   filter(Droplet_count >= 10000)
 
 ```
-
-
 
 
 ```{r check variance}
@@ -153,7 +160,7 @@ d_var <- d %>%
             num_points = n(),
             quant25 = quantile(`Conc(copies/uL)`)[2],
             quant75 = quantile(`Conc(copies/uL)`)[4],
-            gesd = ifelse(Spiked == "Spiked", PMCMRplus::gesdTest(`Conc(copies/uL)`, 2)$p.value[2], NA)
+            gesd = ifelse(Spiked == "Spiked" & num_points > 3, PMCMRplus::gesdTest(`Conc(copies/uL)`, 2)$p.value[2], NA)
   ) %>%
   ungroup() %>%
   unique() %>%
@@ -170,28 +177,54 @@ d_sd <- d %>%
 ```
 
 
-```{r}
+```{r variance and signal check}
 
 variance_test <- any(d_sd$outlier_median >= 9, na.rm = T) | any(d_sd$GESD_q <= 0.01)
 
-wellsToRemove <- d_sd %>%
-  filter(outlier_median >= 9 | GESD_q <= 0.01,
-         grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+signal_check <- d %>%
+  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
          Process == "Concentrated",
          Spiked == "Spiked",
-         Target == "N2" | Target == "E") %>%
-  group_by(Type, Process, Spiked, Sample_date) %>%
-  filter(outlier_median >= 8) %>%
-  select(Well) %>%
-  distinct() %>%
+         ) %>%
+  select(Positives) %>%
   pull()
+
+signal_check <- any(signal_check < 10)
+
+if (variance_test | signal_check) {
+  wellsToRemove <- d_sd %>%
+    filter(Positives < 10 | outlier_median >= 9| GESD_q <= 0.01, 
+           grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+           Process == "Concentrated",
+           Spiked == "Spiked",
+           Target == "N2" | Target == "E") %>%
+    group_by(Type, Process, Spiked, Sample_date) %>%
+    filter(Positives < 10 | outlier_median >= 8) %>%
+    select(Well) %>%
+    distinct() %>%
+    pull()
+    
+  all_var <- d_sd %>%
+    filter(Positives < 10 | outlier_median >= 9 | GESD_q <= 0.01
+           ) %>%
+    select(Well) %>%
+    distinct() %>%
+    pull()
+  
+  all_var_check <- any(wellsToRemove %in% all_var)
+
+}
+
+if (signal_check) {
+  
+}
+
 
 ```
 
 
 
-# Remove samples
-```{r}
+```{r Remove samples}
 
 ww_SC2_conc_result_summarised <- d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
@@ -232,6 +265,17 @@ ww_SC2_conc_result_summarised <- d %>%
 
 
 ```{r data manip}
+
+num_dates <- d %>%
+  pull(Sample_date) %>%
+  unique() %>%
+  length()
+
+if (num_dates == 1) {
+  figHeight <- 4.2
+} else {
+  figHeight <- 8.4
+}
 
 dControls <- d %>%
   filter(!grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type) | (grepl(pattern = "SouthWest", x = Type) & Sample_date == as.Date("2023-05-01"))) %>%
@@ -404,7 +448,7 @@ ww_SC2_conc_result <- d %>%
          stock_conc_GC1L = stock_conc_GCuL*1000*1000
     ) %>%
   ungroup() %>%
-  select(Type, Target, Sample_date, stock_conc_GCuL, stock_conc_GC1L) %>%
+  select(Well, Type, Target, Sample_date, stock_conc_GCuL, stock_conc_GC1L) %>%
   arrange(Sample_date, Type, Target)
 
 ```
