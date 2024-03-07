@@ -160,7 +160,7 @@ tryCatch(
 test_upload <- TRUE
 
 #change this flag to FALSE to not use proxy
-use_proxy <- TRUE 
+use_proxy <- FALSE 
 
 #change this to TRUE to overwrite the submitted files on the sFTP and to resubmit
 overwrite <- FALSE
@@ -271,7 +271,8 @@ if(all(grepl("^EPI_ISL_0$", seqsender$gisaid_accession)) | all(is.na(seqsender$g
                         "--metadata", here("gisaid", paste0(project_name, "_gisaid.csv")),
                         "--fasta", here("gisaid", paste0(project_name, "_gisaid.fsa")),
                         "--frameshift", "catch_novel",
-                        "--log", gs_log))
+                        "--log", gs_log)
+                  )
   
 }
 rstudioapi::executeCommand('activateConsole')
@@ -305,6 +306,7 @@ gisaid_accessions <- read_gisaid_accessions %>%
   mutate(genbank_note = paste0("GISAID virus name: ", gisaid_name, "; GISAID accession: ", gisaid_accession))
   
 if(!test_upload) {
+  #if there is a connection error for the real submission, start appending to the file, instead of rewriting it each time. Find a way to keep the column name the same
   gisaid_accessions %>%
     write_csv(here("gisaid", paste0(project_name, "_gisaid_accessions.csv")))
 }

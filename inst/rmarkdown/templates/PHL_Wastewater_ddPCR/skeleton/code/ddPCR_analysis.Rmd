@@ -28,7 +28,7 @@ knitr::opts_chunk$set(
   echo=FALSE,
   warning=FALSE,
   message=FALSE,
-#  fig.height = 4.2,
+  #fig.height = figHeight,
   dpi=300,
   dev.args = list(pdf = list(useDingbats = FALSE))
   )
@@ -36,12 +36,12 @@ knitr::opts_chunk$set(
 library(tidyverse)
 library(pander)
 
-
 ```
 
 
 ```{r child = 'code/preamble.Rmd', include = FALSE}
 ```
+
 
 \newpage
 
@@ -60,10 +60,19 @@ if (droplet_test) {
 #   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
 #   }
 
-if (variance_test) {
-  print(paste("Detected high variation; wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
+if (variance_test | signal_check) {
+  if (!all_var_check) {
+    print("Detected high variation in non-summarized wells; no wells removed")
+  } else {
+    if (signal_check) {
+      print("Detected wells with no signal")
+    } 
+    if(variance_test) {
+      print("Detected wells with high variation")
+    }
+    print(paste("Wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
+  }
 }
-
 # if ((sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1, na.rm = T) > 0) | sum(d_sd$outlier_median > 5, na.rm = T) > 0) {
 #   print("Detected high variation; please check samples")
 #   }
@@ -105,13 +114,14 @@ d_pre %>%
 
 ## Droplet count
 
-```{r checking droplet count, fig.width=10}
+```{r checking droplet count, fig.width=16, fig.height = 4.2}
 
 if (droplet_test) {
   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
   pander(
     d_pre %>%
-      filter(Droplet_count< 10000) %>%
+      filter(Droplet_count< 10000,
+             Target == "N2") %>%
       select(Well, Sample, Type, Process, Spiked, Sample_date, Droplet_count),
       split.table = 500
     ) 
@@ -131,23 +141,37 @@ d_pre %>%
 
 ```
 
-\newpage
 
 ## Variance check
 
 ```{r variance check}
 
-if (variance_test) {
-  print(paste("Detected high variation; wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
+if (variance_test | signal_check) {
+  if (!all_var_check) {
+    print("Detected high variation in non-summarized wells; no wells removed")
+  } else {
+    if (signal_check) {
+      print("Detected wells with no signal")
+    } 
+    if(variance_test) {
+      print("Detected wells with high variation")
+    }
+    print(paste("Wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
+  }
+
   var_pander <- d_sd %>%
-    select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median, GESD_q) %>%
-    filter(MAD_from_med >= 9 | GESD_q <= 0.01) %>%
+    select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd_from_mean, med_conc = median_conc, MAD_from_med = outlier_median, GESD_q
+           ) %>%
+    filter(MAD_from_med >=7 | GESD_q <= 0.01
+           ) %>%
     arrange(Type, Target) %>%
     distinct()
 
   pander(var_pander,
       split.table = 500
   )
+} else {
+  print("Variation nominal")
 }
 
 ```
@@ -156,7 +180,7 @@ if (variance_test) {
 
 ## Number of overall positive droplets per sample
 
-```{r fig.height= 8}
+```{r, fig.height = 8.2}
 
 d %>% 
   group_by(Well,Type, Sample, Process, Spiked, Sample_date) %>%
@@ -186,10 +210,12 @@ d %>%
 
 ## All Data
 
-```{r}
+```{r, fig.height = figHeight}
 
 #All data
 d %>%
+  mutate(SampleType = ifelse(grepl(pattern = "East|West", x = Type) & Spiked == "Unspiked", "NegMHV", SampleType),
+         SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
   #filter(Spiked == "Spiked") %>%
   ggplot(aes(x=Type, y=Positives, fill = Target)) +
   geom_boxplot(position = "dodge") +
@@ -198,7 +224,7 @@ d %>%
     shape = 21,
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
-  facet_grid(Sample_date ~ Process, scales = "free_x") +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
   theme_light() +
   scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme(
@@ -211,8 +237,14 @@ d %>%
     y = "Number of Positive droplets",
     x = "Samples"
   )
+```
+
+```{r, fig.height = figHeight}
+
 
 d %>%
+  mutate(SampleType = ifelse(grepl(pattern = "East|West", x = Type) & Spiked == "Unspiked", "NegMHV", SampleType),
+         SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
    # filter(Spiked == "Spiked") %>%
   ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
   geom_boxplot(position = "dodge") +
@@ -221,7 +253,7 @@ d %>%
     shape = 21,
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
-  facet_grid(. ~ Process, scales = "free_x") +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
   theme_light() +
   scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme(
@@ -242,12 +274,13 @@ d %>%
 
 ### Experiment controls
 
-```{r Positive and negative control figures}
+```{r Positive and negative control figures, fig.height = figHeight}
 
 #Negative controls
 ##Extraction
 dControls %>%
   filter(exp_con == "Extraction control") %>%
+  mutate(SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
   ggplot(aes(x=Type, y=Positives, fill = Target)) +
   geom_boxplot(position = "dodge") +
   geom_point(
@@ -255,7 +288,7 @@ dControls %>%
     shape = 21,
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
-  facet_grid(Sample_date ~ Process, scales = "free_x") +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
   theme_light() +
   scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   labs(
@@ -264,9 +297,13 @@ dControls %>%
     x = "Samples"
   )
 
+```
+
+```{r, fig.height = figHeight}
 
 dControls %>%
   filter(exp_con == "Extraction control") %>%
+  mutate(SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
   ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
   geom_boxplot(position = "dodge") +
   geom_point(
@@ -274,7 +311,7 @@ dControls %>%
     shape = 21,
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
-  facet_grid(Sample_date ~ Process, scales = "free_x") +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
   scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
@@ -286,7 +323,7 @@ dControls %>%
 
 ### ddPCR controls
 
-```{r}
+```{r, fig.height = figHeight}
 
 ##ddPCR
 dControls %>%
@@ -298,7 +335,7 @@ dControls %>%
     shape = 21,
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
-  facet_grid(Sample_date ~ Process, scales = "free_x") +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
   scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
@@ -306,6 +343,13 @@ dControls %>%
     y = "Number of Positive droplets",
     x = "Samples"
   )
+
+
+```
+
+
+```{r, fig.height = figHeight}
+
 
 dControls %>%
   filter(exp_con == "ddPCR control") %>%
@@ -316,7 +360,7 @@ dControls %>%
     shape = 21,
     size = 1.5,
     position = position_jitterdodge(jitter.width = 0.2)) +
-  facet_grid(Sample_date ~ Process, scales = "free_x") +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
   scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
@@ -353,7 +397,7 @@ extraction input volume = 9600 uL
 
 ## Natural MHV in wastewater
 
-```{r unspiked mhv figures}
+```{r unspiked mhv figures, fig.height = figHeight}
 
 if(nrow(dUnspiked)>0) {
 
@@ -374,6 +418,12 @@ if(nrow(dUnspiked)>0) {
       x = "Samples"
     )
 }
+
+```
+
+
+```{r, fig.height = figHeight}
+
 
 if(nrow(dUnspiked)>0) {
   dUnspiked %>%
@@ -401,7 +451,7 @@ if(nrow(dUnspiked)>0) {
 ## Wastewater signal
 
 ### With MHV signal
-```{r waste water signal with MHV}
+```{r waste water signal with MHV, fig.height = figHeight}
 
 d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
@@ -426,6 +476,12 @@ d %>%
     y = "Number of Positive droplets",
     x = "Samples"
   )
+
+```
+
+
+```{r, fig.height = figHeight}
+
 
 d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
@@ -455,7 +511,7 @@ d %>%
 
 ### Without MHV signal
 
-```{r WW signal without MHV}
+```{r WW signal without MHV, fig.height = figHeight}
 
 d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
@@ -481,6 +537,11 @@ d %>%
     y = "Number of Positive droplets",
     x = "Samples"
   )
+
+```
+
+```{r, fig.height = figHeight}
+
 
 d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
