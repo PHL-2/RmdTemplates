@@ -14,6 +14,10 @@ library(stringr)
 
 run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
+sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
+
+sequencer_type <- c("MiSeq", "NextSeq")[sequencer_select]
+
 # temporary directory in ec2 to hold to sequencing run download. This directory will be deleted after running this script
 ec2_tmp_fp <- "~/tmp_bs_dl/"
 
@@ -29,10 +33,11 @@ phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death"
 #file location of the nextera udi indices
 barcode_fp <- file.path(dirname(here()), "aux_files", "metadata_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
-if(sequencing_date == "" | prj_description == "") {
-  stop (simpleError(paste0("Please fill in the correct sequencing date or short project description in ", here("code"), "/2_generate_barcodes_IDT.R")))
-} else if (is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
-  stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
+if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
+  stop(simpleError(paste0("Please use the 'YYYY-MM-DD' format for this RStudio project date. This date should correspond to the desired sequencing run date")))
+}
+if (prj_description == "") {
+  stop (simpleError(paste0("The project description variable in ", here("code"), "/2_generate_barcodes_IDT.R is empty. Make sure it is set to the correct project workflow")))
 }
 
 ###################################################
@@ -109,6 +114,27 @@ if(run_uploaded_2_basespace) {
     slice(-1) %>%
     filter(grepl(paste0("^", sequencing_folder_regex), Name))
 
+  if(nrow(bs_run) > 1) {
+    warning(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
+                                 "Currently, you are pulling the sequencing run from the ", sequencer_type, "\n\n")))
+
+    #these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
+    sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
+                                 sequencer_type == "NextSeq" ~ "VH")
+
+    intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+
+    bs_run <- bs_run %>%
+      filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
+
+  }
+  if (nrow(bs_run) == 0) {
+    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace matching this pattern: ", intended_sequencing_folder_regex,
+                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
+                            "\nThe sequencer type could also be wrong: ", sequencer_type,
+                            "\nOtherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
+  }
+
   bs_run_id <- bs_run %>%
     select(Id) %>%
     pull()
@@ -116,14 +142,6 @@ if(run_uploaded_2_basespace) {
   sequencing_run <- bs_run %>%
     select(Name) %>%
     pull()
-
-  if(length(bs_run_id) > 1 | length(sequencing_run) > 1) {
-    stop(simpleError("There were two sequencing runs that matched this date. Investigate!"))
-  } else if (length(bs_run_id) == 0 | length(sequencing_run) == 0) {
-    stop(simpleError(paste0("There is no sequencing run on BaseSpace with date ", sequencing_date,
-                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run\n",
-                            "Otherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
-  }
 
   run_stats <- cli_submit("bs", "run", c("seqstats", "--id", bs_run_id))
 
@@ -162,7 +180,7 @@ if(run_uploaded_2_basespace) {
            run_stats = as.numeric(run_stats)/100) %>%
     pull()
 
-  if(!samplesheet_exists){
+  if(!samplesheet_exists) {
 
     sequencing_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
 
@@ -170,14 +188,18 @@ if(run_uploaded_2_basespace) {
     submit_screen_job(message2display = "Download sequencing run from BaseSpace onto EC2 instance",
                       ec2_login = ec2_hostname,
                       screen_session_name = "basespace-run-download",
-                      command2run = paste("bs download runs --id", bs_run_id, "--output", sequencing_run_fp))
+                      command2run = paste("bs download runs --id", bs_run_id, "--output", sequencing_run_fp)
+    )
 
     check_screen_job(message2display = "Checking BaseSpace download job",
                      ec2_login = ec2_hostname,
                      screen_session_name = "basespace-run-download")
 
     # Download the SampleSheet from EC2 instance
-    run_in_terminal(paste("scp", paste0(ec2_hostname, ":", sequencing_run_fp, "SampleSheet.csv"), here("metadata", "munge")))
+    run_in_terminal(paste("scp",
+                          paste0(ec2_hostname, ":", sequencing_run_fp, "SampleSheet.csv"),
+                          here("metadata", "munge"))
+    )
 
     rstudioapi::executeCommand('activateConsole')
 
@@ -211,9 +233,18 @@ samp_sh_header <- data.frame(X1 = unlist(run_sample_sheet$Header)) %>%
 
 instrument_type <- samp_sh_header$instrument_type
 
-if(!instrument_type %in% c("MiSeq", "NextSeq")) {
-  stop(simpleError("Instrument type is not the MiSeq or NextSeq. Check the sample sheet from the sequencing run folder"))
+if(instrument_type != sequencer_type) {
+  message("\n*****")
+  message("The downloaded SampleSheet.csv for this run on ", sequencing_date, " has the instrument set as the ", instrument_type)
+  message("The rest of this script will continue and processing this project as a ", instrument_type, " run")
+  message("If this was not the correct sequencer used for this project, double check the sequencing date or select the appropriate sequencer_type in this Rscript")
+  message("*****")
+
+  Sys.sleep(10)
 }
+
+instrument_regex <- case_when(instrument_type == "MiSeq" ~ "M",
+                              instrument_type == "NextSeq" ~ "VH")
 
 if(!read_length %in% c(76, 151)) {
   stop(simpleError("The read length is not 76 or 151 bp. Check the sample sheet from the sequencing run folder"))
@@ -226,7 +257,6 @@ if(!read_length %in% c(76, 151)) {
 metadata_input_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
 
 read_sheet <- function(fp, sheet_name) {
-
   tryCatch(
     {
       read_excel(fp, sheet = sheet_name) %>%
@@ -242,7 +272,6 @@ read_sheet <- function(fp, sheet_name) {
       stop (simpleError("The sample metadata file from the wet lab scientists may be missing or mis-formatted"))
     }
   )
-
 }
 
 index_sheet <- read_sheet(metadata_input_fp, "Index")
@@ -442,7 +471,7 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
   #merge the metadata
   merge(PHL_TU_merge, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
-  mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", idt_plate_coord, "-", gsub("-", "", sequencing_date)))) %>%
+  mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date)))) %>%
   select(sample_id, everything()) %>%
   arrange(plate, plate_col, plate_row) %>%
   mutate(sequencing_date = sequencing_date) %>%
@@ -547,9 +576,26 @@ metadata_sheet <- metadata_sheet %>%
                                      sample_type == "Wastewater" ~ "jose.lojo@phila.gov",
                                      !is.na(sample_type) ~ "jasmine.schell@phila.gov",
                                      TRUE ~ NA)) %>%
-  mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(plate_row, plate_col),
+  mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
                                         TRUE ~ environmental_site))
+
+main_sample_type <- unique(metadata_sheet$sample_type)[!grepl("control", unique(metadata_sheet$sample_type))]
+
+if(length(main_sample_type) > 1) {
+  stop(simpleError(paste0("This metadata sheet has more than one non-control sample type!\n",
+                          "You may need to separate the metadata sheet and use the appropriate workflow for these samples types:\n",
+                          paste0(main_sample_type, collapse = ", "))))
+  sample_type_acronym <- "Mix"
+}
+
+sample_type_acronym <- case_when(main_sample_type == "Testing sample type" ~ "Test",
+                                 main_sample_type == "Nasal swab" ~ "NS",
+                                 main_sample_type == "Wastewater" ~ "WW")
+
+if(is.na(sample_type_acronym)) {
+  stop(simpleError("There's a new or misformatted sample type in the metadata sheet!"))
+}
 
 for(x in fill_in_columns) {
   if(any(is.na(metadata_sheet[[x]]))) {
@@ -576,9 +622,11 @@ if(ncol(epi_sample_not_found > 0)) {
   #throw error
   if(length(epi_sample_not_found) > 0) {
 
-    message("\nThese samples were found in the epidemiologists metadata sheet but not in our sample sheet. Something might be wrong!")
+    message("\n*****")
+    message("These samples were found in the epidemiologists metadata sheet but not in our sample sheet. Something might be wrong!")
     message("Check email to see if these samples could not be located by the receiving department")
     message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check:")
+    message("*****")
 
     stop(simpleError(paste0(epi_sample_not_found, collapse = ", ")))
   }
@@ -596,8 +644,10 @@ missing_sample_date <- missing_metadata_non_ctrl_samples %>%
 
 #throw error
 if(length(missing_sample_date) > 0) {
-  message("\nThese non-control samples are in the sample sheet but are missing a collection date!")
+  message("\n*****")
+  message("These non-control samples are in the sample sheet but are missing a collection date!")
   message("Something must be wrong:")
+  message("*****")
 
   stop(simpleError(paste0(missing_sample_date, collapse = ", ")))
 }
@@ -616,10 +666,12 @@ missing_metadata_samples <- rbind(missing_sample_RLU, missing_sample_CT)
 
 #show warning
 if(nrow(missing_metadata_samples) > 0){
-  message("\nThese non-control samples are in the sample sheet but are missing RLU or CT values")
+  message("\n*****")
+  message("These non-control samples are in the sample sheet but are missing RLU or CT values")
   message("They may also be GeneXpert samples. These samples should be double checked:")
-
   message(paste0(pull(missing_metadata_samples), collapse = ", "))
+  message("*****")
+
   Sys.sleep(5)
 }
 
@@ -712,7 +764,7 @@ samp_sheet_2_write <- metadata_sheet %>%
   select(sample_id, index, index2) %>%
   rename(Sample_ID = "sample_id")
 
-sample_sheet_fn <- paste0(sequencing_date, "_SampleSheet_v2.csv")
+sample_sheet_fn <- paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, "SampleSheet_v2.csv", sep = "_")
 
 sample_sheet_fp <- here("metadata", "munge", sample_sheet_fn)
 
