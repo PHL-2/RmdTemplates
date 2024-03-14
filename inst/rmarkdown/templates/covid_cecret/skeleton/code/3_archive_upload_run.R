@@ -120,7 +120,7 @@ if(run_uploaded_2_basespace) {
   # The '-n' flag removes the time stamp from the header when compressing, which will allow generating the md5 checksum to be more consistent
   # The flags included in the tar command just tells the program to print a progress bar
   bars <- 99
-  submit_screen_job(message2display = "Create tarball of the sequencing run folder",
+  submit_screen_job(message2display = "Creating tarball of the sequencing run folder",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-tarball",
                     command2run = paste("echo Estimated:", paste0(c("[", rep("=", bars+1), "];"), collapse = ""),
@@ -142,7 +142,7 @@ if(run_uploaded_2_basespace) {
                    screen_session_name = "sequencing-tarball")
 
   # Generate md5 checksum
-  submit_screen_job(message2display = "Generate md5 checksum",
+  submit_screen_job(message2display = "Generating md5 checksum",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-checksum",
                     command2run = paste0("cd ", ec2_tmp_fp, ";",
@@ -156,7 +156,7 @@ if(run_uploaded_2_basespace) {
 
   # Upload data
 
-  submit_screen_job(message2display = "Upload run to S3",
+  submit_screen_job(message2display = "Uploading run to S3",
                     ec2_login = ec2_hostname,
                     screen_session_name = "upload-run",
                     command2run = paste("aws s3 cp",
@@ -243,7 +243,7 @@ if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet), ign
 }
 
 if(run_uploaded_2_basespace) {
-  submit_screen_job(message2display = "Clean up EC2 run folder",
+  submit_screen_job(message2display = "Cleaning up EC2 run folder",
                     ec2_login = ec2_hostname,
                     screen_session_name = "delete-run",
                     command2run = paste0("rm -rf ", ec2_tmp_fp, ";",

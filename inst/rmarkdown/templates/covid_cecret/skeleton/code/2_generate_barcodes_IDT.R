@@ -185,7 +185,7 @@ if(run_uploaded_2_basespace) {
     sequencing_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
 
     # Download the run from BaseSpace onto a running EC2 instance
-    submit_screen_job(message2display = "Download sequencing run from BaseSpace onto EC2 instance",
+    submit_screen_job(message2display = "Downloading sequencing run from BaseSpace",
                       ec2_login = ec2_hostname,
                       screen_session_name = "basespace-run-download",
                       command2run = paste("bs download runs --id", bs_run_id, "--output", sequencing_run_fp)
