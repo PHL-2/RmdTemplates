@@ -59,12 +59,12 @@ if(length(sample_sheet_fn) > 1) {
   stop(simpleError("There are more than 2 sample sheets detected!! Please delete the incorrect one"))
 }
 
-sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq)_.*", "\\1", sample_sheet_fn)
+sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq1k2k)_.*", "\\1", sample_sheet_fn)
 
 sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
-                             sequencer_type == "NextSeq" ~ "VH")
+                             sequencer_type == "NextSeq1k2k" ~ "VH")
 
-intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*$")
 
 sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
 

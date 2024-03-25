@@ -16,7 +16,7 @@ run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to B
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
 
-sequencer_type <- c("MiSeq", "NextSeq")[sequencer_select]
+sequencer_type <- c("MiSeq", "NextSeq1k2k")[sequencer_select]
 
 # temporary directory in ec2 to hold to sequencing run download. This directory will be deleted after running this script
 ec2_tmp_fp <- "~/tmp_bs_dl/"
@@ -96,7 +96,7 @@ barcodes <- tryCatch(
 
 samplesheet_exists <- file.exists(here("metadata", "munge", "SampleSheet.csv"))
 
-sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9A-Z-]*$")
 
 run_cd <- NA
 run_q30 <- NA
@@ -120,9 +120,9 @@ if(run_uploaded_2_basespace) {
 
     #these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
     sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
-                                 sequencer_type == "NextSeq" ~ "VH")
+                                 sequencer_type == "NextSeq1k2k" ~ "VH")
 
-    intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+    intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*$")
 
     bs_run <- bs_run %>%
       filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
@@ -223,15 +223,19 @@ if(run_uploaded_2_basespace) {
 run_samplesheet_fp <- here("metadata", "munge", "SampleSheet.csv")
 run_sample_sheet <- load_sample_sheet(run_samplesheet_fp)
 
-read_length <- unique(unlist(run_sample_sheet$Reads))
-
-samp_sh_header <- data.frame(X1 = unlist(run_sample_sheet$Header)) %>%
-  mutate(col_names = gsub(",.*", "", X1)) %>%
+instrument_type <- data.frame(values = unlist(run_sample_sheet$Header)) %>%
+  mutate(col_names = gsub(",.*", "", values)) %>%
   mutate(col_names = gsub(" ", "_", col_names)) %>%
-  mutate(X1 = gsub(".*,", "", X1)) %>%
-  pivot_wider(names_from = "col_names", values_from = "X1")
+  mutate(values = gsub(".*,", "", values)) %>%
+  filter(grepl("instrument_type|InstrumentPlatform", col_names)) %>%
+  select(values) %>%
+  pull()
 
-instrument_type <- samp_sh_header$instrument_type
+read_length <- data.frame(values = unlist(run_sample_sheet$Reads)) %>%
+  filter(!grepl("^Index[1|2]Cycles,", values)) %>%
+  mutate(values = gsub(".*,", "", values)) %>%
+  pull() %>%
+  unique()
 
 if(instrument_type != sequencer_type) {
   message("\n*****")
@@ -244,7 +248,7 @@ if(instrument_type != sequencer_type) {
 }
 
 instrument_regex <- case_when(instrument_type == "MiSeq" ~ "M",
-                              instrument_type == "NextSeq" ~ "VH")
+                              instrument_type == "NextSeq1k2k" ~ "VH")
 
 if(!read_length %in% c(76, 151)) {
   stop(simpleError("The read length is not 76 or 151 bp. Check the sample sheet from the sequencing run folder"))
@@ -795,6 +799,9 @@ write_samp("")
 
 write_samp("[BCLConvert_Settings]")
 write_samp(c("CreateFastqForIndexReads", "1"))
+#don't split the lanes
+write_samp(c("NoLaneSplitting", "true"))
+write_samp(c("FastqCompressionFormat", "gzip"))
 write_samp("")
 
 write_samp("[BCLConvert_Data]")
@@ -807,6 +814,11 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 #does not contain PHI and accession numbers
 metadata_sheet %>%
   select(-c(I7_Index_ID, I5_Index_ID, any_of(phi_info))) %>%
+  # NextSeq runs have index2 sequences in the reverse complement of the ones listed in the reference barcode sheet
+  # however, the sample sheet used for demultiplexing needs to be the same orientation as the reference barcode sheet
+  # when BCLConvert demultiplexes a NextSeq run, it will automatically reverse complement index2
+  # results from the pipeline will refer to the reverse complement of index2, so this should be updated in the metadata sheet
+  mutate(index2 = ifelse(instrument_type == "NextSeq1k2k", reverse_complement(index2), index2)) %>%
   write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")), row.names = FALSE)
 
 #contains PHI and accession numbers

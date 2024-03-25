@@ -232,7 +232,7 @@ fastqc <- lapply(fastqc_fps, function(f) {
   rm(read_all)
   
   read_qc <- read_tsv(f, skip = line_start, n_max = line_end)
-  read_qc$sample_id <- gsub(".*/|_S[0-9]*_L00[0-9]*_R[12].*", "", f)
+  read_qc$sample_id <- gsub(".*/|_S[0-9]*.*_R[12].*", "", f)
   read_qc$direction <- gsub(".*(R[12]).*", "\\1", f)
   return(read_qc)
   }) %>%
@@ -261,7 +261,7 @@ actual_read_lengths <- lapply(fastqc_fps, function(f) {
   rm(read_all)
   
   read_in_lengths <- read_tsv(f, skip = line_start, n_max = line_end)
-  read_in_lengths$sample_id <- gsub(".*/|_S[0-9]*_L00[0-9]*_R[12].*", "", f)
+  read_in_lengths$sample_id <- gsub(".*/|_S[0-9]*.*_R[12].*", "", f)
   read_in_lengths$direction <- gsub(".*(R[12]).*", "\\1", f)
   return(read_in_lengths)
   }) %>%
