@@ -62,7 +62,7 @@ if(length(sample_sheet_fn) > 1) {
   stop(simpleError("There are more than 2 sample sheets detected!! Please delete the incorrect one"))
 }
 
-sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq)_.*", "\\1", sample_sheet_fn)
+sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq1k2k)_.*", "\\1", sample_sheet_fn)
 
 sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
 
@@ -72,7 +72,7 @@ s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
 system2("aws", c("sso login"))
 
-sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9A-Z-]*$")
 
 if(run_uploaded_2_basespace) {
 
@@ -91,9 +91,9 @@ if(run_uploaded_2_basespace) {
 
     #these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
     sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
-                                 sequencer_type == "NextSeq" ~ "VH")
+                                 sequencer_type == "NextSeq1k2k" ~ "VH")
 
-    intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+    intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*$")
 
     bs_run <- bs_run %>%
       filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
@@ -120,7 +120,7 @@ if(run_uploaded_2_basespace) {
   # The '-n' flag removes the time stamp from the header when compressing, which will allow generating the md5 checksum to be more consistent
   # The flags included in the tar command just tells the program to print a progress bar
   bars <- 99
-  submit_screen_job(message2display = "Create tarball of the sequencing run folder",
+  submit_screen_job(message2display = "Creating tarball of the sequencing run folder",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-tarball",
                     command2run = paste("echo Estimated:", paste0(c("[", rep("=", bars+1), "];"), collapse = ""),
@@ -142,7 +142,7 @@ if(run_uploaded_2_basespace) {
                    screen_session_name = "sequencing-tarball")
 
   # Generate md5 checksum
-  submit_screen_job(message2display = "Generate md5 checksum",
+  submit_screen_job(message2display = "Generating md5 checksum",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-checksum",
                     command2run = paste0("cd ", ec2_tmp_fp, ";",
@@ -156,7 +156,7 @@ if(run_uploaded_2_basespace) {
 
   # Upload data
 
-  submit_screen_job(message2display = "Upload run to S3",
+  submit_screen_job(message2display = "Uploading run to S3",
                     ec2_login = ec2_hostname,
                     screen_session_name = "upload-run",
                     command2run = paste("aws s3 cp",
@@ -243,7 +243,7 @@ if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet), ign
 }
 
 if(run_uploaded_2_basespace) {
-  submit_screen_job(message2display = "Clean up EC2 run folder",
+  submit_screen_job(message2display = "Cleaning up EC2 run folder",
                     ec2_login = ec2_hostname,
                     screen_session_name = "delete-run",
                     command2run = paste0("rm -rf ", ec2_tmp_fp, ";",

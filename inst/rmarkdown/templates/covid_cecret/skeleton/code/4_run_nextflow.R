@@ -59,12 +59,12 @@ if(length(sample_sheet_fn) > 1) {
   stop(simpleError("There are more than 2 sample sheets detected!! Please delete the incorrect one"))
 }
 
-sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq)_.*", "\\1", sample_sheet_fn)
+sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq1k2k)_.*", "\\1", sample_sheet_fn)
 
 sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
-                             sequencer_type == "NextSeq" ~ "VH")
+                             sequencer_type == "NextSeq1k2k" ~ "VH")
 
-intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9]*-[0-9A-Z]*$")
+intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*$")
 
 sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
 
@@ -76,7 +76,7 @@ nf_demux_samplesheet_path <- paste(s3_run_bucket, sequencing_date,
 bclconvert_output_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sep = "/")
 
 # Demultiplexing
-submit_screen_job(message2display = "Demultiplex with BCLConvert",
+submit_screen_job(message2display = "Demultiplexing with BCLConvert",
                   ec2_login = ec2_hostname,
                   screen_session_name = "demux",
                   command2run = paste("cd ~/.tmp_screen/;",
@@ -144,7 +144,7 @@ fastq_path <- paste(bclconvert_output_path, instrument_run_id, sep = "/")
 # fastq_path <- paste(bclconvert_output_path, "fastq-files", sep = "/")
 
 # Download most recent Nextclade dataset
-submit_screen_job(message2display = "Download Nextclade SARS-CoV-2 data",
+submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
                   ec2_login = ec2_hostname,
                   screen_session_name = "nextclade-dl",
                   command2run = paste("mkdir -p ~/.local/bin/;",
@@ -163,7 +163,7 @@ check_screen_job(message2display = "Checking Nextclade download job",
                  screen_session_name = "nextclade-dl")
 
 # Update the Cecret pipeline; this should be done as often as possible as it also updates the freyja data used for assignment
-submit_screen_job(message2display = "Update Cecret pipeline",
+submit_screen_job(message2display = "Updating Cecret pipeline",
                   ec2_login = ec2_hostname,
                   screen_session_name = "update-cecret",
                   command2run = "nextflow pull UPHL-BioNGS/Cecret -r master"
@@ -176,7 +176,7 @@ check_screen_job(message2display = "Checking Cecret update",
 workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sep = "/")
 
 # Cecret pipeline
-submit_screen_job(message2display = "Process data through Cecret pipeline",
+submit_screen_job(message2display = "Processing data through Cecret pipeline",
                   ec2_login = ec2_hostname,
                   screen_session_name = "cecret",
                   command2run = paste("cd ~/.tmp_screen/;",

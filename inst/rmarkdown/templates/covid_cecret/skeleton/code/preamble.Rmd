@@ -232,7 +232,7 @@ fastqc <- lapply(fastqc_fps, function(f) {
   rm(read_all)
   
   read_qc <- read_tsv(f, skip = line_start, n_max = line_end)
-  read_qc$sample_id <- gsub(".*/|_S[0-9]*_L00[0-9]*_R[12].*", "", f)
+  read_qc$sample_id <- gsub(".*/|_S[0-9]*.*_R[12].*", "", f)
   read_qc$direction <- gsub(".*(R[12]).*", "\\1", f)
   return(read_qc)
   }) %>%
@@ -261,7 +261,7 @@ actual_read_lengths <- lapply(fastqc_fps, function(f) {
   rm(read_all)
   
   read_in_lengths <- read_tsv(f, skip = line_start, n_max = line_end)
-  read_in_lengths$sample_id <- gsub(".*/|_S[0-9]*_L00[0-9]*_R[12].*", "", f)
+  read_in_lengths$sample_id <- gsub(".*/|_S[0-9]*.*_R[12].*", "", f)
   read_in_lengths$direction <- gsub(".*(R[12]).*", "\\1", f)
   return(read_in_lengths)
   }) %>%
@@ -295,7 +295,7 @@ samtools_stat <- lapply(samtools_stats_fps, function(f) {
   
   summary_numbers <- read_tsv(f, skip = line_start, n_max = line_end,
                               col_names = c("SN", "samtools_stat", "samtools_stat_val", "comments"))
-  summary_numbers$sample_id <- gsub(".*/|\\.stats.txt", "", f)
+  summary_numbers$sample_id <- gsub(".*/|_S[0-9]*\\.stats\\.txt", "", f)
   return(summary_numbers)
   }) %>%
   do.call("rbind", .) %>%
@@ -324,14 +324,14 @@ mapped_read_lengths <- lapply(samtools_stats_fps, function(f) {
   
   #some samples may have 0 reads
   if(line_end == 0) {
-    read_lengths <- data.frame(sample_id = gsub(".*/|\\.stats.txt", "", f),
+    read_lengths <- data.frame(sample_id = gsub(".*/|_S[0-9]*\\.stats\\.txt", "", f),
                                RL = "RL",
                                samtools_read_length = 0,
                                count = 0)
   } else {
     read_lengths <- read_tsv(f, skip = line_start, n_max = line_end,
                               col_names = c("RL", "samtools_read_length", "count"))
-    read_lengths$sample_id <- gsub(".*/|\\.stats.txt", "", f)
+    read_lengths$sample_id <- gsub(".*/|_S[0-9]*\\.stats\\.txt", "", f)
   }
 
   return(read_lengths)
@@ -366,7 +366,7 @@ amplicon_depth <- amplicon_fps %>%
   ungroup() %>%
   select(-FileName) %>%
   rename(sample_id = "bam") %>%
-  mutate(sample_id = gsub(".primertrim.sorted.bam", "", sample_id)) %>%
+  mutate(sample_id = gsub("_S[0-9]*\\.primertrim\\.sorted\\.bam", "", sample_id)) %>%
   rename_with(function(x) paste0("amp_tile_", gsub(".*_", "", gsub("_INSERT$", "", x)), "_artic_", artic_primer_scheme), -sample_id)
 
 ```
@@ -385,7 +385,7 @@ slide_window_coverage <- coverage_fps %>%
   rename(position = "X2", map_per_position = "X3") %>%
   select(FileName, map_per_position, position) %>%
   mutate(sample_id = gsub(".*/", "", FileName),
-         sample_id = gsub("\\.depth.txt", "", sample_id)) %>%
+         sample_id = gsub("_S[0-9]*\\.depth\\.txt", "", sample_id)) %>%
   select(-c(FileName)) %>%
   group_by(sample_id) %>%
   mutate(slide_window_100 = rollmean(map_per_position, k=100, fill = 0, align = 'right')) %>%
@@ -434,6 +434,7 @@ cov_stats <- cov_num_fps %>%
   do(read_delim(.$FileName, col_names = TRUE)) %>%
   ungroup() %>%
   rename(sample_id = "sample", aligned_reads = "numreads") %>%
+  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
   select(sample_id, aligned_reads)
 
 ```
@@ -449,7 +450,10 @@ k2_files_fps %>%
   group_by(FileName) %>%
   do(read_delim(.$FileName,
                 col_names = c("k2_percent", "k2_clade_kmers", "k2_kmers", "k2_rank", "k2_ncbi_taxon_id", "k2_name"),
-                col_types = cols("k2_percent" = col_character()))) %>%
+                col_types = cols("k2_percent" = col_character(),
+                                 "k2_clade_kmers" = col_double(),
+                                 "k2_kmers" = col_double(),
+                                 "k2_ncbi_taxon_id" = col_double()))) %>%
   ungroup() %>%
   mutate(sample_id = gsub(".*/", "", FileName),
          sample_id = gsub("_kraken2_report.txt", "", sample_id),
@@ -468,6 +472,7 @@ k2_files_fps %>%
                            k2_top_rank,
                            paste0(k2_top_rank, " ", gsub("*[0-9]*", "", k2_rank), "__", k2_name))) %>%
   select(sample_id, k2_taxon, k2_props, k2_kmers) %>%
+  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
   write_csv(kraken_props_fp)
 
 ```
@@ -486,9 +491,8 @@ next_clade <- nc_fp %>%
          nextclade_clade_who = "clade_who",
          nextclade_qc_overallstatus = "qc.overallStatus",
          nextclade_qc_overallscore = "qc.overallScore",
-         nextclade_index = "index",) %>%
-  mutate(ivar_consensus_options = gsub(".*(consensus_threshold.*)$", "\\1", sample_id),
-         sample_id = gsub("^Consensus_|\\.consensus_threshold.*$", "", sample_id))
+         nextclade_index = "index") %>%
+  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id))
 
 nc_v_fp <- here("data", "processed_cecret", "nextclade", "nextclade.json")
 
@@ -534,7 +538,7 @@ freyja <- freyja_fp %>%
   read_delim() %>%
   rename_all(.funs = function(x) paste0("freyja_", x)) %>%
   rename(sample_id = 1) %>%
-  mutate(sample_id = gsub("_variants.tsv", "", sample_id))
+  mutate(sample_id = gsub("_S[0-9]*_variants.tsv", "", sample_id))
   
 ```
 
@@ -553,8 +557,8 @@ colnames(snpdists)[1] %>%
 
 snpdists <- snpdists %>%
   rename(sample_id = 1) %>%
-  mutate(sample_id = gsub("Consensus_|.consensus.*", "", sample_id)) %>%
-  rename_all(.funs = function(x) gsub("Consensus_|.consensus.*", "", x)) %>%
+  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
+  rename_all(.funs = function(x) gsub("_S[0-9]*$", "", x)) %>%
   pivot_longer(cols = -sample_id, names_to = "compared_to", values_to = "snps")
 
 snpdist_check <- snpdists %>%
@@ -576,8 +580,8 @@ cecret_software_select <- c("ivar", "bwa", "seqyclean", "Cecret version", "pango
 #pangolin data is included with this summary file
 cecret_aggregate <- here("data", "processed_cecret", "cecret_results.csv") %>%
   read_csv() %>%
-  select(-c(sample, samtools_meandepth_after_trimming, samtools_per_1X_coverage_after_trimming, fasta_line, freyja_summarized)) %>%
-  rename(vadr_passfail = "vadr_p/f") %>%
+  select(-c(sample_id, samtools_meandepth_after_trimming, samtools_per_1X_coverage_after_trimming, fasta_line, freyja_summarized)) %>%
+  rename(sample_id = "sample", vadr_passfail = "vadr_p/f") %>%
   as.data.frame()
 
 cecret_aggregate %>%
@@ -676,14 +680,18 @@ profile_software_version %>%
 
 ```{r write cecret results, eval = import_data}
 
-list(samp_reads, cov_stats, coverage, s_gene_coverage, next_clade, freyja, amplicon_depth, samtools_stat) %>%
+list(cov_stats, coverage, s_gene_coverage, next_clade, freyja, amplicon_depth, samtools_stat) %>%
   reduce(merge, by = "sample_id", all = TRUE) %>%
   merge(cecret_aggregate,
         by = c("sample_id", "nextclade_clade", "nextclade_clade_who", "nextclade_qc_overallstatus", "nextclade_qc_overallscore"),
         all = TRUE,
         sort = FALSE) %>%
-  mutate(nextclade_clade_who = ifelse(pangolin_lineage == "B" & Nextclade_pango == "B" & nextclade_clade == "19A",
-                                      "Reference", nextclade_clade_who)) %>%
+  
+  mutate(nextclade_clade_who = case_when((grepl("^B$|^B\\.[0-9]*$", Nextclade_pango) & nextclade_clade == "19A") ~ "Reference", #Illumina PC
+                                         (grepl("^A$|^A\\.[0-9]*$", Nextclade_pango) & nextclade_clade == "19B") ~ "Reference", #ZeptoMetrix PC
+                                         TRUE ~ nextclade_clade_who),
+         sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
+  merge(samp_reads, by = "sample_id", all = TRUE) %>%
   write_csv(cecret_results_fp)
   
 ```
@@ -978,7 +986,7 @@ if(have_phi) {
 #check the fastq files to upload; should be 1 set here
 fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
   data.frame(FileName = .) %>%
-  mutate(sample_id = gsub(".*upload/fastq/|_filtered_R[12].fastq.gz$", "", FileName)) %>%
+  mutate(sample_id = gsub(".*upload/fastq/|_S[0-9]*_filtered_R[12].fastq.gz$", "", FileName)) %>%
   mutate(file = gsub(".*/", "", FileName)) %>%
   select(-FileName)
 
@@ -992,7 +1000,7 @@ if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
 #check the fasta files to upload; should be 1 set here
 fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
   filter(grepl("^>", X1)) %>%
-  mutate(sample_id = gsub("^>", "", X1)) %>%
+  mutate(sample_id = gsub("^>|_S[0-9]*$", "", X1)) %>%
   mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
   select(-X1)
 
