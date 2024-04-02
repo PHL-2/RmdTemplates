@@ -1,6 +1,6 @@
 [Header],
 FileFormatVersion,2
-RunName,COVIDSeq
+RunName,COVIDSeq_YYYY-MM-DD
 InstrumentPlatform,NextSeq1k2k
 IndexOrientation,Forward
 
