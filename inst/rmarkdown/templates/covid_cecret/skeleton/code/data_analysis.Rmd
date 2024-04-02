@@ -558,7 +558,9 @@ top_taxon <- k2 %>%
 k2_axis_size <- 11 - length(top_taxon)/10
 
 k2 %>%
-  mutate(k2_taxon = gsub(" subsp\\. .*", "", k2_taxon)) %>%
+  merge(select(s, sample_id), by = "sample_id", all.y = TRUE) %>%
+  mutate(k2_taxon = case_when(is.na(k2_taxon) ~ "",
+                              TRUE ~ gsub(" subsp\\. .*", "", k2_taxon))) %>%
   mutate(k2_taxon = fct_other(k2_taxon, keep = top_taxon, other_level = "Other taxa")) %>%
   group_by(sample_id, k2_taxon) %>%
   summarise(k2_props = sum(k2_props)) %>%
@@ -603,9 +605,12 @@ k2 %>%
 ```{r k2 heatmap phyla, fig.width=20, fig.height=15}
 
 k2 %>%
-  mutate(k2_taxon = gsub("Severe acute respiratory syndrome", "SARS", k2_taxon)) %>%
+  merge(select(s, sample_id), by = "sample_id", all.y = TRUE) %>%
+  mutate(k2_taxon = case_when(is.na(k2_taxon) ~ "",
+                              TRUE ~ gsub("Severe acute respiratory syndrome", "SARS", k2_taxon))) %>%
   mutate(k2_phyla = ifelse(grepl("SARS", k2_taxon), k2_taxon,
                            gsub(" [cofgs]__.*", "", k2_taxon))) %>%
+  mutate(k2_props = ifelse(is.na(k2_props), 0, k2_props)) %>%
   mutate(k2_phyla = fct_lump(k2_phyla, n = 10, w = k2_props, other_level = "Other phyla")) %>%
   group_by(sample_id, k2_phyla) %>%
   summarise(k2_props = sum(k2_props)) %>%
@@ -1345,8 +1350,7 @@ s_toPlot %>%
       plot.title = element_text(hjust = 0.5)
       ) +
     labs(x="", y="Relative abundance", title = "Sample type and\nVOC label", fill="Variants")
-  } +
-  plot_layout(widths = c(5, 1))
+  }
 
 ```
 
@@ -1394,8 +1398,7 @@ s_toPlot %>%
       strip.text.y = element_text(angle = 0, size = 6)
       ) +
     labs(y="", x="Relative abundance", fill="Variants")
-  } +
-  plot_layout(widths = c(5, 1))
+  }
 
 ```
 
@@ -1446,8 +1449,7 @@ freyja_grouping %>%
       axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)
       ) +
     labs(y="", x="Software used to determine variants", fill="Variants")
-  }  +
-  plot_layout(widths = c(5, 1))
+  }
 
 ```
 

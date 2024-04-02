@@ -25,10 +25,11 @@ load_sample_sheet <- function(fp) {
 
   read.delim(fp, header = FALSE) %>%
     mutate(V1 = as.character(V1)) %>%
-    mutate(col_names = case_when(grepl("^\\[", V1) & grepl("\\]$", V1) ~ V1,
+    mutate(col_names = case_when(grepl("^\\[", V1) & grepl("\\]", V1) ~ V1,
                                  TRUE ~ NA_character_)) %>%
     fill(col_names, .direction = "down") %>%
     filter(col_names != V1) %>%
+    mutate(col_names = gsub(",*$", "", col_names)) %>%
     mutate(col_names = gsub("\\[|\\]", "", col_names)) %>%
     pivot_wider(names_from = "col_names", values_from = "V1", values_fn = list)
 
@@ -189,18 +190,18 @@ run_in_terminal <- function(command2run = "") {
 
 submit_screen_job <- function(message2display = "Running function to submit screen job", ec2_login = "", screen_session_name = "", command2run = "") {
 
-  run_in_terminal(paste("echo", paste0("'", message2display, "';"),
+  run_in_terminal(paste("echo", paste0("'", message2display, " through a screen command on EC2 instance [", ec2_login, "]';"),
                         "ssh -tt", ec2_login,
                         shQuote(paste("sleep 5;",
                                       "if screen -ls | grep", paste0("'", screen_session_name, "'"), "-q;",
-                                      "then echo 'Detached", screen_session_name, "session detected. Skipping ahead to check status';",
-                                      "else echo 'Submitting job now';",
-                                      "mkdir -p ~/.tmp_screen;",
-                                      "rm -f", paste0("~/.tmp_screen/", screen_session_name, ".screenlog;"),
-                                      "sleep 5;",
-                                      "screen -dm -S", screen_session_name, "-L -Logfile", paste0("~/.tmp_screen/", screen_session_name, ".screenlog"), "bash -c",
-                                      paste0("\"", command2run, "\";"),
-                                      "sleep 5;",
+                                        "then echo 'Detached", screen_session_name, "session detected. Skipping ahead to check status';",
+                                        "else echo 'Submitting job now';",
+                                        "mkdir -p ~/.tmp_screen;",
+                                        "rm -f", paste0("~/.tmp_screen/", screen_session_name, ".screenlog;"),
+                                        "sleep 5;",
+                                        "screen -dm -S", screen_session_name, "-L -Logfile", paste0("~/.tmp_screen/", screen_session_name, ".screenlog"), "bash -c",
+                                        paste0("\"", command2run, "\";"),
+                                        "sleep 5;",
                                       "fi"), type = "sh")))
 }
 
@@ -262,4 +263,20 @@ convert_sample_size_2_font_size <- function(sample_size = x,
 
   ceiling((((sample_size*font_range)/max_sample_size) + max_font)*2)/2
 
+}
+
+## ==============================
+##  Reverse complement DNA string
+## ==============================
+
+reverse_complement <- function(index) {
+
+  non_atcg <- gsub("[ATCG]", "", index, ignore.case = TRUE)
+
+  if(all(nchar(non_atcg) != 0)) {
+    stop(simpleError("There are non-canonical bases in your indices"))
+  }
+
+  reversed_index <- stringi::stri_reverse(index)
+  chartr(old = "atcgATCG", new = "tagcTAGC", reversed_index)
 }
