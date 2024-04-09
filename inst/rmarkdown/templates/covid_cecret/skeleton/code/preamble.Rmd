@@ -319,6 +319,7 @@ mapped_read_lengths <- lapply(samtools_stats_fps, function(f) {
   #find the line to start reading the file as tsv
   read_all <- readLines(f)
   line_start <- grep(read_length_indic, read_all)
+  #read file until line_end
   line_end <- grep("# Read lengths - first fragments.", read_all) - line_start - 1
   rm(read_all)
   
@@ -591,9 +592,12 @@ cecret_aggregate %>%
             .funs = function(x) sub(".*version.*? ", "", x, ignore.case = TRUE)) %>%
   mutate_all(.funs = function(x) as.character(x)) %>%
   pivot_longer(cols = everything(), names_to = "software", values_to = "version") %>%
-  mutate(software = gsub("^pangolin_|.version$", "", software),
-         software = ifelse(grepl("^PUSHER-", version), "PUSHER", software),
-         version = gsub("^PUSHER-", "", version)) %>%
+  filter(!is.na(version)) %>%
+  unique() %>%
+  mutate(software = case_when(grepl("^PUSHER-", version) ~ "PUSHER",
+                              grepl("^PANGO-", version) ~ "PANGO",
+                              TRUE ~ gsub("^pangolin_|.version$", "", software)),
+         version = gsub("^PUSHER-|^PANGO-", "", version)) %>%
   mutate(pipeline = "UPHL-BioNGS-Cecret") %>%
   select(pipeline, software, version) %>%
   write_csv(file = software_version_fp, append = TRUE)
@@ -742,6 +746,8 @@ s_toPlot <- s %>%
 has_CT <- any(grepl("^CT$", colnames(s)))
 
 has_RLU <- any(grepl("^RLU$", colnames(s)))
+
+has_qubit <- !all(is.na(s$qubit_conc_ng_ul))
 
 if(any(is.na(s$sample_type))) {
   stop(simpleError("A sample type is unaccounted for either in the metadata sheet or in sample_type_lvls"))
