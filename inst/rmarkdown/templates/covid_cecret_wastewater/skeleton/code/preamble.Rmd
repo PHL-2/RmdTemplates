@@ -1,0 +1,1419 @@
+
+```{r only run this chunk once to install packages, include=FALSE, eval=FALSE}
+
+# vegan package requires fortran compiler; see MacBook setup SOP for how to install
+install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx", "ggsci", "reticulate", "vegan", "ape"))
+
+```
+
+```{r manual input ARTIC primer bed file to use}
+
+primer_select <- 2 # set variable as 1 for V3 or 2 for V5.3.2
+
+artic_primer_scheme <- c("V3", "V5.3.2")[primer_select]
+
+# minimum acceptable number of reads per sample
+min_reads <- 1000000
+
+project_name <- basename(here())
+
+sequencing_date <- as.Date(gsub("_.*", "", project_name))
+
+```
+
+```{r load libraries}
+
+library(here)
+library(tidyverse)
+library(rvest)
+library(pander)
+library(kableExtra)
+library(ggsci)
+library(ggthemes)
+library(RColorBrewer)
+library(patchwork)
+library(zoo)
+library(stringdist)
+library(scales)
+library(vegan)
+library(ape)
+
+```
+
+```{r load variables, functions, and signature from common files}
+
+#this file needs to sit in a [aux_files/config] directory path above this project directory
+tryCatch(
+  {
+    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+  },
+  error = function(e) {
+  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+  }
+)
+
+#this file needs to sit in a [aux_files/functions] directory path above this project directory
+tryCatch(
+  {
+    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+  },
+  error = function(e) {
+  stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+  }
+)
+
+#this file needs to sit in a [aux_files/signature] directory path above this project directory
+tryCatch(
+  {
+    signature_fp <- list.files(file.path(dirname(here()), "aux_files", "signature"), pattern = ".png|.jpeg|.tif*|.gif", full.names = TRUE)
+    tag <- signature_fp[!grepl("blank.png", signature_fp)]
+    blank <- signature_fp[grepl("blank.png", signature_fp)]
+  },
+  error = function(e) {
+  stop (simpleError("The signature image file needs to sit in a [aux_files/signature] directory path above this project directory"))
+  }
+)
+
+```
+
+```{r file paths for metadata and results}
+
+### mapping file paths
+mapping_file_fp <- list.files(here("metadata"), pattern = "_metadata.csv", full.names = TRUE)
+PHI_file_fp <- list.files(here("metadata"), pattern = "_PHI.csv", full.names = TRUE)
+
+### file paths to save results to
+unkwn_barcodes_fp <- here("data", paste0(sequencing_date, "_unknown_barcodes.csv"))
+fastqc_qual_fp <- here("data", paste0(sequencing_date, "_fastqc_qual.csv"))
+actual_read_lengths_fp <- here("data", paste0(sequencing_date, "_read_lengths.csv"))
+
+kraken_props_fp <- here("data", paste0(sequencing_date, "_kraken_props.csv"))
+snpdists_fp <- here("data", paste0(sequencing_date, "_snpdists.csv"))
+software_version_fp <- here("data", paste0(sequencing_date, "_software_version.csv"))
+cecret_results_fp <- here("data", paste0(sequencing_date, "_cecret_results.csv"))
+
+```
+
+```{r load metadata}
+
+#define control sample types
+ctrl_fct_lvls <- c("Water control", "Reagent control", "Environmental control", "Mock DNA positive control")
+
+s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
+  mutate(isControl = sample_type %in% ctrl_fct_lvls) %>%
+  mutate(barcode_sequence = paste0(index, "+", index2))
+
+read_length <- unique(s_meta$read_length)
+index_length <- unique(s_meta$index_length)
+
+unaccounted_sample_types <- sort(unique(s_meta$sample_type)[!unique(s_meta$sample_type) %in% c(ctrl_fct_lvls)])
+
+sample_type_lvls <- c(NA, "Reference", "Unassigned reads",
+                      ctrl_fct_lvls,
+                      unlist(lapply(unaccounted_sample_types, function(x) c(x, paste0(x, " - Poor")))))
+
+```
+
+<!-- Load QC data -->
+
+```{r find run folder name, eval = import_data}
+
+#get the sequencing run folder
+run_folder_name <- list.files(here("data", "processed_bclconvert"), pattern = "^[0-9].*[0-9A-Z]$")
+
+folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder_name)) %>%
+  as.Date(format = "%Y%m%d")
+
+if (is.na(folder_date)) {
+  stop(simpleError(paste0("Could not find the demultiplexed report from BCL Convert. Have you tried downloading the data?")))
+}
+
+if (folder_date != gsub("_.*", "", basename(here()))) {
+  stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+}
+
+```
+
+```{r file paths for qc data, eval = import_data}
+
+### demultiplexing results from nfcore
+demux_software_fp <- here("data", "processed_bclconvert", "pipeline_info", "software_versions.yml")
+demuxsum_fp <- here("data", "processed_bclconvert", run_folder_name, "Reports", "Demultiplex_Stats.csv")
+quality_metrics_fp <- here("data", "processed_bclconvert", run_folder_name, "Reports", "Quality_Metrics.csv")
+top_unkwn_fp <- here("data", "processed_bclconvert", run_folder_name, "Reports", "Top_Unknown_Barcodes.csv")
+
+```
+
+```{r save demux software versions, eval = import_data}
+
+read_delim(demux_software_fp, delim = " ", col_names = FALSE) %>%
+  filter(grepl("Nextflow: |nf-core/demultiplex: |bclconvert: |untar: |falco: ", X1)) %>%
+  separate(col = "X1", into = c("software", "version"), sep = ": ") %>%
+  mutate(software = gsub("^ *", "", software),
+         software = gsub("/", "-", software)) %>%
+  mutate(version = gsub("'", "", version)) %>%
+  mutate(pipeline = "nf-core-demultiplex") %>%
+  select(pipeline, software, version) %>%
+  write_csv(file = software_version_fp)
+
+```
+
+```{r load read numbers and save qc figures, eval = import_data}
+
+quality_metrics <- read_delim(quality_metrics_fp) %>%
+  rename(lane = "Lane", sample_id = "SampleID", Q30 = "% Q30") %>%
+  select(lane, sample_id, index, index2, ReadNumber, Q30) %>%
+  filter(!grepl("^I", ReadNumber)) %>%
+  mutate(ReadNumber = paste0("R", ReadNumber, "_Q30")) %>%
+  pivot_wider(names_from = "ReadNumber", values_from = "Q30")
+
+#read counts by sample number
+samp_reads <- read_delim(demuxsum_fp) %>%
+  rename_all(.funs = tolower) %>%
+  rename_all(.funs = function(x) gsub("# ", "", x)) %>%
+  rename_all(.funs = function(x) gsub("% ", "percent_", x)) %>%
+  rename_all(.funs = function(x) gsub(" ", "_", x)) %>%
+  rename(sample_id = "sampleid", barcode_sequence = "index", read_pairs = "reads", percent_of_lane = "percent_reads") %>%
+  mutate(sample_id = gsub("_", "-", sample_id),
+         barcode_sequence = gsub("-", "+", barcode_sequence),
+         read_counts = read_pairs*2) %>%
+  merge(quality_metrics, by = c("lane", "sample_id"), all = TRUE)
+
+top_unkwn_indices <- read_delim(top_unkwn_fp) %>%
+  rename_all(.funs = tolower) %>%
+  rename_all(.funs = function(x) gsub("# ", "", x)) %>%
+  rename_all(.funs = function(x) gsub("% ", "percent_", x)) %>%
+  rename_all(.funs = function(x) gsub(" ", "_", x)) %>%
+  mutate(barcode_sequence = paste0(index, "+", index2)) %>%
+  #get the smallest hamming distance to the sample barcode sequences
+  #levenshtein distance is useful for accounting for insertions and deletions between strings, but not needed in this case to determine barcode distances
+  mutate(min_dist = sapply(barcode_sequence,
+                           function(x) min(stringdist(x, b = samp_reads$barcode_sequence[!is.na(samp_reads$barcode_sequence)], method = "hamming")))) %>%
+  rename(read_counts = "reads") %>%
+  select(lane, barcode_sequence, read_counts, starts_with("percent"), min_dist) %>%
+  order_on_other_col(barcode_sequence, read_counts) %>%
+  droplevels()
+
+write_csv(top_unkwn_indices, unkwn_barcodes_fp)
+
+#throw error if the top unknown index is greater than 0.5% percent of all reads
+if(max(top_unkwn_indices$percent_of_all_reads) > 0.005) {
+  stop(simpleError("Top unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode"))
+}
+
+non_ctrl_samples <- s_meta %>%
+  filter(!sample_type %in% ctrl_fct_lvls) %>%
+  select(sample_id) %>%
+  pull()
+
+#throw error if Undetermined sample has more reads than non-control samples
+if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] >
+   sum(samp_reads[samp_reads$sample_id %in% non_ctrl_samples, "read_counts"])) {
+  stop(simpleError("Undetermined sample has more reads than the median. Double check the sample barcodes"))
+}
+
+```
+
+```{r load fastqc files, eval = import_data}
+
+fastqc_fps <- list.files(here("data", "processed_bclconvert", run_folder_name), pattern = "fastqc_data.txt", recursive = TRUE, full.names = TRUE)
+
+#line positions to skip to
+quality_indic <- ">>Per base sequence quality"
+seq_length_indic <- ">>Sequence Length Distribution"
+
+fastqc <- lapply(fastqc_fps, function(f) {
+  
+  #find the line to start reading the file as tsv
+  read_all <- readLines(f)
+  line_start <- grep(quality_indic, read_all)
+  end_modules <- grep(">>END_MODULE", read_all) - line_start
+  line_end <- min(end_modules[which(end_modules > 0)]) - 2
+  rm(read_all)
+  
+  read_qc <- read_tsv(f, skip = line_start, n_max = line_end)
+  read_qc$sample_id <- gsub(".*/|_S[0-9]*.*_R[12].*", "", f)
+  read_qc$direction <- gsub(".*(R[12]).*", "\\1", f)
+  return(read_qc)
+  }) %>%
+  do.call("rbind", .) %>%
+  rename(position = "#Base") %>%
+  select(sample_id, direction, position, Mean)
+
+length_check <- fastqc %>%
+  group_by(sample_id, direction) %>%
+  summarize(max_length = max(position)) %>%
+  ungroup() %>%
+  select(max_length) %>%
+  pull()
+
+#throw error if fastqc does not have the max read length
+if(!all(length_check == read_length)) {
+  stop(simpleError(paste0("Some samples did not have reads up to ", read_length, " bp")))
+}
+
+actual_read_lengths <- lapply(fastqc_fps, function(f) {
+  #find the line to start reading the file as tsv
+  read_all <- readLines(f)
+  line_start <- grep(seq_length_indic, read_all)
+  end_modules <- grep(">>END_MODULE", read_all) - line_start
+  line_end <- min(end_modules[which(end_modules > 0)]) - 2
+  rm(read_all)
+  
+  read_in_lengths <- read_tsv(f, skip = line_start, n_max = line_end)
+  read_in_lengths$sample_id <- gsub(".*/|_S[0-9]*.*_R[12].*", "", f)
+  read_in_lengths$direction <- gsub(".*(R[12]).*", "\\1", f)
+  return(read_in_lengths)
+  }) %>%
+  do.call("rbind", .) %>%
+  rename(read_length = "#Length", count = "Count") %>%
+  group_by(sample_id, read_length) %>%
+  summarize(count = sum(count)) %>%
+  ungroup() %>%
+  mutate(software = "fastqc") %>%
+  select(software, sample_id, read_length, count)
+
+write_csv(fastqc, fastqc_qual_fp)
+write_csv(actual_read_lengths, actual_read_lengths_fp)
+
+```
+
+```{r load samtools stats files, eval = import_data}
+
+samtools_stats_fps <- list.files(here("data", "processed_cecret", "samtools_stats"), pattern = ".stats.txt", recursive = TRUE, full.names = TRUE)
+
+#line positions to skip to
+summary_indic <- "# Summary Numbers."
+
+samtools_stat <- lapply(samtools_stats_fps, function(f) {
+  
+  #find the line to start reading the file as tsv
+  read_all <- readLines(f)
+  line_start <- grep(summary_indic, read_all)
+  line_end <- grep("# First Fragment Qualities.", read_all) - line_start - 2
+  rm(read_all)
+  
+  summary_numbers <- read_tsv(f, skip = line_start, n_max = line_end,
+                              col_names = c("SN", "samtools_stat", "samtools_stat_val", "comments"))
+  summary_numbers$sample_id <- gsub(".*/|_S[0-9]*\\.stats\\.txt", "", f)
+  return(summary_numbers)
+  }) %>%
+  do.call("rbind", .) %>%
+  mutate(samtools_stat = gsub(" ", "_", samtools_stat),
+         samtools_stat = gsub(":", "", samtools_stat),
+         samtools_stat = gsub("^", "samtools_", samtools_stat)) %>%
+  #select certain rows
+  filter(grepl(paste0(c("^samtools_raw_total_sequences$", 
+                        "^samtools_filtered_sequences$", 
+                        "^samtools_sequences$", 
+                        "^samtools_reads_mapped$", 
+                        "^samtools_reads_unmapped$", 
+                        "^samtools_reads_properly_paired$"), collapse = "|"), samtools_stat)) %>%
+  select(sample_id, samtools_stat, samtools_stat_val) %>%
+  pivot_wider(names_from = "samtools_stat", values_from = "samtools_stat_val")
+
+read_length_indic <- "# Read lengths\\."
+
+mapped_read_lengths <- lapply(samtools_stats_fps, function(f) {
+  
+  #find the line to start reading the file as tsv
+  read_all <- readLines(f)
+  line_start <- grep(read_length_indic, read_all)
+  #read file until line_end
+  line_end <- grep("# Read lengths - first fragments.", read_all) - line_start - 1
+  rm(read_all)
+  
+  #some samples may have 0 reads
+  if(line_end == 0) {
+    read_lengths <- data.frame(sample_id = gsub(".*/|_S[0-9]*\\.stats\\.txt", "", f),
+                               RL = "RL",
+                               samtools_read_length = 0,
+                               count = 0)
+  } else {
+    read_lengths <- read_tsv(f, skip = line_start, n_max = line_end,
+                              col_names = c("RL", "samtools_read_length", "count"))
+    read_lengths$sample_id <- gsub(".*/|_S[0-9]*\\.stats\\.txt", "", f)
+  }
+
+  return(read_lengths)
+  }) %>%
+  do.call("rbind", .) %>%
+  mutate(software = "samtools") %>%
+  select(software, sample_id, samtools_read_length, count)
+
+samtools_tot_sequences <- mapped_read_lengths %>%
+  group_by(sample_id) %>%
+  summarize(count = sum(count)) %>%
+  ungroup() %>%
+  merge(samtools_stat, by = "sample_id", all = TRUE) %>%
+  mutate(all_reads_equal = count == samtools_raw_total_sequences)
+
+if(!all(samtools_tot_sequences$all_reads_equal)) {
+  stop(simpleError("Error with parsing samtools file. Sum of read length count does not equal total number of reads from samtools"))
+}
+
+write_csv(mapped_read_lengths, actual_read_lengths_fp, append = TRUE)
+
+```
+
+```{r load amplicon results, eval = import_data}
+
+amplicon_fps <- list.files(here("data", "processed_cecret", "aci"), pattern = "_amplicon_depth.csv", recursive = TRUE, full.names = TRUE)
+
+amplicon_depth <- amplicon_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_csv(.$FileName, col_names = TRUE)) %>%
+  ungroup() %>%
+  select(-FileName) %>%
+  rename(sample_id = "bam") %>%
+  mutate(sample_id = gsub("_S[0-9]*\\.primertrim\\.sorted\\.bam", "", sample_id)) %>%
+  rename_with(function(x) paste0("amp_tile_", gsub(".*_", "", gsub("_INSERT$", "", x)), "_artic_", artic_primer_scheme), -sample_id)
+
+```
+
+```{r load coverage results, eval = import_data}
+
+#overall coverage depth files (overlapping regions included in overall coverage)
+coverage_fps <- list.files(here("data", "processed_cecret", "samtools_depth"), pattern = ".depth.txt", recursive = TRUE, full.names = TRUE)
+
+slide_window_coverage <- coverage_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName, col_names = FALSE)) %>%
+  ungroup() %>%
+  filter(X1 == "MN908947.3") %>%
+  rename(position = "X2", map_per_position = "X3") %>%
+  select(FileName, map_per_position, position) %>%
+  mutate(sample_id = gsub(".*/", "", FileName),
+         sample_id = gsub("_S[0-9]*\\.depth\\.txt", "", sample_id)) %>%
+  select(-c(FileName)) %>%
+  group_by(sample_id) %>%
+  mutate(slide_window_100 = rollmean(map_per_position, k=100, fill = 0, align = 'right')) %>%
+  ungroup() %>%
+  select(sample_id, position, map_per_position, slide_window_100)
+
+coverage <- slide_window_coverage %>%
+  group_by(sample_id) %>%
+  summarise(pct_genome_coverage_over_30x = sum(map_per_position >= 30)/n(),
+            pct_genome_coverage_over_25x = sum(map_per_position >= 25)/n(),
+            pct_genome_coverage_over_20x = sum(map_per_position >= 20)/n(),
+            pct_genome_coverage_over_15x = sum(map_per_position >= 15)/n(),
+            pct_genome_coverage_over_10x = sum(map_per_position >= 10)/n(),
+            pct_genome_coverage_over_5x = sum(map_per_position >= 5)/n(),
+            pct_genome_coverage_over_1x = sum(map_per_position >= 1)/n(),
+            median_coverage = median(map_per_position),
+            mean_coverage = mean(map_per_position)) %>%
+  ungroup()
+
+s_gene_coverage <- slide_window_coverage %>%
+  filter(position >= 21563) %>%
+  filter(position <= 25384) %>%
+  group_by(sample_id) %>%
+  summarise(pct_s_gene_coverage_over_30x = sum(map_per_position >= 30)/n(),
+            pct_s_gene_coverage_over_25x = sum(map_per_position >= 25)/n(),
+            pct_s_gene_coverage_over_20x = sum(map_per_position >= 20)/n(),
+            pct_s_gene_coverage_over_15x = sum(map_per_position >= 15)/n(),
+            pct_s_gene_coverage_over_10x = sum(map_per_position >= 10)/n(),
+            pct_s_gene_coverage_over_5x = sum(map_per_position >= 5)/n(),
+            pct_s_gene_coverage_over_1x = sum(map_per_position >= 1)/n(),
+            median_s_gene_coverage = median(map_per_position),
+            mean_s_gene_coverage = mean(map_per_position)) %>%
+  ungroup()
+
+```
+
+```{r load samtools coverage data, eval = import_data}
+
+#number of reads that mapped to reference
+cov_num_fps <- list.files(here("data", "processed_cecret", "samtools_coverage"), pattern = ".cov.txt", recursive = TRUE, full.names = TRUE)
+
+#the mean coverage from samtools is slightly different than by manually calculation but the 1X coverage is the same
+cov_stats <- cov_num_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName, col_names = TRUE)) %>%
+  ungroup() %>%
+  rename(sample_id = "sample", aligned_reads = "numreads") %>%
+  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
+  select(sample_id, aligned_reads)
+
+```
+
+<!-- Load analysis data -->
+
+```{r load kmer results, eval = import_data}
+
+k2_files_fps <- list.files(here("data", "processed_cecret", "kraken2"), pattern = "_kraken2_report.txt", recursive = TRUE, full.names = TRUE)
+
+k2_files_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName,
+                col_names = c("k2_percent", "k2_clade_kmers", "k2_kmers", "k2_rank", "k2_ncbi_taxon_id", "k2_name"),
+                col_types = cols("k2_percent" = col_character(),
+                                 "k2_clade_kmers" = col_double(),
+                                 "k2_kmers" = col_double(),
+                                 "k2_ncbi_taxon_id" = col_double()))) %>%
+  ungroup() %>%
+  mutate(sample_id = gsub(".*/", "", FileName),
+         sample_id = gsub("_kraken2_report.txt", "", sample_id),
+         k2_name = gsub("^ *", "", k2_name),
+         k2_rank = tolower(k2_rank)) %>%
+  select(sample_id, k2_rank, k2_name, k2_kmers) %>%
+  group_by(sample_id) %>%
+  mutate(k2_top_rank = case_when(grepl("^u$|^r$|^d$|^k$|^p$", k2_rank) ~ paste0(k2_rank, "__", k2_name),
+                                 TRUE ~ NA)) %>%
+  fill(k2_top_rank, .direction = "down") %>%
+  #filter for taxon with at least 2 kmer hits
+  filter(k2_kmers > 1) %>%
+  mutate(k2_props = k2_kmers/sum(k2_kmers)) %>%
+  ungroup() %>%
+  mutate(k2_taxon = ifelse(k2_top_rank == paste0(k2_rank, "__", k2_name),
+                           k2_top_rank,
+                           paste0(k2_top_rank, " ", gsub("*[0-9]*", "", k2_rank), "__", k2_name))) %>%
+  select(sample_id, k2_taxon, k2_props, k2_kmers) %>%
+  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
+  write_csv(kraken_props_fp)
+
+```
+
+```{r load NextClade results, eval = import_data}
+
+nc_fp <- here("data", "processed_cecret", "nextclade", "nextclade.tsv")
+
+next_clade <- nc_fp %>%
+  read_delim(col_names = TRUE,
+             col_types = cols(missing = col_character(),
+                              clade_nextstrain = col_character(),
+                              clade = col_character())) %>%
+  rename(sample_id = "seqName",
+         nextclade_clade = "clade",
+         nextclade_clade_who = "clade_who",
+         nextclade_qc_overallstatus = "qc.overallStatus",
+         nextclade_qc_overallscore = "qc.overallScore",
+         nextclade_index = "index") %>%
+  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id))
+
+nc_v_fp <- here("data", "processed_cecret", "nextclade", "nextclade.json")
+
+nc_v_fp %>%
+  read_delim(n_max = 1, delim = ":", col_names = FALSE, skip = 2) %>%
+  rename(version = "X2") %>%
+  mutate(pipeline = "UPHL-BioNGS-Cecret",
+         software = "nextclade",
+         version = gsub("\"|,| ", "", version)) %>%
+  select(pipeline, software, version) %>%
+  write_csv(file = software_version_fp, append = TRUE)
+
+nc_dl_fp <- here("data", "processed_cecret", "nextclade", "nextclade-sars.json")
+
+nc_dl_v <- nc_dl_fp %>%
+  read_csv(col_names = FALSE) %>%
+  rename(version = "X1") %>%
+  mutate(find_version = ifelse(grepl("version: \\{", version), TRUE, NA)) %>%
+  fill(find_version, .direction = "down") %>%
+  filter(find_version) %>%
+  filter(grepl("updatedAt", version)) %>%
+  unique() %>%
+  select(version)
+
+if(nrow(nc_dl_v) > 1) {
+  stop(simpleError("Check the nextclade dataset version"))
+}
+
+nc_dl_v %>%
+  mutate(pipeline = "UPHL-BioNGS-Cecret",
+         software = "nextclade-dataset",
+         version = gsub("updatedAt: |,", "", version)) %>%
+  select(pipeline, software, version) %>%
+  write_csv(file = software_version_fp, append = TRUE)
+
+```
+
+```{r load freyja results, eval = import_data}
+
+freyja_fp <- here("data", "processed_cecret", "freyja", "aggregated-freyja.tsv")
+
+freyja <- freyja_fp %>%
+  read_delim() %>%
+  rename_all(.funs = function(x) paste0("freyja_", x)) %>%
+  rename(sample_id = 1) %>%
+  mutate(sample_id = gsub("_S[0-9]*_variants.tsv", "", sample_id))
+  
+```
+
+```{r load snp dists results, eval = import_data}
+
+snpdists_raw_fp <- here("data", "processed_cecret", "snp-dists", "snp-dists.txt")
+
+snpdists <- snpdists_raw_fp %>%
+  read_csv()
+
+colnames(snpdists)[1] %>%
+  gsub(" ", ",", .) %>%
+  paste0("UPHL-BioNGS-Cecret,", .) %>%
+  as.data.frame() %>%
+  write_csv(file = software_version_fp, append = TRUE, quote = "none")
+
+snpdists <- snpdists %>%
+  rename(sample_id = 1) %>%
+  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
+  rename_all(.funs = function(x) gsub("_S[0-9]*$", "", x)) %>%
+  pivot_longer(cols = -sample_id, names_to = "compared_to", values_to = "snps")
+
+snpdist_check <- snpdists %>%
+  filter(sample_id == compared_to)
+
+if(!all(snpdist_check$snps == 0)) {
+  stop(simpleError("Something wrong with the snp-dist process"))
+}
+  
+snpdists %>%
+  write_csv(snpdists_fp)
+  
+```
+
+```{r load cecret software versions, eval = import_data}
+
+cecret_software_select <- c("ivar", "bwa", "seqyclean", "Cecret version", "pangolin_scorpio_version", "pangolin_constellation_version", "pangolin_pangolin_version", "pangolin_version")
+
+#pangolin data is included with this summary file
+cecret_aggregate <- here("data", "processed_cecret", "cecret_results.csv") %>%
+  read_csv() %>%
+  select(-c(sample_id, samtools_meandepth_after_trimming, samtools_per_1X_coverage_after_trimming, fasta_line, freyja_summarized)) %>%
+  rename(sample_id = "sample", vadr_passfail = "vadr_p/f") %>%
+  as.data.frame()
+
+cecret_aggregate %>%
+  select(all_of(cecret_software_select)) %>%
+  unique() %>%
+  mutate_at(.cols = cecret_software_select[1:3],
+            .funs = function(x) sub(".*version.*? ", "", x, ignore.case = TRUE)) %>%
+  mutate_all(.funs = function(x) as.character(x)) %>%
+  pivot_longer(cols = everything(), names_to = "software", values_to = "version") %>%
+  filter(!is.na(version)) %>%
+  unique() %>%
+  mutate(software = case_when(grepl("^PUSHER-", version) ~ "PUSHER",
+                              grepl("^PANGO-", version) ~ "PANGO",
+                              TRUE ~ gsub("^pangolin_|.version$", "", software)),
+         version = gsub("^PUSHER-|^PANGO-", "", version)) %>%
+  mutate(pipeline = "UPHL-BioNGS-Cecret") %>%
+  select(pipeline, software, version) %>%
+  write_csv(file = software_version_fp, append = TRUE)
+
+cecret_aggregate <- cecret_aggregate %>%
+  select(-all_of(cecret_software_select))
+
+```
+
+```{r load nextflow cecret profile, eval = import_data}
+
+nf_cecret_profile <- here("data", "processed_cecret", "nextflow.config") %>%
+  read_csv(col_names = FALSE)
+
+profile_write <- data.frame()
+
+open_brack_count <- 0
+record_settings <- FALSE
+record_profile <- FALSE
+
+for(current_line in 1:nrow(nf_cecret_profile)) {
+  
+  if(grepl("^aws \\{$|^docker \\{$", nf_cecret_profile[current_line,])) {
+    open_brack_count <- 0
+    record_settings <- TRUE
+  }
+  
+  if(grepl(paste0("^", cecret_profile, " \\{$"), nf_cecret_profile[current_line,])) {
+    open_brack_count <- 0
+    record_profile <- TRUE
+    profile_write <- rbind(profile_write, data.frame(X1 = "profiles {"))
+  }
+  
+  if(grepl("\\{", nf_cecret_profile[current_line,])) {
+    open_brack_count <- open_brack_count + 1
+  }
+  
+  if(grepl("\\}", nf_cecret_profile[current_line,])) {
+    open_brack_count <- open_brack_count - 1
+  }
+  
+  if(record_settings | record_profile) {
+    if(open_brack_count > 0) {
+      profile_write <- rbind(profile_write, nf_cecret_profile[current_line,])
+    } else if(open_brack_count == 0) {
+      profile_write <- rbind(profile_write, data.frame(X1 = "}"))
+      
+      if(record_profile) {
+        profile_write <- rbind(profile_write, data.frame(X1 = "}"))
+      }
+      
+      record_settings <- FALSE
+      record_profile <- FALSE
+    }
+  }
+}
+  
+profile_write %>%
+  write_csv(file = here("data", paste0(sequencing_date, "_nextflow.config")), col_names = FALSE)
+
+profile_software_version <- profile_write %>%
+  filter(grepl("kraken2_db|primer_set", X1)) %>%
+  separate(col = "X1", into = c("software", "version"), sep = " = ") %>%
+  mutate(pipeline = "UPHL-BioNGS-Cecret",
+         version = gsub("'", "", version),
+         version = gsub("/$", "", version),
+         version = gsub(".*/", "", version)) %>%
+  select(pipeline, software, version)
+
+nf_artic_version <- profile_software_version %>%
+  filter(software == "primer_set") %>%
+  select(version) %>%
+  mutate(version = gsub("ncov_", "", version)) %>%
+  pull()
+
+if(nf_artic_version != artic_primer_scheme) {
+    stop(simpleError("The primer_set setting in the Nextflow config file does not match the selected primer set in this RStudio project. Investigate!!"))
+}
+
+profile_software_version %>%
+  write_csv(file = software_version_fp, append = TRUE)
+
+```
+
+```{r write cecret results, eval = import_data}
+
+list(cov_stats, coverage, s_gene_coverage, next_clade, freyja, amplicon_depth, samtools_stat) %>%
+  reduce(merge, by = "sample_id", all = TRUE) %>%
+  merge(cecret_aggregate,
+        by = c("sample_id", "nextclade_clade", "nextclade_clade_who", "nextclade_qc_overallstatus", "nextclade_qc_overallscore"),
+        all = TRUE,
+        sort = FALSE) %>%
+  
+  mutate(nextclade_clade_who = case_when((grepl("^B$|^B\\.[0-9]*$", Nextclade_pango) & nextclade_clade == "19A") ~ "Reference", #Illumina PC
+                                         (grepl("^A$|^A\\.[0-9]*$", Nextclade_pango) & nextclade_clade == "19B") ~ "Reference", #ZeptoMetrix PC
+                                         TRUE ~ nextclade_clade_who),
+         sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
+  merge(samp_reads, by = "sample_id", all = TRUE) %>%
+  write_csv(cecret_results_fp)
+  
+```
+
+```{r read in data}
+
+top_unkwn_indices <- read_csv(unkwn_barcodes_fp)
+
+fastqc <- read_csv(fastqc_qual_fp)
+
+actual_read_lengths <- read_csv(actual_read_lengths_fp)
+
+cecret_results <- read_csv(cecret_results_fp)
+
+software_version <- read_csv(software_version_fp) %>%
+  select(software, version) %>%
+  deframe() %>%
+  as.list()
+
+k2 <- read_csv(kraken_props_fp)
+
+snpdists <- read_csv(snpdists_fp)
+
+```
+
+```{r merge metadata with data and select samples with results}
+
+#df with all samples
+s <- s_meta %>%
+  merge(cecret_results, by = c("sample_id", "barcode_sequence", "index", "index2", "lane"), all = TRUE) %>%
+  mutate(sample_type = case_when(grepl("^Undetermined$", sample_id) ~ "Unassigned reads",
+                                 ((pangolin_qc_status == "fail" | nextclade_qc_overallstatus == "bad") & !isControl) ~ paste0(sample_type, " - Poor"),
+                                 TRUE ~ sample_type)) %>%
+  #rearrange the sampletypes by ctrls first
+  mutate(sample_type = factor(sample_type, levels = sample_type_lvls)) %>%
+  #order the sample_id by sample type then by plate position
+  mutate(sample_id = factor(sample_id, levels = unique(sample_id[str_order(paste0(as.numeric(sample_type), "-", plate_col, plate_row), decreasing = FALSE, numeric = TRUE)]))) %>%
+  droplevels()
+
+#df with samples that have results (including controls)
+s_toPlot <- s %>%
+  filter(!grepl("None|Undetermined", sample_id)) %>%
+  filter(!grepl(" - Poor$", sample_type)) %>%
+  filter(!(pangolin_qc_status == "fail" & nextclade_qc_overallstatus == "bad")) %>%
+  mutate(sample_id = as.character(sample_id)) %>%
+  droplevels()
+
+has_CT <- any(grepl("^CT$", colnames(s)))
+
+has_RLU <- any(grepl("^RLU$", colnames(s)))
+
+has_qubit <- !all(is.na(s$qubit_conc_ng_ul))
+
+if(any(is.na(s$sample_type))) {
+  stop(simpleError("A sample type is unaccounted for either in the metadata sheet or in sample_type_lvls"))
+}
+
+```
+
+<!-- Prepare files containing samples with good results for uploading -->
+
+```{r upload filepaths}
+
+#path of seqsender config file
+seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "seqsender_config.yaml", full.names = TRUE)
+seqsender_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "seqsender_config_test.yaml", full.names = TRUE)
+
+epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
+seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.tsv", sep = "_"))
+fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
+
+```
+
+```{r save fastq and fasta for upload, eval = import_data}
+
+#get only the good quality samples to upload
+s_upload <- s_toPlot %>%
+  filter4report() %>%
+  select(sample_id) %>%
+  pull()
+
+if(length(s_upload) > 0) {
+
+  #make folder for fastq files
+  dir.create(here("upload", "fastq"), recursive = TRUE)
+  
+  #fastq files for SRA submission
+  #these "filtered" fastq files are reads that aligned to the reference genome but they have not been primer trimmed
+  fastq_fps <- list.files(here("data", "processed_cecret", "filter"), pattern = "*_filtered_R[12].fastq.gz", recursive = TRUE, full.names = TRUE)
+  
+  fastq2upload <- fastq_fps[grepl(paste0(s_upload, collapse = "|"), fastq_fps)]
+  
+  #move files to upload folder
+  for(fastq_name_fp in fastq2upload) {
+    file.copy(fastq_name_fp, to = here("upload", "fastq", gsub(".*/", "", fastq_name_fp)))
+  }
+  
+  #make folder for fasta files
+  dir.create(here("upload", "fasta"), recursive = TRUE)
+  
+  #find all fasta files
+  fasta_fps <- list.files(here("data", "processed_cecret", "consensus"), pattern = ".consensus.fa", recursive = TRUE, full.names = TRUE)
+  
+  #vadr is the software that can test for success or fail of GenBank submission
+  #test to see if the FASTA file for vadr failed samples
+  #If using this filter, the Seqsender metadata will still contain the failed samples; can non-matching metadata and fasta file be submitted to GenBank?
+  fasta_upload_vadr_filter <- s_toPlot %>%
+    filter(sample_id %in% s_upload) %>%
+    filter(vadr_passfail == "PASS") %>%
+    select(sample_id) %>%
+    pull()
+  
+  fasta2upload <- fasta_fps[grepl(paste0(fasta_upload_vadr_filter, collapse = "|"), fasta_fps)]
+
+  fasta2upload %>%
+    data_frame(FileName = .) %>%
+    group_by(FileName) %>%
+    do(read.delim(.$FileName, header = FALSE)) %>%
+    ungroup() %>%
+    #rename the header of the fasta file
+    mutate(V1 = gsub("Consensus_|.consensus.*", "", V1)) %>%
+    mutate(is_header = grepl("^>", V1)) %>%
+    group_by(FileName, is_header) %>%
+    mutate(concat_fasta = paste0(V1, collapse = "")) %>%
+    ungroup() %>%
+    # the following lines can be used to check that the fasta file is concatenated correctly
+    #rowwise() %>%
+    #mutate(find_string_position = unlist(gregexpr(V1, concat_fasta))[1]) %>%
+    #mutate(len = nchar(concat_fasta)) %>%
+    select(concat_fasta) %>%
+    unique() %>%
+    #have to manually remove terminal N's for GenBank submission
+    mutate(concat_fasta = gsub("^N*N|N*N$", "", concat_fasta)) %>%
+    #this na argument needs to be blank, otherwise it will put strings beginning with the first two letters in quotes
+    write_delim(file = fasta_fp, delim = "", col_names = FALSE, na = "")
+  
+}
+
+```
+
+```{r export data to epi, eval = have_phi}
+
+dir.create(here("upload", "epi"), recursive = TRUE)
+
+if(length(PHI_file_fp) == 0) {
+  stop(simpleError("You are missing the PHI file. Check the Admin fileshare for this file or generate it with the 2_generate_barcodes_IDT.R script"))
+}
+
+s_phi <- read_csv(PHI_file_fp)
+
+# Export the data for EPI's
+epi_report <- s_toPlot %>%
+  merge(s_phi, by = "sample_id", all.x = TRUE) %>%
+  filter4report() %>%
+  select(sample_name, sample_collected_by, sequencing_date, Nextclade_pango, nextclade_clade_who) %>%
+  arrange(sample_collected_by, sample_name) %>%
+  rename(accession_number = "sample_name", who_label = "nextclade_clade_who", lineage = "Nextclade_pango")
+
+epi_report %>%
+  write_csv(epi_report_fp)
+
+```
+
+```{r export data to upload to NCBI}
+
+dir.create(here("upload", "seqsender"), recursive = TRUE)
+
+# Export the data for seqsender upload to sra, genbank, and gisaid
+seqsender <- s_toPlot %>%
+  filter4report() %>%
+  #submit only nasal swabs for now. WW data needs additional metadata
+  filter(sample_type == "Nasal swab") %>%
+  mutate(collection_date = case_when(!(is.na(sample_collection_date) |
+                                         as.character(sample_collection_date) == "Unknown") ~ as.character(sample_collection_date),
+                                     !is.na(PHL_sample_received_date) ~ as.character(PHL_sample_received_date),
+                                     TRUE ~ as.character(sequencing_date))) %>%
+  #the number at the end of the name for these samples must be the collection year, or the databases will complain
+  mutate(collection_date = as.Date(collection_date, tryFormats = c("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y"))) %>%
+  mutate(collection_year = format(collection_date, format = "%Y")) %>%
+  #make genbank name blank if it didn't pass vadr
+  mutate(genbank_name = ifelse(vadr_passfail == "PASS",
+                               paste0("SARS-CoV-2/Human/USA/", sample_id, "/", collection_year),
+                               "")) %>%
+  mutate(sra_name = paste0("SARS-CoV-2/Human/USA/", sample_id)) %>%
+  #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/collection year. This name may conflict with samples collected/sequenced in different years
+  mutate(gisaid_name = paste0("hCoV-19/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sample_id), "/", collection_year)) %>%
+  mutate(gisaid_accession = "",
+         location = "USA: Pennsylvania",
+         gisaid_location = "North America/USA/Pennsylvania",
+         zip = "19145",
+         type = "betacoronavirus",
+         passage = "Original") %>%
+  #make gender and age for Temple samples as Unknown for now until they confirm its okay to submit these fields on their behalf
+  mutate(host_age_bin = ifelse(is.na(host_age_bin)|sample_collected_by == "Temple University", "Unknown", host_age_bin),
+         gender = ifelse(is.na(gender)|sample_collected_by == "Temple University", "Unknown", gender),
+         collected_by = sample_collected_by) %>%
+  select(-c(isolation_source)) %>%
+  rename(isolation_source = "sample_type",
+         host = "host_scientific_name",
+         sex = "gender",
+         orig_lab = "sample_collected_by") %>%
+  mutate(patient_status = "Unknown",
+         instrument = paste0("Illumina ", instrument_type),
+         library = paste0("ARTIC Network Protocol ", artic_primer_scheme),
+         assembly_method = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
+         library_strategy = "AMPLICON",
+         library_source = "VIRAL RNA",
+         library_selection = "PCR",
+         library_layout = "PAIRED",
+         structured_comment = "Assembly-Data",
+         genbank_note = "") %>%
+  mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "1930 South Broad Street Suite 37, Philadelphia, PA 19145 USA",
+                                      orig_lab == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122 USA",
+                                      TRUE ~ "Unknown")) %>%
+  mutate(sra_file_path_1 = here("upload", "fastq", paste0(sample_id, "_filtered_R1.fastq.gz")),
+         sra_file_path_2 = here("upload", "fastq", paste0(sample_id, "_filtered_R2.fastq.gz"))) %>%
+  mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC ", artic_primer_scheme,
+                                     " primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length,
+                                     " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
+  select(sample_id, genbank_name, sra_name, gisaid_name, gisaid_accession, collection_date, location, gisaid_location, zip, type, passage, organism,
+         isolation_source, host, host_disease, host_age_bin, sex, patient_status, 
+         instrument, library, assembly_method, library_strategy, library_source, library_selection, library_layout, structured_comment, median_coverage, genbank_note, design_description,
+         collected_by, orig_lab, orig_lab_address, sra_file_path_1, sra_file_path_2)
+
+seqsender %>%
+  write_tsv(seqsender_meta_fp)
+
+```
+
+```{r reported numbers}
+
+#double checking to see if number of samples match
+n_samples_report <- s %>%
+  filter(!grepl("None|Undetermined", sample_id)) %>%
+  filter(!grepl("control", sample_type, ignore.case = TRUE)) %>%
+  filter(!is.na(pangolin_lineage)) %>%
+  filter(!is.na(Nextclade_pango)) %>%
+  filter(!is.na(nextclade_qc_overallstatus)) %>%
+  filter(nextclade_qc_overallstatus != "bad") %>%
+  filter(!(nextclade_qc_overallstatus == "mediocre" & pct_genome_coverage_over_30x < .8)) %>%
+  filter(pangolin_qc_status != "fail") %>%
+  nrow()
+
+#these are samples that failed in the pipeline for whatever reason. Can rerun pipeline to generate results for these samples
+rerun_samples <- s %>%
+  filter(is.na(pangolin_qc_status)) %>%
+  filter(!isControl) %>%
+  select(sample_id) %>%
+  pull()
+
+#number of samples to submit
+#check the seqsender file to upload to ncbi
+seqsender_2_upload_fp <- list.files(here("upload", "seqsender"), pattern = ".tsv", recursive = TRUE, full.names = TRUE)
+
+all_sample_ids_from_seqsender <- seqsender_2_upload_fp %>%
+  read_tsv()%>%
+  select(sample_id, genbank_name, sra_name, gisaid_name) %>%
+  mutate(gisaid_name = gsub(".*PA-", "", gisaid_name)) %>%
+  #changing the year at the end of the gisaid name back to the sequencing year
+  mutate(gisaid_name = gsub("/.*$", paste0("/", str_sub(project_name, 1, 4)), gisaid_name)) %>%
+  mutate(gisaid_name = gsub(format(sequencing_date, "%m%d/%Y"), format(sequencing_date, "%Y%m%d"), gisaid_name)) %>%
+  pivot_longer(cols = c("genbank_name", "sra_name", "gisaid_name"), names_to = "file", values_to = "upload_id") %>%
+  mutate(upload_id = gsub(".*/USA/|/.*", "", upload_id)) %>%
+  mutate(all_sample_same = upload_id == sample_id)
+
+if (!all(all_sample_ids_from_seqsender$all_sample_same)) {
+  stop (simpleError("Some of the database names don't match the sample_id names! The GenBank name may also be missing because it didn't pass vadr check. Try submitting the GenBank files anyway through seqsender to see if it passes"))
+}
+
+all_sample_ids_from_seqsender %<>% select(file, upload_id) %>%
+  rename(sample_id = "upload_id")
+
+run_check_all_chunk <- any(grepl("Nasal swab", sample_type_lvls))
+
+```
+
+```{r check all files generated, eval = run_check_all_chunk}
+
+#check the csv file for the epi's
+if(have_phi) {
+
+  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = "_PHL_sequencing_results.csv", recursive = TRUE, full.names = TRUE)
+  
+  epi_report <- epi_2_upload_fp %>%
+    read_csv() %>%
+    select(accession_number) %>%
+    merge(select(s_phi, sample_id, sample_name), by.x = "accession_number", by.y = "sample_name", all.x = TRUE) %>%
+    mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
+    mutate(file = "epi") %>%
+    select(file, sample_id)
+
+}
+
+#check the fastq files to upload; should be 1 set here
+fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
+  data.frame(FileName = .) %>%
+  mutate(sample_id = gsub(".*upload/fastq/|_S[0-9]*_filtered_R[12].fastq.gz$", "", FileName)) %>%
+  mutate(file = gsub(".*/", "", FileName)) %>%
+  select(-FileName)
+
+fastq2_compare <- fastq_2_upload %>%
+  filter(grepl("_filtered_R1.fastq.gz", file))
+
+if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
+  stop (simpleError("Missing some fastq files!"))
+}
+
+#check the fasta files to upload; should be 1 set here
+fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
+  filter(grepl("^>", X1)) %>%
+  mutate(sample_id = gsub("^>|_S[0-9]*$", "", X1)) %>%
+  mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
+  select(-X1)
+
+check_all <- all_sample_ids_from_seqsender %>%
+  rbind(fastq2_compare) %>%
+  rbind(fasta_samples)
+
+if (have_phi) {
+  check_all <- check_all %>%
+    rbind(epi_report)
+  
+  total_file_sets_2_count <- 6
+  
+} else {
+  total_file_sets_2_count <- 5
+  
+}
+
+check_all %<>%
+  group_by(sample_id) %>%
+  mutate(count_all_samples = n()) %>%
+  ungroup()
+
+if (!all(check_all$count_all_samples == total_file_sets_2_count)) {
+  stop (simpleError("Some files are missing samples to upload!"))
+}
+
+```
+
+<!-- Assign colors to sample attributes and create some ggplot legends and figures -->
+
+```{r sample type attributes for ggplot}
+
+sample_type_num_vector <- 1:length(sample_type_lvls)
+
+ann_geom_values <- list()
+
+# pick sample type colors for ggplot
+sample_type_color_select <- c(15, 19, 16, 13, 2, 1, 4, 10, 7, 11, 14, 20, 17)
+sample_type_color_scheme <- c("#808080", "#000000", pal_d3("category20")(20)[sample_type_color_select])
+additional_colors <- pal_d3("category20")(20)[!1:20 %in% sample_type_color_select]
+
+ann_geom_values[["sample_type_colors"]] <- setNames(c(sample_type_color_scheme, additional_colors)[sample_type_num_vector],
+                                                    sample_type_lvls)
+
+# pick sample type shapes for ggplot
+sample_type_shape_select <- c(4, 3, 8, 24, 13, 25, 23, 21, 22)
+additional_shapes <- c(9:14)
+
+ann_geom_values[["sample_type_shapes"]] <- setNames(c(sample_type_shape_select, additional_shapes)[sample_type_num_vector], sample_type_lvls)
+
+# pick sample shape sizes for ggplot
+sample_type_size_select <- c(4, 4, 4, 2, 4, 2, 4, 2, 2)
+additional_sizes <- rep(2, length(sample_type_lvls) - length(sample_type_size_select))
+
+ann_geom_values[["sample_type_sizes"]] <- setNames(c(sample_type_size_select, additional_sizes), sample_type_lvls)
+
+# pick alpha values for ggplot
+alpha_select <- c(1, 1, 1, 0.4, 1, 0.4, 1, 0.2, 0.2)
+additional_alphas <- rep(0.2, length(sample_type_lvls) - length(sample_type_size_select))
+
+ann_geom_values[["alpha"]] <- setNames(c(alpha_select, additional_alphas), sample_type_lvls)
+
+# pick additional ggplot parameters
+ann_geom_values[["linetype"]] <- setNames(c("solid", "twodash", "dotted", "dashed"), c("good", "mediocre", "bad", "control"))
+ann_geom_values[["nc_qc_status"]] <- setNames(c(brewer.pal(6, "Set3")[c(1, 6, 4)], "#808080"), c("good", "mediocre", "bad", NA))
+
+nextclade_qc_score_lvls <- c("missingData", "mixedSites", "privateMutations", "snpClusters", "stopCodons", "frameShifts")
+ann_geom_values[["nc_qc_scores"]] <- setNames(c(colorblind_pal()(8)[3:8]), nextclade_qc_score_lvls)
+
+# create a sample type legend
+sample_type_legend <- s %>%
+  select(sample_id, sample_type, plate_coord) %>%
+  mutate(plate_coord = ifelse(is.na(plate_coord), "", gsub(".*_", "", plate_coord))) %>%
+  order_on_other_col(plate_coord, sample_id, decreasing = FALSE) %>%
+  {
+  ggplot(., aes(y = 1, x = sample_id, fill = sample_type)) +
+    geom_tile(color = "black") +
+    coord_fixed() +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type),
+                                                                        names(ann_geom_values$sample_type_colors))]) +
+    scale_x_discrete(labels = levels(.$plate_coord)) +
+    theme_bw() +
+    theme(
+      strip.text = element_text(size = 12),
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      axis.line = element_blank(),
+      plot.margin= margin(0, 0, 0, 0, "pt"),
+      legend.position = "bottom"
+    ) +
+    labs(y = "", x = "", fill = "Sample Type") + 
+    guides(fill = guide_legend(override.aes = list(size = 2)))
+  }
+
+#show_col(ann_geom_values[["sample_type_colors"]])
+
+```
+
+```{r variant colors}
+
+variant_list <- s %>%
+  select(nextclade_clade_who, pangolin_lineage, pangolin_note, Nextclade_pango) %>%
+  mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
+  mutate(pangolin_note = ifelse(pangolin_note == "Assigned from designation hash.", NA, pangolin_note)) %>%
+  unique() %>%
+  separate_rows(pangolin_note, sep=" ") %>%
+  pivot_longer(cols = c("pangolin_lineage", "pangolin_note", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
+  mutate(variants = gsub("\\(.*", "", variants)) %>%
+  select(-variant_num) %>%
+  filter(!is.na(variants)) %>%
+  filter(variants!="Unassigned") %>%
+  distinct() %>%
+  arrange(nextclade_clade_who, variants) %>%
+  mutate(combined_list = gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", variants))
+
+variant_color <- data.frame(colors = c(calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)],
+                                       few_pal(palette = "Light")(8))) %>%
+  slice_head(n=length(unique(variant_list$combined_list))) %>%
+  bind_cols(lineage = sort(unique(variant_list$combined_list))) %>%
+  left_join(variant_list, by = c("lineage" = "combined_list")) %>%
+  select(-nextclade_clade_who) %>%
+  distinct()
+  
+var_colorgrad <- NULL
+for(var in unique(variant_color$lineage)) {
+  subcolors <- variant_color %>%
+    filter(lineage == var)
+
+  variant_gradient <- colorRampPalette(c(unique(subcolors$colors),
+                                         adjustcolor(unique(subcolors$colors), alpha.f = 0.1)), alpha = TRUE)(nrow(subcolors)) 
+    
+  subcolors <- data.frame(subcolors = variant_gradient) %>%
+    bind_cols(subcolors)
+  
+  var_colorgrad <- var_colorgrad %>%
+    bind_rows(subcolors)
+}
+  
+var_colorgrad<- var_colorgrad %>%
+  left_join(variant_list, by = c("variants", "lineage" = "combined_list"))
+
+ann_geom_values[["variants"]] <- var_colorgrad %>%
+  select(subcolors, variants) %>%
+  distinct() %>%
+  pull(subcolors, name = variants) 
+
+ann_geom_values[["parent_variant"]] <- var_colorgrad %>%
+  select(colors, lineage) %>%
+  distinct() %>%
+  pull(colors, name = "lineage")
+  
+ann_geom_values[["variants"]] <- c("#80808080", "#80808080", ann_geom_values[["variants"]])
+names(ann_geom_values[["variants"]]) <- c(NA, "Unassigned", names(ann_geom_values[["variants"]])[-(1:2)])
+
+```
+
+```{r save coverage png, eval=import_data}
+
+SC2_annotation <- data.frame(ORF1a = "266-13468",
+                             ORF1b = "13468-21555",
+                             S = "21563-25384",
+                             ORF3a = "25393-26220",
+                             E = "26245-26472",
+                             M = "26523-27191",
+                             ORF6 = "27202-27387",
+                             ORF7a = "27394-27759",
+                             ORF7b = "27756-27887",
+                             ORF8 = "27894-28259",
+                             N = "28274-29533",
+                             ORF10 = "29558-29674") %>%
+  pivot_longer(cols = everything(), names_to = "gene", values_to = "position") %>%
+  mutate(annotation = "SARS-CoV-2")
+
+ddPCR_annotation <- data.frame(N1 = "28287-28358",
+                               N2 = "29164-29230") %>%
+  pivot_longer(cols = everything(), names_to = "gene", values_to = "position") %>%
+  mutate(annotation = "ddPCR")
+
+annotation_legend <- rbind(SC2_annotation, ddPCR_annotation) %>%
+  mutate(start = as.numeric(gsub("-.*$", "", position)),
+         end = as.numeric(gsub("^.*-", "", position)),
+         gene = factor(gene, levels = unique(gene)[order(start, decreasing = FALSE)])) %>%
+  ggplot() +
+    geom_rect(aes(xmin = start, xmax = end, ymin = 1, ymax = 2, fill = gene), position = position_dodge(width = 0.5)) +
+    scale_fill_manual(values = tableau_color_pal(palette = "Tableau 20")(20)) +
+    scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.text.x = element_text(size = 8),
+      legend.position = "bottom"
+    ) +
+    labs(x="Genomic position (bp)", y="", fill = "") +
+    guides(fill=guide_legend(nrow=1, bycol=TRUE, override.aes = list(size = 0.5)))
+
+slide_window_coverage %>%
+  merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
+  mutate(slide_window_100 = ifelse(slide_window_100 <= 1, 1, slide_window_100)) %>%
+  {
+  ggplot(., aes(x = position, y = slide_window_100, fill = sample_type, group = sample_id)) +
+    geom_area(aes(alpha = sample_type), position = "identity") +
+    geom_hline(yintercept = 100, linetype = "dashed", alpha = 0.4) +
+    facet_wrap(~sample_type, ncol = 1, scales = "free_y") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_alpha_manual(values = ann_geom_values$alpha[match(levels(.$sample_type), names(ann_geom_values$alpha))]) + 
+    scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
+    scale_y_continuous(trans = "log10") + 
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      legend.position = "none",
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      ) +
+    labs(x="", y="Sliding window average (X)") +
+  annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
+  } %>%
+  ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
+
+slide_window_coverage %>%
+  filter(position >= 21563) %>%
+  filter(position <= 25384) %>%
+  merge(select(s, sample_id, sample_type), by = "sample_id", all.x = TRUE) %>%
+  mutate(slide_window_100 = ifelse(slide_window_100 <= 1, 1, slide_window_100)) %>%
+  {
+  ggplot(., aes(x = position, y = slide_window_100, fill = sample_type, group = sample_id)) +
+    geom_area(aes(alpha = sample_type), position = "identity") +
+    geom_hline(yintercept = 100, linetype = "dashed", alpha = 0.4) +
+    facet_wrap(~sample_type, ncol = 1, scales = "free_y") +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
+    scale_alpha_manual(values = ann_geom_values$alpha[match(levels(.$sample_type), names(ann_geom_values$alpha))]) + 
+    scale_x_continuous(expand = c(0, 50),
+                       breaks = c(min(.$position),
+                                  labeling::extended(min(.$position),
+                                                     max(.$position),
+                                                     m = 5),
+                                  max(.$position))) + 
+    scale_y_continuous(trans = "log10") + 
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      legend.position = "none"
+      ) +
+    labs(x="Genomic position (bp)", y="Sliding window average (X)")
+  } %>%
+  ggsave(filename = here("data", "figures", paste0(sequencing_date, "_s_gene_sliding_coverage_100_bp.png")), plot = ., width = 11, height = 8)
+
+col2show <- s %>%
+  filter(sample_id != "Undetermined") %>%
+  filter(!is.na(median_coverage)) %>%
+  select(plate_col) %>%
+  unique() %>%
+  pull()
+
+for(col_num in col2show) {
+  
+  filtered_samp_name <- s %>%
+    mutate(nextclade_qc_overallstatus = case_when(is.na(nextclade_qc_overallstatus) & !isControl ~ "bad",
+                                                  is.na(nextclade_qc_overallstatus) & isControl ~ "control",
+                                                  TRUE ~ nextclade_qc_overallstatus)) %>%
+    mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = names(ann_geom_values$linetype))) %>%
+    mutate(parent_variant = case_when(is.na(Nextclade_pango) & !isControl ~ "no results",
+                                 is.na(Nextclade_pango) & isControl ~ "control",
+                                 TRUE ~ gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", Nextclade_pango))) %>%
+    mutate(parent_variant = factor(parent_variant, levels = c(names(ann_geom_values$parent_variant), "no results", "control"))) %>%
+    filter(sample_id != "Undetermined") %>%
+    filter(plate_col == col_num) %>%
+    droplevels() %>%
+    select(sample_id, parent_variant, nextclade_qc_overallstatus, sample_type)
+  
+  sample_type_label <- setNames(as.character(filtered_samp_name$sample_type), filtered_samp_name$sample_id)
+
+  slide_window_coverage %>%
+    filter(sample_id %in% filtered_samp_name$sample_id) %>%
+    mutate(slide_window_100 = ifelse(slide_window_100 > 100, 100, slide_window_100)) %>%
+    merge(filtered_samp_name, by = "sample_id", all = TRUE) %>%
+    droplevels() %>%
+    {
+    ggplot(., aes(x = position, y = slide_window_100, group = sample_id, fill = parent_variant)) +
+      geom_line(aes(linetype = nextclade_qc_overallstatus), color = "black") +
+      geom_area(position = "identity") +
+      facet_wrap(~sample_id, ncol = 1, scales = "free_y", labeller = labeller(sample_id = sample_type_label)) +
+      scale_linetype_manual(values = ann_geom_values$linetype[match(levels(.$nextclade_qc_overallstatus), names(ann_geom_values$linetype))]) +
+      scale_fill_manual(values = c(ann_geom_values$parent_variant, setNames(c("#808080", "#000000"), c("no results", "control")))[match(levels(.$parent_variant), c(names(ann_geom_values$parent_variant), "no results", "control"))]) +
+      scale_x_continuous(expand = c(0,0), limits = c(0, 30000)) + 
+      theme_bw() +
+      theme(
+        strip.background = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA, size = 1),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        ) +
+      labs(x=paste0("Column ", col_num, " samples"),
+           y="Sliding window average (X)",
+           fill = "Parent\nvariant",
+           linetype = "Nextclade Quality") +
+      guides(linetype = guide_legend(order = 1), fill = guide_legend(order = 2)) +
+    annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
+    } %>%
+    ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sample_sliding_coverage_100_bp_col", col_num, ".png")), plot = ., width = 11, height = 8)
+}
+
+```
+
+```{r export freyja table}
+
+# this table groups the sublineages with the same parent lineages together and gets the sum of the abundances
+freyja_grouping <- s %>%
+  as.data.frame() %>%
+  select(sample_id, sample_type, freyja_lineages, freyja_abundances) %>%
+  group_by(sample_id) %>%
+  mutate(lineages = list(freyja_lineages),
+         relative_abundances = list(freyja_abundances)) %>%
+  separate_rows(c(lineages, relative_abundances), sep=" ") %>%
+  mutate(lineages = gsub("\\([0-9]*\\)|-like", "", lineages),
+         lineages = ifelse((is.na(lineages) | lineages == "Misc"), "Unresolved", lineages),
+         relative_abundances = as.numeric(relative_abundances),
+         main_lineage = gsub("\\..*", "", lineages)) %>%
+  ungroup() %>%
+  select(-c("freyja_lineages", "freyja_abundances")) %>%
+  arrange(sample_id, relative_abundances, str_rank(lineages, numeric = TRUE)) %>%
+  group_by(sample_id, main_lineage, relative_abundances) %>%
+  #add an extra period to the end to help with matching lineages correctly
+  mutate(lineages = gsub("$", ".", lineages),
+         least_common_substring = attr(adist(lineages, counts = TRUE), "trafos")[, 1],
+         end_match = do.call(rbind, stringi::stri_locate_all_regex(least_common_substring, "^M+"))[, 2],
+         has_lowest_str_length = str_length(lineages) == min(str_length(lineages)),
+         substring_end = ifelse(sum(has_lowest_str_length) == 1 &
+                                grepl("^M+$", least_common_substring), end_match, NA),
+         substring_end = ifelse(all(is.na(substring_end)), min(end_match), substring_end)) %>%
+  fill(substring_end, .direction = "down") %>%
+  ungroup() %>%
+  mutate(combined_lineage = stringi::stri_sub(lineages, 1, substring_end)) %>%
+  mutate(combined_lineage = gsub("\\.$", "", combined_lineage)) %>%
+  mutate(combined_lineage = factor(combined_lineage, levels = str_sort(unique(combined_lineage), numeric = TRUE))) %>%
+  mutate(relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", combined_lineage),
+                                      1, relative_abundances))
+
+freyja_matrix <- freyja_grouping %>%
+  complete(nesting(sample_id, sample_type), combined_lineage, fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, combined_lineage) %>%
+  summarize(relative_abundances = sum(relative_abundances)) %>%
+  ungroup() %>%
+  pivot_wider(names_from = "combined_lineage", values_from = "relative_abundances") %>%
+  column_to_rownames("sample_id")
+
+# this table groups sample type numbers together
+freyja_sample_type <- freyja_grouping %>%
+  filter(sample_id %in% s_toPlot$sample_id) %>%
+  droplevels() %>%
+  complete(nesting(sample_id, sample_type), nesting(combined_lineage, main_lineage), fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, sample_type, combined_lineage, main_lineage) %>%
+  summarize(relative_abundances = sum(relative_abundances)) %>%
+  ungroup() %>%
+  filter(!is.na(relative_abundances)) %>%
+  group_by(sample_type) %>%
+  mutate(total_samples = n_distinct(sample_id)) %>%
+  ungroup() %>%
+  # to calculate the total standard deviation of a combined distribution,
+  # get the total variance and square root it
+  group_by(sample_type, combined_lineage, main_lineage) %>%
+  mutate(avg_rel_abund = relative_abundances/total_samples,
+         variance = var(avg_rel_abund)) %>%
+  summarize(avg_rel_abund = sum(avg_rel_abund),
+            total_sd = sqrt(sum(variance))) %>%
+  ungroup() %>%
+  group_by(combined_lineage) %>%
+  filter(any(avg_rel_abund > 0.00005)) %>%
+  ungroup() %>%
+  droplevels()
+
+dir.create(here("upload", "freyja"), recursive = TRUE)
+
+freyja_sample_type %>%
+  mutate(print_rel_abund = ifelse(!is.na(total_sd),
+                                  paste0(round(avg_rel_abund*100, 2), "% +/- ",
+                                         round(total_sd*100, 2), "%"),
+                                  paste0(round(avg_rel_abund*100, 2), "%"))) %>%
+  select(-c(total_sd, avg_rel_abund)) %>%
+  pivot_wider(names_from = "sample_type", values_from = "print_rel_abund", values_fill = "") %>%
+  filter(!is.na(combined_lineage)) %>%
+  arrange(combined_lineage) %>%
+  rename(Lineage = "combined_lineage") %>%
+  write_csv(here("upload", "freyja", paste0(project_name, "_freyja_results.csv")))
+
+```
+
+```{r empty plate to plot}
+
+empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_col = sprintf("%02d", rep(1:12, 8)), plate = 1) %>%
+  mutate(plate_coord = paste0(plate, "_", plate_row, plate_col))
+
+```
+
+```{r}
+```
