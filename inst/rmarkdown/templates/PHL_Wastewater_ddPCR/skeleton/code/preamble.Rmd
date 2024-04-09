@@ -67,7 +67,7 @@ if(run_date != dat_date) {
 
 ```{r saving data to rstudio metadata folder (for github upload), eval = useExportFolder}
 
-file.copy(run_dat_fp, to = here())
+file.copy(run_dat_fp, to = here(), overwrite = T)
 
 ```
 
@@ -179,45 +179,68 @@ d_sd <- d %>%
 
 ```{r variance and signal check}
 
-variance_test <- any(d_sd$outlier_median >= 9, na.rm = T) | any(d_sd$GESD_q <= 0.01)
+variance_test <- any(d_sd$outlier_median >= 9, na.rm = T) | any(d_sd$GESD_q <= 0.01, na.rm = T)
 
 signal_check <- d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
          Process == "Concentrated",
          Spiked == "Spiked",
+         Target == "MHV"
          ) %>%
   select(Positives) %>%
   pull()
 
-signal_check <- any(signal_check < 10)
+signal_check <- any(signal_check < 20)
 
 if (variance_test | signal_check) {
   wellsToRemove <- d_sd %>%
-    filter(Positives < 10 | outlier_median >= 9| GESD_q <= 0.01, 
+    filter(outlier_median >= 9| GESD_q <= 0.01, 
            grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
            Process == "Concentrated",
            Spiked == "Spiked",
            Target == "N2" | Target == "E") %>%
     group_by(Type, Process, Spiked, Sample_date) %>%
-    filter(Positives < 10 | outlier_median >= 8) %>%
+    filter(outlier_median >= 8) %>%
     select(Well) %>%
     distinct() %>%
     pull()
+  
+  wellsToRemove2 <- d_sd %>%
+    filter(Target == "MHV",
+           Positives < 20 | outlier_median >= 9| GESD_q <= 0.01, 
+           grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+           Process == "Concentrated",
+           Spiked == "Spiked",
+           ) %>%
+    group_by(Type, Process, Spiked, Sample_date) %>%
+    filter(Positives < 20 | outlier_median >= 8) %>%
+    select(Well) %>%
+    distinct() %>%
+    pull()  
     
+  wellsToRemove <- c(wellsToRemove, wellsToRemove2)
+  
   all_var <- d_sd %>%
-    filter(Positives < 10 | outlier_median >= 9 | GESD_q <= 0.01
+    filter(outlier_median >= 9 | GESD_q <= 0.01
            ) %>%
     select(Well) %>%
     distinct() %>%
     pull()
   
+  all_var2 <- d_sd %>%
+    filter(Target == "MHV",
+           Positives < 20, outlier_median >= 9 | GESD_q <= 0.01
+           ) %>%
+    select(Well) %>%
+    distinct() %>%
+    pull()
+  
+  all_var <- c(all_var, all_var2)
+  
   all_var_check <- any(wellsToRemove %in% all_var)
 
 }
 
-if (signal_check) {
-  
-}
 
 
 ```
