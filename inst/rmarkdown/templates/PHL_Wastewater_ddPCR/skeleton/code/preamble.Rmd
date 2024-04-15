@@ -141,6 +141,12 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
 
 droplet_test <- sum(d_pre$Droplet_count<10000) > 0
 
+droplet_test_wells <- d_pre %>%
+  filter(Droplet_count<10000) %>%
+  select(Well) %>%
+  pull() %>%
+  unique()
+
 d <- d_pre %>%
   filter(Droplet_count >= 10000)
 
@@ -188,12 +194,13 @@ signal_check <- d %>%
          Target == "MHV"
          ) %>%
   select(Positives) %>%
-  pull()
+  pull() %>%
+  unique()
 
 signal_check <- any(signal_check < 20)
 
 if (variance_test | signal_check) {
-  wellsToRemove <- d_sd %>%
+  wellsToRemove1 <- d_sd %>%
     filter(outlier_median >= 9| GESD_q <= 0.01, 
            grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
            Process == "Concentrated",
@@ -218,7 +225,7 @@ if (variance_test | signal_check) {
     distinct() %>%
     pull()  
     
-  wellsToRemove <- c(wellsToRemove, wellsToRemove2)
+  wellsToRemove <- unique(c(wellsToRemove1, wellsToRemove2))
   
   all_var <- d_sd %>%
     filter(outlier_median >= 9 | GESD_q <= 0.01
@@ -234,6 +241,7 @@ if (variance_test | signal_check) {
     select(Well) %>%
     distinct() %>%
     pull()
+  
   
   all_var <- c(all_var, all_var2)
   
