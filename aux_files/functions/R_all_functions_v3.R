@@ -61,7 +61,7 @@ kable_style <- function(data, font_sizing = 10) {
     mutate_if(function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .))
 
   # ... should be column number
-  if (row_num > 30) {
+  if (row_num > 14) {
     data_return <- data_return %>%
       kable("latex", longtable = T, digits=2, booktabs=T, escape=F) %>%
       kable_styling(latex_options = c("repeat_header", "HOLD_position"), font_size = font_sizing) %>%
