@@ -393,8 +393,8 @@ ENV_fp <- max(list.files(here("metadata", "extra_metadata"), pattern = "environm
 if(!is.na(ENV_fp)) {
 
   ENV_data <- read_csv(ENV_fp) %>%
-    #use the first day of the week (starting on Monday) as the sample_collection_date
-    mutate(sample_collection_date = as.Date(cut(as.POSIXct(Sys.time()), "week"))) %>%
+    #use the Tuesday day of the sequencing week as the sample_collection_date
+    mutate(sample_collection_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
     select(sample_name, sample_collection_date, environmental_site) %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
@@ -546,8 +546,8 @@ metadata_sheet <- metadata_sheet %>%
   mutate(PHL_sample_received_date = case_when(!(is.na(PHL_sample_received_date) | as.character(PHL_sample_received_date) == "") ~ as.Date(PHL_sample_received_date),
                                               #if it's a wastewater sample without a date, throw an error
                                               sample_type == "Wastewater" ~ NA,
-                                              #use Tuesday of the current week if no date specified; older samples that are rerun should have a date manually added in on the sheet
-                                              TRUE ~ as.Date(cut(as.POSIXct(Sys.time()), "week")) + 1)) %>%
+                                              #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet
+                                              TRUE ~ as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1)) %>%
   mutate(sample_collection_date = case_when(!(is.na(sample_collection_date) | as.character(sample_collection_date) == "") ~ as.Date(sample_collection_date),
                                             #if it's a wastewater sample without a date, use the PHL sample received date
                                             sample_type == "Wastewater" ~ PHL_sample_received_date,
