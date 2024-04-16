@@ -299,6 +299,7 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
                    ec2_login = ec2_hostname,
                    screen_session_name = "nextclade-version-dl")
 
+  # Download data from EC2 instance to local
   run_in_terminal(paste("scp -r", paste0(ec2_hostname, ":", ec2_tmp_fp, "data"),
                         here())
   )
