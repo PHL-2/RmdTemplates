@@ -242,18 +242,4 @@ if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet), ign
   stop(simpleError("Local upload of sample sheets to s3 bucket failed"))
 }
 
-if(run_uploaded_2_basespace) {
-  submit_screen_job(message2display = "Cleaning up EC2 run folder",
-                    ec2_login = ec2_hostname,
-                    screen_session_name = "delete-run",
-                    command2run = paste0("rm -rf ", ec2_tmp_fp, ";",
-                                         "echo Here are your files and directories at home:;",
-                                         "ls -GF")
-                    )
-
-  check_screen_job(message2display = "Checking delete job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = "delete-run")
-
-  rstudioapi::executeCommand('activateConsole')
-}
+rstudioapi::executeCommand('activateConsole')
