@@ -1159,9 +1159,10 @@ s_toPlot %>%
 ```{r pc check}
 
 has_pos_ctrl <- s %>%
-  filter(grepl("Mock DNA", sample_type)) %>%
-  mutate(is_pos = Nextclade_pango == "B") %>%
+  filter(grepl("ZeptoSC2", sample_name)) %>%
+  mutate(is_pos = Nextclade_pango == "A") %>%
   select(is_pos) %>%
+  unique() %>%
   pull()
 
 if(length(has_pos_ctrl) == 0) {
@@ -1224,14 +1225,14 @@ s %>%
 
 * Nextflow: `r software_version$Nextflow`
   + nf-core/demultiplex pipeline: `r software_version[["nf-core-demultiplex"]]`
-    - BCLConvert: `r software_version$bclconvert`
-    - Falco: `r software_version$falco`
-  + Cecret pipeline: `r software_version$Cecret`
-    - Kraken2 database: `r software_version$kraken2_db`
-    - Nextclade: `r software_version$nextclade`
+    - BCLConvert: `r software_version[["bclconvert"]]`
+    - Falco: `r software_version[["falco"]]`
+  + Cecret pipeline: `r software_version[["Cecret"]]`
+    - Kraken2 database: `r software_version[["kraken2_db"]]`
+    - Nextclade: `r software_version[["nextclade"]]`
       - Nextclade dataset: `r software_version[["nextclade-dataset"]]`
-    - Pangolin: `r software_version$pangolin`
-      - UShER database: `r software_version$PUSHER`
+    - Pangolin: `r software_version[["pangolin"]]`
+      - UShER database: `r software_version[["PUSHER"]]`
 
 \newpage
 
