@@ -1338,11 +1338,12 @@ freyja_grouping <- s %>%
          relative_abundances = list(freyja_abundances)) %>%
   separate_rows(c(lineages, relative_abundances), sep=" ") %>%
   mutate(lineages = gsub("\\([0-9]*\\)|-like", "", lineages),
-         lineages = ifelse((is.na(lineages) | lineages == "Misc"), "Unresolved", lineages),
-         relative_abundances = as.numeric(relative_abundances),
+         lineages = ifelse((is.na(lineages) | lineages == "Misc" | relative_abundances == "nan"), "Unresolved", lineages),
+         relative_abundances = as.numeric(gsub("nan", "", relative_abundances)),
          main_lineage = gsub("\\..*", "", lineages)) %>%
   ungroup() %>%
   select(-c("freyja_lineages", "freyja_abundances")) %>%
+  unique() %>%
   arrange(sample_id, relative_abundances, str_rank(lineages, numeric = TRUE)) %>%
   group_by(sample_id, main_lineage, relative_abundances) %>%
   #add an extra period to the end to help with matching lineages correctly
