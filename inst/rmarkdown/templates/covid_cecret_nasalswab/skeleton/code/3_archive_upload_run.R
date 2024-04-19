@@ -55,8 +55,10 @@ tryCatch(
 # Tar the sequencing folder and upload to S3
 ############################################
 
+bclconvert_sample_sheet_pattern <- "SampleSheet_v2.csv"
+
 # If this sample sheet is missing, get it from AWS S3 bucket
-sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = "SampleSheet_v2.csv")
+sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = bclconvert_sample_sheet_pattern)
 
 if(length(sample_sheet_fn) > 1) {
   stop(simpleError("There are more than 2 sample sheets detected!! Please delete the incorrect one"))
@@ -135,7 +137,7 @@ if(run_uploaded_2_basespace) {
                                         "-cC", sequencing_run_fp, ". |",
                                         "gzip -n >", paste0(ec2_tmp_fp, sequencing_run, ".tar.gz;"),
                                         "echo ']\nTar completed!'")
-                    )
+  )
 
   check_screen_job(message2display = "Checking tar job",
                    ec2_login = ec2_hostname,
@@ -148,29 +150,11 @@ if(run_uploaded_2_basespace) {
                     command2run = paste0("cd ", ec2_tmp_fp, ";",
                                          "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, sequencing_run, ".md5;",
                                          "cat ", ec2_tmp_fp, sequencing_run, ".md5")
-                    )
+  )
 
   check_screen_job(message2display = "Checking md5 job",
                    ec2_login = ec2_hostname,
                    screen_session_name = "sequencing-checksum")
-
-  # Upload data
-
-  submit_screen_job(message2display = "Uploading run to S3",
-                    ec2_login = ec2_hostname,
-                    screen_session_name = "upload-run",
-                    command2run = paste("aws s3 cp",
-                                        ec2_tmp_fp,
-                                        s3_run_bucket_fp,
-                                        "--recursive",
-                                        "--exclude '*'",
-                                        paste0("--include '", sequencing_run, ".md5'"),
-                                        paste0("--include '", sequencing_run, ".tar.gz'"))
-                    )
-
-  check_screen_job(message2display = "Checking run upload job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = "upload-run")
 
   rstudioapi::executeCommand('activateConsole')
 
@@ -210,10 +194,27 @@ if(run_uploaded_2_basespace) {
   s3_cp_md5 <- system2("aws", c("s3 cp", shQuote(md5_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
   s3_cp_run_tarball <- system2("aws", c("s3 cp", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 
-  if(!all(grepl("Completed", c(s3_cp_md5, s3_cp_run_tarball), ignore.case = TRUE))) {
-    stop(simpleError("Local upload of checksum and tarball files to s3 bucket failed!"))
-  }
+  # If the aws-cli provides an SSL error on local machine, run the command through the instance
+  if(length(s3_cp_md5) == 0 | length(s3_cp_run_tarball) == 0) {
 
+    mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
+                                   shQuote(paste("mkdir -p", ec2_tmp_fp))),
+                          stdout = TRUE, stderr = TRUE)
+
+    if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
+      stop(simpleError("Failed to make temporary directory in EC2 instance"))
+    }
+
+    run_in_terminal(paste("scp", md5_fp,
+                          paste0(ec2_hostname, ":", ec2_tmp_fp))
+    )
+
+    run_in_terminal(paste("scp", paste0(run_folder, ".tar.gz"),
+                          paste0(ec2_hostname, ":", ec2_tmp_fp))
+    )
+
+    rstudioapi::executeCommand('activateConsole')
+  }
 }
 
 sample_sheet_fp <- here("metadata", "munge", sample_sheet_fn)
@@ -225,8 +226,10 @@ nf_demux_samplesheet <- data.frame(
   flowcell = paste0(s3_run_bucket_fp, sequencing_run, ".tar.gz")
 )
 
+nfcore_demux_sample_sheet_pattern <- "nf_demux_samplesheet.csv"
+
 nf_demux_samplesheet_fp <- here("metadata", "munge",
-                                tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_demux_samplesheet.csv", sep = "_")))
+                                tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, nfcore_demux_sample_sheet_pattern, sep = "_")))
 
 nf_demux_samplesheet %>%
   write.csv(file = nf_demux_samplesheet_fp,
@@ -236,24 +239,34 @@ message("Uploading samplesheets to AWS S3")
 s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samplesheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 
-if(!all(grepl("Completed", c(s3_cp_samplesheet, s3_cp_nf_demux_samplesheet), ignore.case = TRUE)) |
-   length(s3_cp_samplesheet) == 0 |
-   length(s3_cp_nf_demux_samplesheet) == 0) {
-  stop(simpleError("Local upload of sample sheets to s3 bucket failed"))
+if(length(s3_cp_samplesheet) == 0 | length(s3_cp_nf_demux_samplesheet) == 0) {
+
+  run_in_terminal(paste("scp", sample_sheet_fp,
+                        paste0(ec2_hostname, ":", ec2_tmp_fp))
+  )
+
+  run_in_terminal(paste("scp", nf_demux_samplesheet_fp,
+                        paste0(ec2_hostname, ":", ec2_tmp_fp))
+  )
 }
 
-if(run_uploaded_2_basespace) {
-  submit_screen_job(message2display = "Cleaning up EC2 run folder",
-                    ec2_login = ec2_hostname,
-                    screen_session_name = "delete-run",
-                    command2run = paste0("rm -rf ", ec2_tmp_fp, ";",
-                                         "echo Here are your files and directories at home:;",
-                                         "ls -GF")
-                    )
+# Upload data
+submit_screen_job(message2display = "Uploading run to S3",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = "upload-run",
+                  command2run = paste("aws s3 cp",
+                                      ec2_tmp_fp,
+                                      s3_run_bucket_fp,
+                                      "--recursive",
+                                      "--exclude '*'",
+                                      paste0("--include '*", bclconvert_sample_sheet_pattern, "'"),
+                                      paste0("--include '*", nfcore_demux_sample_sheet_pattern, "'"),
+                                      paste0("--include '", sequencing_run, ".md5'"),
+                                      paste0("--include '", sequencing_run, ".tar.gz'"))
+)
 
-  check_screen_job(message2display = "Checking delete job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = "delete-run")
+check_screen_job(message2display = "Checking run upload job",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = "upload-run")
 
-  rstudioapi::executeCommand('activateConsole')
-}
+rstudioapi::executeCommand('activateConsole')
