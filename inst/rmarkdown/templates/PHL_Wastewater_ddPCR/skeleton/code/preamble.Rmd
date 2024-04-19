@@ -197,7 +197,7 @@ signal_check <- d %>%
   pull() %>%
   unique()
 
-signal_check <- any(signal_check < 20)
+signal_check <- any(signal_check < 100)
 
 if (variance_test | signal_check) {
   wellsToRemove1 <- d_sd %>%
@@ -214,13 +214,13 @@ if (variance_test | signal_check) {
   
   wellsToRemove2 <- d_sd %>%
     filter(Target == "MHV",
-           Positives < 20 | outlier_median >= 9| GESD_q <= 0.01, 
+           Positives < 100 | outlier_median >= 9| GESD_q <= 0.01, 
            grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
            Process == "Concentrated",
            Spiked == "Spiked",
            ) %>%
     group_by(Type, Process, Spiked, Sample_date) %>%
-    filter(Positives < 20 | outlier_median >= 8) %>%
+    filter(Positives < 100 | outlier_median >= 8) %>%
     select(Well) %>%
     distinct() %>%
     pull()  
