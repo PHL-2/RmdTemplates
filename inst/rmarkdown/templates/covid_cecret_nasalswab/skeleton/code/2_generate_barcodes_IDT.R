@@ -129,7 +129,7 @@ if(run_uploaded_2_basespace) {
 
   }
   if (nrow(bs_run) == 0) {
-    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace matching this pattern: ", intended_sequencing_folder_regex,
+    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace for this date: ", sequencing_date,
                             "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
                             "\nThe sequencer type could also be wrong: ", sequencer_type,
                             "\nOtherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
