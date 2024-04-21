@@ -205,7 +205,7 @@ if(run_uploaded_2_basespace) {
 
   }
 
-} else if (!run_uploaded_2_basespace & !samplesheet_exists) {
+} else if (!run_uploaded_2_basespace) {
 
   #get the local run folder
   run_folder <- sequencing_folder_fp %>%
@@ -216,8 +216,11 @@ if(run_uploaded_2_basespace) {
     filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
     pull()
 
-  file.copy(file.path(run_folder, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
+  sequencing_run <- basename(run_folder)
 
+  if(!samplesheet_exists) {
+    file.copy(file.path(run_folder, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
+  }
 }
 
 run_samplesheet_fp <- here("metadata", "munge", "SampleSheet.csv")
@@ -475,18 +478,19 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
   #merge the metadata
   merge(PHL_TU_merge, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
-  mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date)))) %>%
-  select(sample_id, everything()) %>%
   arrange(plate, plate_col, plate_row) %>%
-  mutate(sequencing_date = sequencing_date) %>%
-  mutate(prj_descrip = prj_description) %>%
-  mutate(instrument_type = instrument_type) %>%
-  mutate(read_length = read_length) %>%
-  mutate(index_length = index_length) %>%
-  mutate(run_cd = run_cd) %>%
-  mutate(run_q30 = run_q30) %>%
-  mutate(run_pf = run_pf) %>%
-  mutate(run_error = run_error)
+  mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
+         uniq_sample_name = gsub("-Rep[0-9*]", "", sample_name),
+         sequencing_date = sequencing_date,
+         prj_descrip = prj_description,
+         instrument_type = instrument_type,
+         read_length = read_length,
+         index_length = index_length,
+         run_cd = run_cd,
+         run_q30 = run_q30,
+         run_pf = run_pf,
+         run_error = run_error) %>%
+  select(sample_id, everything())
 
 #####################################################################
 # Fill in these columns in the metadata sheet if they were left blank
@@ -811,17 +815,53 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 # Write sheet to metadata folder
 ################################
 
+merged_samples_metadata_sheet <- metadata_sheet %>%
+  select(-c(sample_id, index, index2,
+            starts_with("idt_"), starts_with("plate"), ends_with("_ID", ignore.case = FALSE))) %>%
+  filter(!sample_type %in%
+           c("Water control", "Reagent control", "Environmental control", "Mock DNA positive control")) %>%
+  group_by(uniq_sample_name) %>%
+  mutate(sample_counts = n()) %>%
+  ungroup() %>%
+  filter(sample_counts > 1) %>%
+  select(-c(sample_name, sample_counts)) %>%
+  unique() %>%
+  mutate(index = "TTTTTTTTTT",
+         index2 = "TTTTTTTTTT",
+         UDI_Index_ID = "UDP9999",
+         idt_set = "Merged",
+         idt_plate_row = rep(LETTERS[1:8], 12)[row_number()],
+         idt_plate_col = unlist(lapply(1:12, function (x) rep(x, 8)))[row_number()],
+         idt_plate_coord = paste0(idt_set, "_", idt_plate_row, idt_plate_col),
+         plate = 999,
+         plate_row = idt_plate_row,
+         plate_col = idt_plate_col,
+         plate_coord = paste0(plate, "_", plate_row, plate_col),
+         across(matches("_col$|coord$"), ~ str_replace_all(., "\\d+", function(m) sprintf("%02d", as.numeric(m)))),
+         sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
+         sample_name = paste0(uniq_sample_name, "-Merged"))
+
 #does not contain PHI and accession numbers
 metadata_sheet %>%
-  select(-c(I7_Index_ID, I5_Index_ID, any_of(phi_info))) %>%
+  select(-c(I7_Index_ID, I5_Index_ID)) %>%
   # NextSeq runs have index2 sequences in the reverse complement of the ones listed in the reference barcode sheet
   # however, the sample sheet used for demultiplexing needs to be the same orientation as the reference barcode sheet
   # when BCLConvert demultiplexes a NextSeq run, it will automatically reverse complement index2
   # results from the pipeline will refer to the reverse complement of index2, so this should be updated in the metadata sheet
   mutate(index2 = ifelse(instrument_type == "NextSeq1k2k", reverse_complement(index2), index2)) %>%
+  rbind(merged_samples_metadata_sheet) %>%
   write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")), row.names = FALSE)
 
-#contains PHI and accession numbers
+bclconvert_output_final_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sequencing_run, sep = "/")
+
+#write the sample sheet for merging nextflow script
 metadata_sheet %>%
-  select(sample_id, any_of(phi_info)) %>%
-  write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")), row.names = FALSE)
+  select(fastq = sample_id, uniq_sample_name) %>%
+  mutate(fastq_1 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R1_001.fastq.gz"),
+         fastq_2 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R2_001.fastq.gz")) %>%
+  merge(select(merged_samples_metadata_sheet, sample_id, uniq_sample_name), by = "uniq_sample_name", all = TRUE) %>%
+  filter(!is.na(sample_id)) %>%
+  select(sample_id, fastq_1, fastq_2) %>%
+  write.csv(file = here("metadata", "munge",
+                        tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_concat_fastq_samplesheet.csv", sep = "_"))),
+            row.names = FALSE, quote = FALSE)
