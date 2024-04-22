@@ -80,7 +80,6 @@ tryCatch(
 
 ### mapping file paths
 mapping_file_fp <- list.files(here("metadata"), pattern = "_metadata.csv", full.names = TRUE)
-PHI_file_fp <- list.files(here("metadata"), pattern = "_PHI.csv", full.names = TRUE)
 
 ### file paths to save results to
 unkwn_barcodes_fp <- here("data", paste0(sequencing_date, "_unknown_barcodes.csv"))
@@ -177,7 +176,17 @@ samp_reads <- read_delim(demuxsum_fp) %>%
   mutate(sample_id = gsub("_", "-", sample_id),
          barcode_sequence = gsub("-", "+", barcode_sequence),
          read_counts = read_pairs*2) %>%
-  merge(quality_metrics, by = c("lane", "sample_id"), all = TRUE)
+  merge(quality_metrics, by = c("lane", "sample_id"), all = TRUE) %>%
+  merge(select(s_meta, sample_id, uniq_sample_name), by = "sample_id", all = TRUE) %>%
+  mutate(across(starts_with("index"), ~replace_na(., "TTTTTTTTTT")),
+         across(starts_with("barcode_sequence"), ~replace_na(., "TTTTTTTTTT+TTTTTTTTTT")),
+         across(starts_with("percent_of_lane"), ~replace_na(., 0)),
+         across(matches("^index|barcode_sequence"), ~ case_when(sample_id == "Undetermined" ~ NA, TRUE ~ (.)))) %>%
+  group_by(uniq_sample_name) %>%
+  mutate(across(matches("percent_|lane|_Q30"), ~replace_na(., replace = mean(., na.rm = TRUE))),
+         across(contains("read"), ~replace_na(., replace = sum(., na.rm = TRUE)))) %>%
+  ungroup() %>%
+  select(-uniq_sample_name)
 
 top_unkwn_indices <- read_delim(top_unkwn_fp) %>%
   rename_all(.funs = tolower) %>%
@@ -769,7 +778,7 @@ fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")
 
 ```
 
-```{r save fastq and fasta for upload, eval = import_data}
+```{r save fastq and fasta for upload, eval = FALSE}
 
 #get only the good quality samples to upload
 s_upload <- s_toPlot %>%
@@ -836,19 +845,12 @@ if(length(s_upload) > 0) {
 
 ```
 
-```{r export data to epi, eval = have_phi}
+```{r export data to epi, eval = FALSE}
 
 dir.create(here("upload", "epi"), recursive = TRUE)
 
-if(length(PHI_file_fp) == 0) {
-  stop(simpleError("You are missing the PHI file. Check the Admin fileshare for this file or generate it with the 2_generate_barcodes_IDT.R script"))
-}
-
-s_phi <- read_csv(PHI_file_fp)
-
 # Export the data for EPI's
 epi_report <- s_toPlot %>%
-  merge(s_phi, by = "sample_id", all.x = TRUE) %>%
   filter4report() %>%
   select(sample_name, sample_collected_by, sequencing_date, Nextclade_pango, nextclade_clade_who) %>%
   arrange(sample_collected_by, sample_name) %>%
@@ -1217,7 +1219,7 @@ slide_window_coverage %>%
   {
   ggplot(., aes(x = position, y = slide_window_100, fill = sample_type, group = sample_id)) +
     geom_area(aes(alpha = sample_type), position = "identity") +
-    geom_hline(yintercept = 100, linetype = "dashed", alpha = 0.4) +
+    geom_hline(yintercept = 10, linetype = "dashed", alpha = 0.4) +
     facet_wrap(~sample_type, ncol = 1, scales = "free_y") +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     scale_alpha_manual(values = ann_geom_values$alpha[match(levels(.$sample_type), names(ann_geom_values$alpha))]) + 
@@ -1245,7 +1247,7 @@ slide_window_coverage %>%
   {
   ggplot(., aes(x = position, y = slide_window_100, fill = sample_type, group = sample_id)) +
     geom_area(aes(alpha = sample_type), position = "identity") +
-    geom_hline(yintercept = 100, linetype = "dashed", alpha = 0.4) +
+    geom_hline(yintercept = 10, linetype = "dashed", alpha = 0.4) +
     facet_wrap(~sample_type, ncol = 1, scales = "free_y") +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     scale_alpha_manual(values = ann_geom_values$alpha[match(levels(.$sample_type), names(ann_geom_values$alpha))]) + 
@@ -1294,7 +1296,7 @@ for(col_num in col2show) {
 
   slide_window_coverage %>%
     filter(sample_id %in% filtered_samp_name$sample_id) %>%
-    mutate(slide_window_100 = ifelse(slide_window_100 > 100, 100, slide_window_100)) %>%
+    mutate(slide_window_100 = ifelse(slide_window_100 > 10, 10, slide_window_100)) %>%
     merge(filtered_samp_name, by = "sample_id", all = TRUE) %>%
     droplevels() %>%
     {

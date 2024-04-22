@@ -701,10 +701,10 @@ read_type %>%
 s %>%
   filter(!is.na(median_coverage)) %>%
   droplevels() %>%
-  select(sample_type, median_coverage, pct_genome_coverage_over_30x) %>%
+  select(sample_type, median_coverage, pct_genome_coverage_over_10x) %>%
   {
-  ggplot(., aes(x = median_coverage, y = pct_genome_coverage_over_30x, fill = sample_type)) +
-    geom_hline(yintercept = 0.8, color = "grey", linetype = "dotted", lwd=0.75) +
+  ggplot(., aes(x = median_coverage, y = pct_genome_coverage_over_10x, fill = sample_type)) +
+    geom_hline(yintercept = 0.6, color = "grey", linetype = "dotted", lwd=0.75) +
     geom_point(shape = 21, size = 3) +
     scale_y_continuous(labels=percent) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
@@ -852,12 +852,12 @@ knitr::include_graphics(
 ```{r nextclade coverage, fig.height=8, fig.width=7}
 
 s %>%
-  select(sample_type, median_coverage, pct_genome_coverage_over_30x, nextclade_qc_overallstatus) %>%
+  select(sample_type, median_coverage, pct_genome_coverage_over_10x, nextclade_qc_overallstatus) %>%
   filter(!is.na(median_coverage)) %>%
   mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = c("good", "mediocre", "bad"))) %>%
   {
-  ggplot(., aes(x = nextclade_qc_overallstatus, y = pct_genome_coverage_over_30x)) +
-    geom_hline(yintercept = 0.8, color = "grey", linetype = "dotted", lwd=0.75) +
+  ggplot(., aes(x = nextclade_qc_overallstatus, y = pct_genome_coverage_over_10x)) +
+    geom_hline(yintercept = 0.6, color = "grey", linetype = "dotted", lwd=0.75) +
     geom_boxplot(outlier.alpha = 0) +
     geom_point(aes(fill = median_coverage, shape = sample_type), position = position_jitterdodge(), size = 3) +
     scale_shape_manual(values = ann_geom_values$sample_type_shapes[match(levels(.$sample_type), names(ann_geom_values$sample_type_shapes))]) +
@@ -1179,7 +1179,7 @@ if(length(has_pos_ctrl) == 0) {
 Red samples will not be reported (controls or no lineage results) \newline
 Orange samples also will not be reported due to low quality (bad or mediocre NextClade QC with <80% 30X coverage) \newline
 The total number of samples with acceptable results for reporting is `r n_samples_report` out of `r sum(!s$isControl, na.rm = TRUE)` non-control samples sequenced. \newline
-Number of samples to send to epidemiologists: `r ifelse(have_phi, nrow(epi_report), 0)` \newline
+Number of samples to send to epidemiologists: \newline
 Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "gisaid_name", "sample_id"])` \newline
 Number of samples to upload to SRA: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])` \newline
 Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])`\newline
@@ -1201,7 +1201,7 @@ s %>%
     mutate(sample = cell_spec(sample, "latex",
                                color = case_when((grepl(paste0(rerun_samples, collapse = "|"), sample_id) & length(rerun_samples) > 0) ~ "yellow",
                                                  ((grepl("control|Unassigned reads", `sample type`)) | (!(sample_id %in% s_toPlot$sample_id))) ~ "red",
-                                                 ((grepl("bad", nextclade_qc_overallstatus)) | (grepl("mediocre", nextclade_qc_overallstatus) & pct_genome_coverage_over_30x < .8) | (grepl("fail", pangolin_qc_status))) ~ "orange",
+                                                 ((grepl("bad", nextclade_qc_overallstatus)) | (grepl("mediocre", nextclade_qc_overallstatus) & pct_genome_coverage_over_10x < .6) | (grepl("fail", pangolin_qc_status))) ~ "orange",
                                                  TRUE ~ "black"))) %>%
       select(sample,
              `sample type`,

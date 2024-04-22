@@ -480,7 +480,7 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   merge(PHL_TU_merge, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
   arrange(plate, plate_col, plate_row) %>%
   mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
-         uniq_sample_name = gsub("-Rep[0-9*]", "", sample_name),
+         uniq_sample_name = gsub("-Rep[0-9]*", "", sample_name),
          sequencing_date = sequencing_date,
          prj_descrip = prj_description,
          instrument_type = instrument_type,
@@ -545,7 +545,6 @@ metadata_sheet <- metadata_sheet %>%
                                  (is.na(sample_type) | sample_type == "") ~ multi_grep(named_sample_type, sample_name),
                                  TRUE ~ NA)) %>%
   mutate(sample_collected_by = case_when(!(is.na(sample_collected_by) | sample_collected_by == "") ~ sample_collected_by,
-                                         grepl("^8[0-9]*$|^9[0-9]*$", sample_name) ~ "Temple University",
                                          TRUE ~ "Philadelphia Department of Public Health")) %>%
   mutate(PHL_sample_received_date = case_when(!(is.na(PHL_sample_received_date) | as.character(PHL_sample_received_date) == "") ~ as.Date(PHL_sample_received_date),
                                               #if it's a wastewater sample without a date, throw an error
@@ -576,14 +575,6 @@ metadata_sheet <- metadata_sheet %>%
                                       grepl("control$", sample_type) ~ "Environmental",
                                       grepl("test", sample_type, ignore.case = TRUE) ~ "Test sample",
                                       TRUE ~ NA)) %>%
-  mutate(requester = case_when(!(is.na(requester) | requester == "") ~ requester,
-                               sample_type == "Wastewater" ~ "Jose Lojo",
-                               !is.na(sample_type) ~ "Jasmine Schell",
-                               TRUE ~ NA)) %>%
-  mutate(requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
-                                     sample_type == "Wastewater" ~ "jose.lojo@phila.gov",
-                                     !is.na(sample_type) ~ "jasmine.schell@phila.gov",
-                                     TRUE ~ NA)) %>%
   mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
                                         TRUE ~ environmental_site))
@@ -598,8 +589,21 @@ if(length(main_sample_type) > 1) {
 }
 
 sample_type_acronym <- case_when(main_sample_type == "Testing sample type" ~ "Test",
-                                 main_sample_type == "Nasal swab" ~ "NS",
                                  main_sample_type == "Wastewater" ~ "WW")
+
+requester_var <- case_when(main_sample_type == "Testing sample type" ~ "Test Sample",
+                       main_sample_type == "Wastewater" ~ "Jose Lojo")
+
+requester_email_var <- case_when(main_sample_type == "Testing sample type" ~ "test@sample.com",
+                             main_sample_type == "Wastewater" ~ "jose.lojo@phila.gov")
+
+metadata_sheet <- metadata_sheet %>%
+  mutate(requester = case_when(!(is.na(requester) | requester == "") ~ requester,
+                               is.na(requester) ~ requester_var,
+                               TRUE ~ NA)) %>%
+  mutate(requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
+                                     is.na(requester_email) ~ requester_email_var,
+                                     TRUE ~ NA))
 
 if(is.na(sample_type_acronym)) {
   stop(simpleError("There's a new or misformatted sample type in the metadata sheet!"))
@@ -850,7 +854,7 @@ metadata_sheet %>%
   # results from the pipeline will refer to the reverse complement of index2, so this should be updated in the metadata sheet
   mutate(index2 = ifelse(instrument_type == "NextSeq1k2k", reverse_complement(index2), index2)) %>%
   rbind(merged_samples_metadata_sheet) %>%
-  write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")), row.names = FALSE)
+  write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")))
 
 bclconvert_output_final_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sequencing_run, sep = "/")
 
@@ -862,6 +866,5 @@ metadata_sheet %>%
   merge(select(merged_samples_metadata_sheet, sample_id, uniq_sample_name), by = "uniq_sample_name", all = TRUE) %>%
   filter(!is.na(sample_id)) %>%
   select(sample_id, fastq_1, fastq_2) %>%
-  write.csv(file = here("metadata", "munge",
-                        tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_concat_fastq_samplesheet.csv", sep = "_"))),
-            row.names = FALSE, quote = FALSE)
+  write_csv(file = here("metadata", "munge",
+                        tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_concat_fastq_samplesheet.csv", sep = "_"))))
