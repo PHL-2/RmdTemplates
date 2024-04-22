@@ -573,11 +573,9 @@ metadata_sheet <- metadata_sheet %>%
                                       grepl("test", sample_type, ignore.case = TRUE) ~ "Test sample",
                                       TRUE ~ NA)) %>%
   mutate(requester = case_when(!(is.na(requester) | requester == "") ~ requester,
-                               sample_type == "Wastewater" ~ "Jose Lojo",
                                !is.na(sample_type) ~ "Jasmine Schell",
                                TRUE ~ NA)) %>%
   mutate(requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
-                                     sample_type == "Wastewater" ~ "jose.lojo@phila.gov",
                                      !is.na(sample_type) ~ "jasmine.schell@phila.gov",
                                      TRUE ~ NA)) %>%
   mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
