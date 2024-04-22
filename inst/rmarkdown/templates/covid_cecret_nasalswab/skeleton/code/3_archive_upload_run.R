@@ -232,8 +232,7 @@ nf_demux_samplesheet_fp <- here("metadata", "munge",
                                 tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, nfcore_demux_sample_sheet_pattern, sep = "_")))
 
 nf_demux_samplesheet %>%
-  write.csv(file = nf_demux_samplesheet_fp,
-            row.names = FALSE, quote = FALSE)
+  write_csv(file = nf_demux_samplesheet_fp)
 
 message("Uploading samplesheets to AWS S3")
 s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)

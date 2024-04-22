@@ -232,7 +232,7 @@ fastqc <- lapply(fastqc_fps, function(f) {
   rm(read_all)
   
   read_qc <- read_tsv(f, skip = line_start, n_max = line_end)
-  read_qc$sample_id <- gsub(".*/|_S[0-9]*.*_R[12].*", "", f)
+  read_qc$sample_id <- gsub(".*/|_S[0-9]*|_R[12].*", "", f)
   read_qc$direction <- gsub(".*(R[12]).*", "\\1", f)
   return(read_qc)
   }) %>%
@@ -261,7 +261,7 @@ actual_read_lengths <- lapply(fastqc_fps, function(f) {
   rm(read_all)
   
   read_in_lengths <- read_tsv(f, skip = line_start, n_max = line_end)
-  read_in_lengths$sample_id <- gsub(".*/|_S[0-9]*.*_R[12].*", "", f)
+  read_in_lengths$sample_id <- gsub(".*/|_S[0-9]*|_R[12].*", "", f)
   read_in_lengths$direction <- gsub(".*(R[12]).*", "\\1", f)
   return(read_in_lengths)
   }) %>%
@@ -295,7 +295,7 @@ samtools_stat <- lapply(samtools_stats_fps, function(f) {
   
   summary_numbers <- read_tsv(f, skip = line_start, n_max = line_end,
                               col_names = c("SN", "samtools_stat", "samtools_stat_val", "comments"))
-  summary_numbers$sample_id <- gsub(".*/|_S[0-9]*\\.stats\\.txt", "", f)
+  summary_numbers$sample_id <- gsub(".*/|_S[0-9]*|\\.stats\\.txt", "", f)
   return(summary_numbers)
   }) %>%
   do.call("rbind", .) %>%
@@ -325,14 +325,14 @@ mapped_read_lengths <- lapply(samtools_stats_fps, function(f) {
   
   #some samples may have 0 reads
   if(line_end == 0) {
-    read_lengths <- data.frame(sample_id = gsub(".*/|_S[0-9]*\\.stats\\.txt", "", f),
+    read_lengths <- data.frame(sample_id = gsub(".*/|_S[0-9]*|\\.stats\\.txt", "", f),
                                RL = "RL",
                                samtools_read_length = 0,
                                count = 0)
   } else {
     read_lengths <- read_tsv(f, skip = line_start, n_max = line_end,
                               col_names = c("RL", "samtools_read_length", "count"))
-    read_lengths$sample_id <- gsub(".*/|_S[0-9]*\\.stats\\.txt", "", f)
+    read_lengths$sample_id <- gsub(".*/|_S[0-9]*|\\.stats\\.txt", "", f)
   }
 
   return(read_lengths)
@@ -367,7 +367,7 @@ amplicon_depth <- amplicon_fps %>%
   ungroup() %>%
   select(-FileName) %>%
   rename(sample_id = "bam") %>%
-  mutate(sample_id = gsub("_S[0-9]*\\.primertrim\\.sorted\\.bam", "", sample_id)) %>%
+  mutate(sample_id = gsub("_S[0-9]*|\\.primertrim\\.sorted\\.bam", "", sample_id)) %>%
   rename_with(function(x) paste0("amp_tile_", gsub(".*_", "", gsub("_INSERT$", "", x)), "_artic_", artic_primer_scheme), -sample_id)
 
 ```
@@ -386,7 +386,7 @@ slide_window_coverage <- coverage_fps %>%
   rename(position = "X2", map_per_position = "X3") %>%
   select(FileName, map_per_position, position) %>%
   mutate(sample_id = gsub(".*/", "", FileName),
-         sample_id = gsub("_S[0-9]*\\.depth\\.txt", "", sample_id)) %>%
+         sample_id = gsub("_S[0-9]*|\\.depth\\.txt", "", sample_id)) %>%
   select(-c(FileName)) %>%
   group_by(sample_id) %>%
   mutate(slide_window_100 = rollmean(map_per_position, k=100, fill = 0, align = 'right')) %>%
@@ -539,7 +539,7 @@ freyja <- freyja_fp %>%
   read_delim() %>%
   rename_all(.funs = function(x) paste0("freyja_", x)) %>%
   rename(sample_id = 1) %>%
-  mutate(sample_id = gsub("_S[0-9]*_variants.tsv", "", sample_id))
+  mutate(sample_id = gsub("_S[0-9]*|_variants.tsv", "", sample_id))
   
 ```
 
@@ -994,7 +994,7 @@ if(have_phi) {
 #check the fastq files to upload; should be 1 set here
 # fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
 #   data.frame(FileName = .) %>%
-#   mutate(sample_id = gsub(".*upload/fastq/|_S[0-9]*_filtered_R[12].fastq.gz$", "", FileName)) %>%
+#   mutate(sample_id = gsub(".*upload/fastq/|_S[0-9]*|_filtered_R[12].fastq.gz$", "", FileName)) %>%
 #   mutate(file = gsub(".*/", "", FileName)) %>%
 #   select(-FileName)
 # 

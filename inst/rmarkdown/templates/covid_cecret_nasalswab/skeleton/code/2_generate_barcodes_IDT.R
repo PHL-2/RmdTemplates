@@ -819,9 +819,9 @@ metadata_sheet %>%
   # when BCLConvert demultiplexes a NextSeq run, it will automatically reverse complement index2
   # results from the pipeline will refer to the reverse complement of index2, so this should be updated in the metadata sheet
   mutate(index2 = ifelse(instrument_type == "NextSeq1k2k", reverse_complement(index2), index2)) %>%
-  write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")), row.names = FALSE)
+  write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")))
 
 #contains PHI and accession numbers
 metadata_sheet %>%
   select(sample_id, any_of(phi_info)) %>%
-  write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")), row.names = FALSE)
+  write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")))
