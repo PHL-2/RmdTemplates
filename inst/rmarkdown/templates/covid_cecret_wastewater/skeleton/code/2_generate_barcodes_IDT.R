@@ -556,28 +556,34 @@ metadata_sheet <- metadata_sheet %>%
                                             sample_type == "Wastewater" ~ PHL_sample_received_date,
                                             TRUE ~ NA)) %>%
   mutate(organism = case_when(!(is.na(organism) | organism == "") ~ organism,
-                              sample_type == "Nasal swab" ~ "Severe acute respiratory syndrome coronavirus 2",
-                              #WW sample has to be listed as metagenome even if targeted sequencing was used
                               sample_type == "Wastewater" ~ "Wastewater metagenome",
                               !is.na(sample_type) ~ sample_type,
                               TRUE ~ NA)) %>%
   mutate(host_scientific_name = case_when(!(is.na(host_scientific_name) | host_scientific_name == "") ~ host_scientific_name,
-                                          sample_type == "Nasal swab" ~ "Homo sapiens",
                                           !is.na(sample_type) ~ "not applicable",
                                           TRUE ~ NA)) %>%
   mutate(host_disease = case_when(!(is.na(host_disease) | host_disease == "") ~ host_disease,
-                                  sample_type == "Nasal swab" ~ "COVID-19",
                                   !is.na(sample_type) ~ "not applicable",
                                   TRUE ~ NA)) %>%
   mutate(isolation_source = case_when(!(is.na(isolation_source) | isolation_source == "") ~ isolation_source,
-                                      sample_type == "Nasal swab" ~ "Clinical",
                                       sample_type == "Wastewater" ~ "Wastewater",
                                       grepl("control$", sample_type) ~ "Environmental",
                                       grepl("test", sample_type, ignore.case = TRUE) ~ "Test sample",
                                       TRUE ~ NA)) %>%
+  mutate(requester = case_when(!(is.na(requester) | requester == "") ~ requester,
+                               !is.na(sample_type) ~ "Jose Lojo",
+                               TRUE ~ NA)) %>%
+  mutate(requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
+                                     !is.na(sample_type) ~ "jose.lojo@phila.gov",
+                                     TRUE ~ NA)) %>%
   mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
-                                        TRUE ~ environmental_site))
+                                        TRUE ~ environmental_site)) %>%
+  mutate(sample_group = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ sample_type,
+                                        TRUE ~ gsub("^WW-|^Test", "", uniq_sample_name))) %>%
+  mutate(ww_group = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ sample_type,
+                              grepl("PBS|oldWW|ZeptoSC2", uniq_sample_name) ~ "Wastewater control",
+                              TRUE ~ "Wastewater sample"))
 
 main_sample_type <- unique(metadata_sheet$sample_type)[!grepl("control", unique(metadata_sheet$sample_type))]
 
@@ -590,20 +596,6 @@ if(length(main_sample_type) > 1) {
 
 sample_type_acronym <- case_when(main_sample_type == "Testing sample type" ~ "Test",
                                  main_sample_type == "Wastewater" ~ "WW")
-
-requester_var <- case_when(main_sample_type == "Testing sample type" ~ "Test Sample",
-                       main_sample_type == "Wastewater" ~ "Jose Lojo")
-
-requester_email_var <- case_when(main_sample_type == "Testing sample type" ~ "test@sample.com",
-                             main_sample_type == "Wastewater" ~ "jose.lojo@phila.gov")
-
-metadata_sheet <- metadata_sheet %>%
-  mutate(requester = case_when(!(is.na(requester) | requester == "") ~ requester,
-                               is.na(requester) ~ requester_var,
-                               TRUE ~ NA)) %>%
-  mutate(requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
-                                     is.na(requester_email) ~ requester_email_var,
-                                     TRUE ~ NA))
 
 if(is.na(sample_type_acronym)) {
   stop(simpleError("There's a new or misformatted sample type in the metadata sheet!"))
