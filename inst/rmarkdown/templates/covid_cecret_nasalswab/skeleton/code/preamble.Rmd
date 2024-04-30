@@ -533,13 +533,22 @@ nc_dl_v %>%
 
 ```{r load freyja results, eval = import_data}
 
-freyja_fp <- here("data", "processed_cecret", "freyja", "aggregated-freyja.tsv")
+freyja_fps <- list.files(here("data", "processed_cecret", "freyja"), pattern = "_demix.tsv", recursive = TRUE, full.names = TRUE)
 
-freyja <- freyja_fp %>%
-  read_delim() %>%
-  rename_all(.funs = function(x) paste0("freyja_", x)) %>%
-  rename(sample_id = 1) %>%
-  mutate(sample_id = gsub("_S[0-9]*|_variants.tsv", "", sample_id))
+freyja <- freyja_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_tsv(.$FileName,
+                col_names = c("col_names", "values"),
+                col_types = cols("col_names" = col_character(),
+                                 "values" = col_character()))) %>%
+  ungroup() %>%
+  filter(!is.na(col_names)) %>%
+  mutate(sample_id = gsub(".*/", "", FileName),
+         sample_id = gsub("_S[0-9]*|_demix.tsv", "", sample_id),
+         col_names = paste0("freyja_", col_names)) %>%
+  select(sample_id, col_names, values) %>%
+  pivot_wider(names_from = "col_names", values_from = "values")
   
 ```
 
@@ -1338,8 +1347,9 @@ freyja_grouping <- s %>%
          relative_abundances = list(freyja_abundances)) %>%
   separate_rows(c(lineages, relative_abundances), sep=" ") %>%
   mutate(lineages = gsub("\\([0-9]*\\)|-like", "", lineages),
-         lineages = ifelse((is.na(lineages) | lineages == "Misc" | relative_abundances == "nan"), "Unresolved", lineages),
-         relative_abundances = as.numeric(gsub("nan", "", relative_abundances)),
+         lineages = ifelse((is.na(lineages) | lineages == "Misc" | relative_abundances == "nan" | relative_abundances == "inf"),
+                           "Unresolved", lineages),
+         relative_abundances = as.numeric(gsub("nan|inf", "", relative_abundances)),
          main_lineage = gsub("\\..*", "", lineages)) %>%
   ungroup() %>%
   select(-c("freyja_lineages", "freyja_abundances")) %>%
