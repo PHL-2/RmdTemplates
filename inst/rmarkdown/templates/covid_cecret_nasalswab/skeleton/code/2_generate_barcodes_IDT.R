@@ -589,6 +589,11 @@ if(length(main_sample_type) > 1) {
   sample_type_acronym <- "Mix"
 }
 
+if(main_sample_type != "Nasal swab" | main_sample_type != "Testing sample type") {
+  stop(simpleError(paste0("The sample type included in the metadata sheet is not nasal swab or a test sample type!\n",
+                          "This may not be the appropriate workflow for this run!\n")))
+}
+
 sample_type_acronym <- case_when(main_sample_type == "Testing sample type" ~ "Test",
                                  main_sample_type == "Nasal swab" ~ "NS",
                                  main_sample_type == "Wastewater" ~ "WW")
