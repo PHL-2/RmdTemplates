@@ -536,8 +536,8 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^NC-" = "Water control",
                        "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
                        "^PC[0-9]*$" = "Mock DNA positive control",
-                       "^H[0-9]*$|^8[0-9]*$|^9[0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
-                       "^WW" = "Wastewater")
+                       "^[A-Z0-9][0-9]*$" = "Nasal swab",
+                       "^WW-" = "Wastewater")
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
@@ -571,11 +571,9 @@ metadata_sheet <- metadata_sheet %>%
                                       grepl("test", sample_type, ignore.case = TRUE) ~ "Test sample",
                                       TRUE ~ NA)) %>%
   mutate(requester = case_when(!(is.na(requester) | requester == "") ~ requester,
-                               !is.na(sample_type) ~ "Jose Lojo",
-                               TRUE ~ NA)) %>%
+                               TRUE ~ epi_name)) %>%
   mutate(requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
-                                     !is.na(sample_type) ~ "jose.lojo@phila.gov",
-                                     TRUE ~ NA)) %>%
+                                     TRUE ~ epi_email)) %>%
   mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
                                         TRUE ~ environmental_site)) %>%
@@ -592,6 +590,11 @@ if(length(main_sample_type) > 1) {
                           "You may need to separate the metadata sheet and use the appropriate workflow for these samples types:\n",
                           paste0(main_sample_type, collapse = ", "))))
   sample_type_acronym <- "Mix"
+}
+
+if(main_sample_type != "Wastewater" | main_sample_type != "Testing sample type") {
+  stop(simpleError(paste0("The sample type included in the metadata sheet is not wastewater or a test sample type!\n",
+                          "This may not be the appropriate workflow for this run!\n")))
 }
 
 sample_type_acronym <- case_when(main_sample_type == "Testing sample type" ~ "Test",
