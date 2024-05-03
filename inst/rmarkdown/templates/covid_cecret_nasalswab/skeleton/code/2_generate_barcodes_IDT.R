@@ -532,8 +532,8 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^NC-" = "Water control",
                        "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
                        "^PC[0-9]*$" = "Mock DNA positive control",
-                       "^H[0-9]*$|^8[0-9]*$|^9[0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
-                       "^WW" = "Wastewater")
+                       "^[A-Z0-9][0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
+                       "^WW-" = "Wastewater")
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
@@ -573,11 +573,9 @@ metadata_sheet <- metadata_sheet %>%
                                       grepl("test", sample_type, ignore.case = TRUE) ~ "Test sample",
                                       TRUE ~ NA)) %>%
   mutate(requester = case_when(!(is.na(requester) | requester == "") ~ requester,
-                               !is.na(sample_type) ~ "Jasmine Schell",
-                               TRUE ~ NA)) %>%
+                               TRUE ~ epi_name)) %>%
   mutate(requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
-                                     !is.na(sample_type) ~ "jasmine.schell@phila.gov",
-                                     TRUE ~ NA)) %>%
+                                     TRUE ~ epi_email)) %>%
   mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
                                         TRUE ~ environmental_site))
