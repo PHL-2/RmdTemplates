@@ -129,7 +129,7 @@ if(run_uploaded_2_basespace) {
 
   }
   if (nrow(bs_run) == 0) {
-    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace matching this pattern: ", intended_sequencing_folder_regex,
+    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace for this date: ", sequencing_date,
                             "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
                             "\nThe sequencer type could also be wrong: ", sequencer_type,
                             "\nOtherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
@@ -205,7 +205,7 @@ if(run_uploaded_2_basespace) {
 
   }
 
-} else if (!run_uploaded_2_basespace & !samplesheet_exists) {
+} else if (!run_uploaded_2_basespace) {
 
   #get the local run folder
   run_folder <- sequencing_folder_fp %>%
@@ -216,8 +216,11 @@ if(run_uploaded_2_basespace) {
     filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
     pull()
 
-  file.copy(file.path(run_folder, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
+  sequencing_run <- basename(run_folder)
 
+  if(!samplesheet_exists) {
+    file.copy(file.path(run_folder, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
+  }
 }
 
 run_samplesheet_fp <- here("metadata", "munge", "SampleSheet.csv")
@@ -475,18 +478,19 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
   #merge the metadata
   merge(PHL_TU_merge, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
-  mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date)))) %>%
-  select(sample_id, everything()) %>%
   arrange(plate, plate_col, plate_row) %>%
-  mutate(sequencing_date = sequencing_date) %>%
-  mutate(prj_descrip = prj_description) %>%
-  mutate(instrument_type = instrument_type) %>%
-  mutate(read_length = read_length) %>%
-  mutate(index_length = index_length) %>%
-  mutate(run_cd = run_cd) %>%
-  mutate(run_q30 = run_q30) %>%
-  mutate(run_pf = run_pf) %>%
-  mutate(run_error = run_error)
+  mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
+         uniq_sample_name = gsub("-Rep[0-9]*", "", sample_name),
+         sequencing_date = sequencing_date,
+         prj_descrip = prj_description,
+         instrument_type = instrument_type,
+         read_length = read_length,
+         index_length = index_length,
+         run_cd = run_cd,
+         run_q30 = run_q30,
+         run_pf = run_pf,
+         run_error = run_error) %>%
+  select(sample_id, everything())
 
 #####################################################################
 # Fill in these columns in the metadata sheet if they were left blank
@@ -532,8 +536,8 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^NC-" = "Water control",
                        "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
                        "^PC[0-9]*$" = "Mock DNA positive control",
-                       "^H[0-9]*$|^8[0-9]*$|^9[0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
-                       "^WW" = "Wastewater")
+                       "^[A-Z0-9][0-9]*$" = "Nasal swab",
+                       "^WW-" = "Wastewater")
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
@@ -541,7 +545,6 @@ metadata_sheet <- metadata_sheet %>%
                                  (is.na(sample_type) | sample_type == "") ~ multi_grep(named_sample_type, sample_name),
                                  TRUE ~ NA)) %>%
   mutate(sample_collected_by = case_when(!(is.na(sample_collected_by) | sample_collected_by == "") ~ sample_collected_by,
-                                         grepl("^8[0-9]*$|^9[0-9]*$", sample_name) ~ "Temple University",
                                          TRUE ~ "Philadelphia Department of Public Health")) %>%
   mutate(PHL_sample_received_date = case_when(!(is.na(PHL_sample_received_date) | as.character(PHL_sample_received_date) == "") ~ as.Date(PHL_sample_received_date),
                                               #if it's a wastewater sample without a date, throw an error
@@ -553,36 +556,32 @@ metadata_sheet <- metadata_sheet %>%
                                             sample_type == "Wastewater" ~ PHL_sample_received_date,
                                             TRUE ~ NA)) %>%
   mutate(organism = case_when(!(is.na(organism) | organism == "") ~ organism,
-                              sample_type == "Nasal swab" ~ "Severe acute respiratory syndrome coronavirus 2",
-                              #WW sample has to be listed as metagenome even if targeted sequencing was used
                               sample_type == "Wastewater" ~ "Wastewater metagenome",
                               !is.na(sample_type) ~ sample_type,
                               TRUE ~ NA)) %>%
   mutate(host_scientific_name = case_when(!(is.na(host_scientific_name) | host_scientific_name == "") ~ host_scientific_name,
-                                          sample_type == "Nasal swab" ~ "Homo sapiens",
                                           !is.na(sample_type) ~ "not applicable",
                                           TRUE ~ NA)) %>%
   mutate(host_disease = case_when(!(is.na(host_disease) | host_disease == "") ~ host_disease,
-                                  sample_type == "Nasal swab" ~ "COVID-19",
                                   !is.na(sample_type) ~ "not applicable",
                                   TRUE ~ NA)) %>%
   mutate(isolation_source = case_when(!(is.na(isolation_source) | isolation_source == "") ~ isolation_source,
-                                      sample_type == "Nasal swab" ~ "Clinical",
                                       sample_type == "Wastewater" ~ "Wastewater",
                                       grepl("control$", sample_type) ~ "Environmental",
                                       grepl("test", sample_type, ignore.case = TRUE) ~ "Test sample",
                                       TRUE ~ NA)) %>%
   mutate(requester = case_when(!(is.na(requester) | requester == "") ~ requester,
-                               sample_type == "Wastewater" ~ "Jose Lojo",
-                               !is.na(sample_type) ~ "Jasmine Schell",
-                               TRUE ~ NA)) %>%
+                               TRUE ~ epi_name)) %>%
   mutate(requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
-                                     sample_type == "Wastewater" ~ "jose.lojo@phila.gov",
-                                     !is.na(sample_type) ~ "jasmine.schell@phila.gov",
-                                     TRUE ~ NA)) %>%
+                                     TRUE ~ epi_email)) %>%
   mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
-                                        TRUE ~ environmental_site))
+                                        TRUE ~ environmental_site)) %>%
+  mutate(sample_group = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ sample_type,
+                                        TRUE ~ gsub("^WW-|^Test", "", uniq_sample_name))) %>%
+  mutate(ww_group = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ sample_type,
+                              grepl("PBS|oldWW|ZeptoSC2", uniq_sample_name) ~ "Wastewater control",
+                              TRUE ~ "Wastewater sample"))
 
 main_sample_type <- unique(metadata_sheet$sample_type)[!grepl("control", unique(metadata_sheet$sample_type))]
 
@@ -593,8 +592,12 @@ if(length(main_sample_type) > 1) {
   sample_type_acronym <- "Mix"
 }
 
+if(main_sample_type != "Wastewater" | main_sample_type != "Testing sample type") {
+  stop(simpleError(paste0("The sample type included in the metadata sheet is not wastewater or a test sample type!\n",
+                          "This may not be the appropriate workflow for this run!\n")))
+}
+
 sample_type_acronym <- case_when(main_sample_type == "Testing sample type" ~ "Test",
-                                 main_sample_type == "Nasal swab" ~ "NS",
                                  main_sample_type == "Wastewater" ~ "WW")
 
 if(is.na(sample_type_acronym)) {
@@ -811,17 +814,52 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 # Write sheet to metadata folder
 ################################
 
+merged_samples_metadata_sheet <- metadata_sheet %>%
+  select(-c(sample_id, index, index2,
+            starts_with("idt_"), starts_with("plate"), ends_with("_ID", ignore.case = FALSE))) %>%
+  filter(!sample_type %in%
+           c("Water control", "Reagent control", "Environmental control", "Mock DNA positive control")) %>%
+  group_by(uniq_sample_name) %>%
+  mutate(sample_counts = n()) %>%
+  ungroup() %>%
+  filter(sample_counts > 1) %>%
+  select(-c(sample_name, sample_counts)) %>%
+  unique() %>%
+  mutate(index = "TTTTTTTTTT",
+         index2 = "TTTTTTTTTT",
+         UDI_Index_ID = "UDP9999",
+         idt_set = "Merged",
+         idt_plate_row = rep(LETTERS[1:8], 12)[row_number()],
+         idt_plate_col = unlist(lapply(1:12, function (x) rep(x, 8)))[row_number()],
+         idt_plate_coord = paste0(idt_set, "_", idt_plate_row, idt_plate_col),
+         plate = 999,
+         plate_row = idt_plate_row,
+         plate_col = idt_plate_col,
+         plate_coord = paste0(plate, "_", plate_row, plate_col),
+         across(matches("_col$|coord$"), ~ str_replace_all(., "\\d+", function(m) sprintf("%02d", as.numeric(m)))),
+         sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
+         sample_name = paste0(uniq_sample_name, "-Merged"))
+
 #does not contain PHI and accession numbers
 metadata_sheet %>%
-  select(-c(I7_Index_ID, I5_Index_ID, any_of(phi_info))) %>%
+  select(-c(I7_Index_ID, I5_Index_ID)) %>%
   # NextSeq runs have index2 sequences in the reverse complement of the ones listed in the reference barcode sheet
   # however, the sample sheet used for demultiplexing needs to be the same orientation as the reference barcode sheet
   # when BCLConvert demultiplexes a NextSeq run, it will automatically reverse complement index2
   # results from the pipeline will refer to the reverse complement of index2, so this should be updated in the metadata sheet
   mutate(index2 = ifelse(instrument_type == "NextSeq1k2k", reverse_complement(index2), index2)) %>%
-  write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")), row.names = FALSE)
+  rbind(merged_samples_metadata_sheet) %>%
+  write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")))
 
-#contains PHI and accession numbers
+bclconvert_output_final_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sequencing_run, sep = "/")
+
+#write the sample sheet for merging nextflow script
 metadata_sheet %>%
-  select(sample_id, any_of(phi_info)) %>%
-  write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")), row.names = FALSE)
+  select(fastq = sample_id, uniq_sample_name) %>%
+  mutate(fastq_1 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R1_001.fastq.gz"),
+         fastq_2 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R2_001.fastq.gz")) %>%
+  merge(select(merged_samples_metadata_sheet, sample_id, uniq_sample_name), by = "uniq_sample_name", all = TRUE) %>%
+  filter(!is.na(sample_id)) %>%
+  select(sample_id, fastq_1, fastq_2) %>%
+  write_csv(file = here("metadata", "munge",
+                        tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_concat_fastq_samplesheet.csv", sep = "_"))))
