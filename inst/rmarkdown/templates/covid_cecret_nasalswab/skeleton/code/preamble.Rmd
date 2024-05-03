@@ -232,7 +232,7 @@ fastqc <- lapply(fastqc_fps, function(f) {
   rm(read_all)
   
   read_qc <- read_tsv(f, skip = line_start, n_max = line_end)
-  read_qc$sample_id <- gsub(".*/|_S[0-9]*.*_R[12].*", "", f)
+  read_qc$sample_id <- gsub(".*/|_S[0-9]*|_R[12].*", "", f)
   read_qc$direction <- gsub(".*(R[12]).*", "\\1", f)
   return(read_qc)
   }) %>%
@@ -261,7 +261,7 @@ actual_read_lengths <- lapply(fastqc_fps, function(f) {
   rm(read_all)
   
   read_in_lengths <- read_tsv(f, skip = line_start, n_max = line_end)
-  read_in_lengths$sample_id <- gsub(".*/|_S[0-9]*.*_R[12].*", "", f)
+  read_in_lengths$sample_id <- gsub(".*/|_S[0-9]*|_R[12].*", "", f)
   read_in_lengths$direction <- gsub(".*(R[12]).*", "\\1", f)
   return(read_in_lengths)
   }) %>%
@@ -295,7 +295,7 @@ samtools_stat <- lapply(samtools_stats_fps, function(f) {
   
   summary_numbers <- read_tsv(f, skip = line_start, n_max = line_end,
                               col_names = c("SN", "samtools_stat", "samtools_stat_val", "comments"))
-  summary_numbers$sample_id <- gsub(".*/|_S[0-9]*\\.stats\\.txt", "", f)
+  summary_numbers$sample_id <- gsub(".*/|_S[0-9]*|\\.stats\\.txt", "", f)
   return(summary_numbers)
   }) %>%
   do.call("rbind", .) %>%
@@ -325,14 +325,14 @@ mapped_read_lengths <- lapply(samtools_stats_fps, function(f) {
   
   #some samples may have 0 reads
   if(line_end == 0) {
-    read_lengths <- data.frame(sample_id = gsub(".*/|_S[0-9]*\\.stats\\.txt", "", f),
+    read_lengths <- data.frame(sample_id = gsub(".*/|_S[0-9]*|\\.stats\\.txt", "", f),
                                RL = "RL",
                                samtools_read_length = 0,
                                count = 0)
   } else {
     read_lengths <- read_tsv(f, skip = line_start, n_max = line_end,
                               col_names = c("RL", "samtools_read_length", "count"))
-    read_lengths$sample_id <- gsub(".*/|_S[0-9]*\\.stats\\.txt", "", f)
+    read_lengths$sample_id <- gsub(".*/|_S[0-9]*|\\.stats\\.txt", "", f)
   }
 
   return(read_lengths)
@@ -367,7 +367,7 @@ amplicon_depth <- amplicon_fps %>%
   ungroup() %>%
   select(-FileName) %>%
   rename(sample_id = "bam") %>%
-  mutate(sample_id = gsub("_S[0-9]*\\.primertrim\\.sorted\\.bam", "", sample_id)) %>%
+  mutate(sample_id = gsub("_S[0-9]*|\\.primertrim\\.sorted\\.bam", "", sample_id)) %>%
   rename_with(function(x) paste0("amp_tile_", gsub(".*_", "", gsub("_INSERT$", "", x)), "_artic_", artic_primer_scheme), -sample_id)
 
 ```
@@ -386,7 +386,7 @@ slide_window_coverage <- coverage_fps %>%
   rename(position = "X2", map_per_position = "X3") %>%
   select(FileName, map_per_position, position) %>%
   mutate(sample_id = gsub(".*/", "", FileName),
-         sample_id = gsub("_S[0-9]*\\.depth\\.txt", "", sample_id)) %>%
+         sample_id = gsub("_S[0-9]*|\\.depth\\.txt", "", sample_id)) %>%
   select(-c(FileName)) %>%
   group_by(sample_id) %>%
   mutate(slide_window_100 = rollmean(map_per_position, k=100, fill = 0, align = 'right')) %>%
@@ -533,13 +533,22 @@ nc_dl_v %>%
 
 ```{r load freyja results, eval = import_data}
 
-freyja_fp <- here("data", "processed_cecret", "freyja", "aggregated-freyja.tsv")
+freyja_fps <- list.files(here("data", "processed_cecret", "freyja"), pattern = "_demix.tsv", recursive = TRUE, full.names = TRUE)
 
-freyja <- freyja_fp %>%
-  read_delim() %>%
-  rename_all(.funs = function(x) paste0("freyja_", x)) %>%
-  rename(sample_id = 1) %>%
-  mutate(sample_id = gsub("_S[0-9]*_variants.tsv", "", sample_id))
+freyja <- freyja_fps %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_tsv(.$FileName,
+                col_names = c("col_names", "values"),
+                col_types = cols("col_names" = col_character(),
+                                 "values" = col_character()))) %>%
+  ungroup() %>%
+  filter(!is.na(col_names)) %>%
+  mutate(sample_id = gsub(".*/", "", FileName),
+         sample_id = gsub("_S[0-9]*|_demix.tsv", "", sample_id),
+         col_names = paste0("freyja_", col_names)) %>%
+  select(sample_id, col_names, values) %>%
+  pivot_wider(names_from = "col_names", values_from = "values")
   
 ```
 
@@ -581,7 +590,7 @@ cecret_software_select <- c("ivar", "bwa", "seqyclean", "Cecret version", "pango
 #pangolin data is included with this summary file
 cecret_aggregate <- here("data", "processed_cecret", "cecret_results.csv") %>%
   read_csv() %>%
-  select(-c(sample_id, samtools_meandepth_after_trimming, samtools_per_1X_coverage_after_trimming, fasta_line, freyja_summarized)) %>%
+  select(-c(sample_id, samtools_meandepth_after_trimming, samtools_per_1X_coverage_after_trimming, fasta_line)) %>%
   rename(sample_id = "sample", vadr_passfail = "vadr_p/f") %>%
   as.data.frame()
 
@@ -769,7 +778,7 @@ fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")
 
 ```
 
-```{r save fastq and fasta for upload, eval = import_data}
+```{r save fastq and fasta for upload, eval = FALSE}
 
 #get only the good quality samples to upload
 s_upload <- s_toPlot %>%
@@ -861,6 +870,8 @@ epi_report %>%
 
 ```{r export data to upload to NCBI}
 
+ec2_upload_fp <- paste0("~/seqsender_upload/", sequencing_date, "/")
+
 dir.create(here("upload", "seqsender"), recursive = TRUE)
 
 # Export the data for seqsender upload to sra, genbank, and gisaid
@@ -910,8 +921,8 @@ seqsender <- s_toPlot %>%
   mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "1930 South Broad Street Suite 37, Philadelphia, PA 19145 USA",
                                       orig_lab == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122 USA",
                                       TRUE ~ "Unknown")) %>%
-  mutate(sra_file_path_1 = here("upload", "fastq", paste0(sample_id, "_filtered_R1.fastq.gz")),
-         sra_file_path_2 = here("upload", "fastq", paste0(sample_id, "_filtered_R2.fastq.gz"))) %>%
+  mutate(sra_file_path_1 = paste0(ec2_upload_fp, sample_id, "_filtered_R1.fastq.gz"),
+         sra_file_path_2 = paste0(ec2_upload_fp, sample_id, "_filtered_R2.fastq.gz")) %>%
   mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC ", artic_primer_scheme,
                                      " primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length,
                                      " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
@@ -990,38 +1001,38 @@ if(have_phi) {
 }
 
 #check the fastq files to upload; should be 1 set here
-fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
-  data.frame(FileName = .) %>%
-  mutate(sample_id = gsub(".*upload/fastq/|_S[0-9]*_filtered_R[12].fastq.gz$", "", FileName)) %>%
-  mutate(file = gsub(".*/", "", FileName)) %>%
-  select(-FileName)
-
-fastq2_compare <- fastq_2_upload %>%
-  filter(grepl("_filtered_R1.fastq.gz", file))
-
-if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
-  stop (simpleError("Missing some fastq files!"))
-}
+# fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
+#   data.frame(FileName = .) %>%
+#   mutate(sample_id = gsub(".*upload/fastq/|_S[0-9]*|_filtered_R[12].fastq.gz$", "", FileName)) %>%
+#   mutate(file = gsub(".*/", "", FileName)) %>%
+#   select(-FileName)
+# 
+# fastq2_compare <- fastq_2_upload %>%
+#   filter(grepl("_filtered_R1.fastq.gz", file))
+# 
+# if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
+#   stop (simpleError("Missing some fastq files!"))
+# }
 
 #check the fasta files to upload; should be 1 set here
-fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
-  filter(grepl("^>", X1)) %>%
-  mutate(sample_id = gsub("^>|_S[0-9]*$", "", X1)) %>%
-  mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
-  select(-X1)
+# fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
+#   filter(grepl("^>", X1)) %>%
+#   mutate(sample_id = gsub("^>|_S[0-9]*$", "", X1)) %>%
+#   mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
+#   select(-X1)
 
-check_all <- all_sample_ids_from_seqsender %>%
-  rbind(fastq2_compare) %>%
-  rbind(fasta_samples)
+check_all <- all_sample_ids_from_seqsender# %>%
+  # rbind(fastq2_compare) %>%
+  # rbind(fasta_samples)
 
 if (have_phi) {
   check_all <- check_all %>%
     rbind(epi_report)
   
-  total_file_sets_2_count <- 6
+  total_file_sets_2_count <- 4
   
 } else {
-  total_file_sets_2_count <- 5
+  total_file_sets_2_count <- 3
   
 }
 
@@ -1336,11 +1347,13 @@ freyja_grouping <- s %>%
          relative_abundances = list(freyja_abundances)) %>%
   separate_rows(c(lineages, relative_abundances), sep=" ") %>%
   mutate(lineages = gsub("\\([0-9]*\\)|-like", "", lineages),
-         lineages = ifelse((is.na(lineages) | lineages == "Misc"), "Unresolved", lineages),
-         relative_abundances = as.numeric(relative_abundances),
+         lineages = ifelse((is.na(lineages) | lineages == "Misc" | relative_abundances == "nan" | relative_abundances == "inf"),
+                           "Unresolved", lineages),
+         relative_abundances = as.numeric(gsub("nan|inf", "", relative_abundances)),
          main_lineage = gsub("\\..*", "", lineages)) %>%
   ungroup() %>%
   select(-c("freyja_lineages", "freyja_abundances")) %>%
+  unique() %>%
   arrange(sample_id, relative_abundances, str_rank(lineages, numeric = TRUE)) %>%
   group_by(sample_id, main_lineage, relative_abundances) %>%
   #add an extra period to the end to help with matching lineages correctly
