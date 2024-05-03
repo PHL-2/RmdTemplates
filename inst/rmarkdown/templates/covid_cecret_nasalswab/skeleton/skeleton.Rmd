@@ -152,6 +152,8 @@ tryCatch(
 
 ```{r upload data if results look good, message=TRUE, include=FALSE, eval=FALSE}
 
+## THIS CHUNK NO LONGER WORKS. NEED TO SUBMIT DATA THROUGH AWS
+
 ### =============
 ### Manual inputs
 ### =============
