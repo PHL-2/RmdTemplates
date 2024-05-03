@@ -129,7 +129,7 @@ if(run_uploaded_2_basespace) {
 
   }
   if (nrow(bs_run) == 0) {
-    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace matching this pattern: ", intended_sequencing_folder_regex,
+    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace for this date: ", sequencing_date,
                             "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
                             "\nThe sequencer type could also be wrong: ", sequencer_type,
                             "\nOtherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
@@ -532,8 +532,8 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^NC-" = "Water control",
                        "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
                        "^PC[0-9]*$" = "Mock DNA positive control",
-                       "^H[0-9]*$|^8[0-9]*$|^9[0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
-                       "^WW" = "Wastewater")
+                       "^[A-Z0-9][0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
+                       "^WW-" = "Wastewater")
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
@@ -573,13 +573,9 @@ metadata_sheet <- metadata_sheet %>%
                                       grepl("test", sample_type, ignore.case = TRUE) ~ "Test sample",
                                       TRUE ~ NA)) %>%
   mutate(requester = case_when(!(is.na(requester) | requester == "") ~ requester,
-                               sample_type == "Wastewater" ~ "Jose Lojo",
-                               !is.na(sample_type) ~ "Jasmine Schell",
-                               TRUE ~ NA)) %>%
+                               TRUE ~ epi_name)) %>%
   mutate(requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
-                                     sample_type == "Wastewater" ~ "jose.lojo@phila.gov",
-                                     !is.na(sample_type) ~ "jasmine.schell@phila.gov",
-                                     TRUE ~ NA)) %>%
+                                     TRUE ~ epi_email)) %>%
   mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
                                         TRUE ~ environmental_site))
@@ -591,6 +587,11 @@ if(length(main_sample_type) > 1) {
                           "You may need to separate the metadata sheet and use the appropriate workflow for these samples types:\n",
                           paste0(main_sample_type, collapse = ", "))))
   sample_type_acronym <- "Mix"
+}
+
+if(main_sample_type != "Nasal swab" | main_sample_type != "Testing sample type") {
+  stop(simpleError(paste0("The sample type included in the metadata sheet is not nasal swab or a test sample type!\n",
+                          "This may not be the appropriate workflow for this run!\n")))
 }
 
 sample_type_acronym <- case_when(main_sample_type == "Testing sample type" ~ "Test",
@@ -819,9 +820,9 @@ metadata_sheet %>%
   # when BCLConvert demultiplexes a NextSeq run, it will automatically reverse complement index2
   # results from the pipeline will refer to the reverse complement of index2, so this should be updated in the metadata sheet
   mutate(index2 = ifelse(instrument_type == "NextSeq1k2k", reverse_complement(index2), index2)) %>%
-  write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")), row.names = FALSE)
+  write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")))
 
 #contains PHI and accession numbers
 metadata_sheet %>%
   select(sample_id, any_of(phi_info)) %>%
-  write.csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")), row.names = FALSE)
+  write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")))

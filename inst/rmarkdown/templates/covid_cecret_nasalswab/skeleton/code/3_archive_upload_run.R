@@ -102,7 +102,7 @@ if(run_uploaded_2_basespace) {
 
   }
   if (nrow(bs_run) == 0) {
-    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace matching this pattern: ", intended_sequencing_folder_regex,
+    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace for this date: ", sequencing_date,
                             "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
                             "\nThe sequencer type could also be wrong: ", sequencer_type,
                             "\nOtherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
@@ -232,8 +232,7 @@ nf_demux_samplesheet_fp <- here("metadata", "munge",
                                 tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, nfcore_demux_sample_sheet_pattern, sep = "_")))
 
 nf_demux_samplesheet %>%
-  write.csv(file = nf_demux_samplesheet_fp,
-            row.names = FALSE, quote = FALSE)
+  write_csv(file = nf_demux_samplesheet_fp)
 
 message("Uploading samplesheets to AWS S3")
 s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
@@ -259,8 +258,8 @@ submit_screen_job(message2display = "Uploading run to S3",
                                       s3_run_bucket_fp,
                                       "--recursive",
                                       "--exclude '*'",
-                                      paste0("--include '*", bclconvert_sample_sheet_pattern, "'"),
-                                      paste0("--include '*", nfcore_demux_sample_sheet_pattern, "'"),
+                                      paste0("--include '", sample_sheet_fn, "'"),
+                                      paste0("--include '", basename(nf_demux_samplesheet_fp), "'"),
                                       paste0("--include '", sequencing_run, ".md5'"),
                                       paste0("--include '", sequencing_run, ".tar.gz'"))
 )

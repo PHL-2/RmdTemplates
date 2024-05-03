@@ -1,4 +1,9 @@
+#############
+# People info
+#############
 bioinformatician_name <- "First Last, Degree"
+epi_name <- NA
+epi_email <- NA
 
 #################
 # AWS S3 settings
