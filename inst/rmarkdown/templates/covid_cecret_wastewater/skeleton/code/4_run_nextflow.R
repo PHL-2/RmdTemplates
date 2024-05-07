@@ -179,23 +179,23 @@ if(length(s3_cp_nf_concat_samplesheet) == 0) {
   run_in_terminal(paste("scp", nf_concat_samplesheet_fp,
                         paste0(ec2_hostname, ":", ec2_tmp_fp))
   )
+
+  # Upload concat fastq samplesheet
+  submit_screen_job(message2display = "Uploading samplesheet to S3",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = "upload-concat-samplesheet",
+                    command2run = paste("aws s3 cp",
+                                        ec2_tmp_fp,
+                                        paste0(bclconvert_output_path, "/nf_samplesheets/"),
+                                        "--recursive",
+                                        "--exclude '*'",
+                                        paste0("--include '", basename(nf_concat_samplesheet_fp), "'"))
+  )
+
+  check_screen_job(message2display = "Checking samplesheet upload job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = "upload-concat-samplesheet")
 }
-
-# Upload concat fastq samplesheet
-submit_screen_job(message2display = "Uploading samplesheet to S3",
-                  ec2_login = ec2_hostname,
-                  screen_session_name = "upload-concat-samplesheet",
-                  command2run = paste("aws s3 cp",
-                                      ec2_tmp_fp,
-                                      paste0(bclconvert_output_path, "/nf_samplesheets/"),
-                                      "--recursive",
-                                      "--exclude '*'",
-                                      paste0("--include '", basename(nf_concat_samplesheet_fp), "'"))
-)
-
-check_screen_job(message2display = "Checking samplesheet upload job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = "upload-concat-samplesheet")
 
 # Run nextflow merge fastq file pipeline
 run_in_terminal(paste("scp", file.path(dirname(here()), "aux_files", "nf_scripts", "concat_fastq.nf"),
