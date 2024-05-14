@@ -1064,7 +1064,7 @@ ann_geom_values <- list()
 # pick sample type colors for ggplot
 sample_type_color_select <- c(15, 19, 16, 13, 2, #colors for sequencing controls
                               11, 14, 12, #colors for wastewater controls
-                              1, 4, 9, #colors for wastewater samples
+                              1, 4, 3, #colors for wastewater samples
                               10, 7, 20, 17) #some additional colors
 
 sample_type_color_scheme <- c("#808080", "#000000",
@@ -1344,7 +1344,7 @@ for(sites in coverage_loop) {
 # this table groups the sublineages with the same parent lineages together and gets the sum of the abundances
 freyja_grouping <- s %>%
   as.data.frame() %>%
-  select(sample_id, ww_group, freyja_lineages, freyja_abundances) %>%
+  select(sample_id, sample_group, ww_group, freyja_lineages, freyja_abundances, pct_genome_coverage_over_10x) %>%
   group_by(sample_id) %>%
   mutate(lineages = list(freyja_lineages),
          relative_abundances = list(freyja_abundances)) %>%
@@ -1376,7 +1376,7 @@ freyja_grouping <- s %>%
                                       1, relative_abundances))
 
 freyja_matrix <- freyja_grouping %>%
-  complete(nesting(sample_id, ww_group), combined_lineage, fill = list(relative_abundances = 0)) %>%
+  complete(nesting(sample_id, sample_group), combined_lineage, fill = list(relative_abundances = 0)) %>%
   group_by(sample_id, combined_lineage) %>%
   summarize(relative_abundances = sum(relative_abundances)) %>%
   ungroup() %>%
@@ -1387,17 +1387,17 @@ freyja_matrix <- freyja_grouping %>%
 freyja_sample_type <- freyja_grouping %>%
   filter(sample_id %in% s_toPlot$sample_id) %>%
   droplevels() %>%
-  complete(nesting(sample_id, ww_group), nesting(combined_lineage, main_lineage), fill = list(relative_abundances = 0)) %>%
-  group_by(sample_id, ww_group, combined_lineage, main_lineage) %>%
+  complete(nesting(sample_id, sample_group), nesting(combined_lineage, main_lineage), fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, sample_group, combined_lineage, main_lineage) %>%
   summarize(relative_abundances = sum(relative_abundances)) %>%
   ungroup() %>%
   filter(!is.na(relative_abundances)) %>%
-  group_by(ww_group) %>%
+  group_by(sample_group) %>%
   mutate(total_samples = n_distinct(sample_id)) %>%
   ungroup() %>%
   # to calculate the total standard deviation of a combined distribution,
   # get the total variance and square root it
-  group_by(ww_group, combined_lineage, main_lineage) %>%
+  group_by(sample_group, combined_lineage, main_lineage) %>%
   mutate(avg_rel_abund = relative_abundances/total_samples,
          variance = var(avg_rel_abund)) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
@@ -1410,13 +1410,14 @@ freyja_sample_type <- freyja_grouping %>%
 
 dir.create(here("upload", "freyja"), recursive = TRUE)
 
+#add filter to remove low abundance lineages (<1%)
 freyja_sample_type %>%
   mutate(print_rel_abund = ifelse(!is.na(total_sd),
                                   paste0(round(avg_rel_abund*100, 2), "% +/- ",
                                          round(total_sd*100, 2), "%"),
                                   paste0(round(avg_rel_abund*100, 2), "%"))) %>%
   select(-c(total_sd, avg_rel_abund)) %>%
-  pivot_wider(names_from = "ww_group", values_from = "print_rel_abund", values_fill = "") %>%
+  pivot_wider(names_from = "sample_group", values_from = "print_rel_abund", values_fill = "") %>%
   filter(!is.na(combined_lineage)) %>%
   arrange(combined_lineage) %>%
   rename(Lineage = "combined_lineage") %>%

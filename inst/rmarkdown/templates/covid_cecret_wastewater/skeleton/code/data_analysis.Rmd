@@ -64,8 +64,8 @@ s %>%
   droplevels() %>%
   group_by(sample_group) %>%
   mutate(n = n(),
-         Good = ifelse(!isControl, as.character(n - sum(grepl("Poor", ww_group))), ""),
-         Poor = ifelse(!isControl, as.character(sum(grepl("Poor", ww_group))), ""),
+         Good = sum(pct_genome_coverage_over_10x >= 0.6, na.rm = TRUE),
+         Poor = n - Good,
          Merged = ifelse(!isControl, as.character(sum(grepl("Merged", ww_group))), "")) %>%
   ungroup() %>%
   select(sample_group, n, Good, Poor, Merged) %>%
@@ -835,280 +835,232 @@ knitr::include_graphics(
 
 \elandscape
 
-## Nextclade quality control
+## Freyja results
 
-### Coverage and QC status
+### Heatmap
 
-```{r nextclade coverage, fig.height=8, fig.width=7}
+Only top 3 lineage in each sample is shown. The rest are grouped into "Other lineages" \newline
+No freyja results or results assigned "Misc" are grouped into "Unresolved"
 
-s %>%
-  select(ww_group, median_coverage, pct_genome_coverage_over_10x, coverage_qc_status) %>%
-  filter(!is.na(median_coverage)) %>%
-  mutate(coverage_qc_status = factor(coverage_qc_status, levels = c("Good", "Poor"))) %>%
-  {
-  ggplot(., aes(x = coverage_qc_status, y = pct_genome_coverage_over_10x)) +
-    geom_hline(yintercept = 0.6, color = "grey", linetype = "dotted", lwd=0.75) +
-    geom_boxplot(outlier.alpha = 0) +
-    geom_point(aes(fill = median_coverage), shape = 21, position = position_jitter(), size = 3) +
-    scale_fill_viridis_c() +
-    scale_y_continuous(labels=percent) +
-    theme_classic() +
-    theme(
-      strip.background = element_rect(color = "white", size = 50)
-    ) +
-    labs(x="NextClade QC Status", y="Percentage of genome\nwith >= 30X coverage", fill = "Median\nCoverage (X)", shape = "Samples and Sites")
-  }
+```{r freyja heatmap, fig.height=11, fig.width=9}
 
-```
-
-\newpage
-
-### Nextclade QC score breakdown
-
-Nextclade uses an overall quality score to grade the assembled sequences based on various metrics. Each of these metrics are assigned a numeric score whereby a higher score indicates problematic sequencing quality and should be investigated further. The following figure displays the breakdown of the Nextclade QC scores used to calculate the overall score. \newline
-For more information, please visit: \newline https://docs.nextstrain.org/projects/nextclade/en/stable/user/algorithm/07-quality-control.html
-
-```{r nextclade scores}
-
-s %>%
-  select(sample_id, ww_group, nextclade_qc_overallstatus, nextclade_qc_overallscore, matches("^qc\\..*\\.score$")) %>%
-  pivot_longer(cols = matches("^qc\\..*\\.score$"), names_to = "Nextclade QC score", values_to = "qc_value") %>%
-  filter(!is.na(nextclade_qc_overallscore)) %>%
-  mutate(`Nextclade QC score` = gsub("^qc\\.|\\.score$", "", `Nextclade QC score`),
-         `Nextclade QC score` = factor(`Nextclade QC score`, levels = nextclade_qc_score_lvls),
-         qc_score_percent = ifelse(nextclade_qc_overallscore == 0, 0, qc_value^2/100/nextclade_qc_overallscore),
-         nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = c("good", "mediocre", "bad"))) %>%
-  order_on_other_col(sample_id, nextclade_qc_overallscore) %>%
-  {
-  ggplot(., aes(y = sample_id, x = qc_score_percent, fill = `Nextclade QC score`)) +
-    geom_col() +
-    facet_grid(nextclade_qc_overallstatus~., space = "free", scales = "free") +
-    scale_fill_manual(values = ann_geom_values$nc_qc_scores) +
-    scale_x_continuous(labels = percent, expand = c(0, 0)) +
-    scale_y_discrete(breaks = .$sample_id, labels = .$ww_group) +
-    theme_bw() +
-    theme(
-      strip.background = element_blank(),
-      strip.text.y = element_text(angle = 0),
-      panel.grid = element_blank(),
-      panel.border = element_rect(color = "black", fill = NA, size = 1),
-      plot.margin= margin(0, 0, 0, 0, "pt")
-      ) +
-    labs(y="", x="QC score percentage")
-  }
-
-```
-
-\newpage
-
-## Lineage Results
-
-### Variant assignments from Nextclade
-
-```{r variant assignments, fig.height=9, fig.width=7}
-
-s_toPlot %>%
-  select(sample_id, Nextclade_pango, ww_group, nextclade_clade_who) %>%
-  group_by(ww_group, nextclade_clade_who) %>%
-  mutate(fraction = 1/n()) %>%
-  ungroup() %>%
-  mutate(variants = fct_lump(Nextclade_pango, 20, w = fraction)) %>% 
-  select(-Nextclade_pango) %>%
-  group_by(ww_group, variants, nextclade_clade_who) %>%
-  summarize(props = sum(fraction)) %>%
-  ungroup() %>%
-  mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
-  droplevels() %>%
-  {
-  ggplot(., aes(x=ww_group, y=props, fill=variants)) +
-    geom_bar(stat="identity", position = position_fill(reverse = FALSE)) +
-    facet_grid(~ww_group+nextclade_clade_who, space = "free", scales="free",
-               labeller = labeller(.default = function(x) {gsub("$", "\n", x)}, .multi_line = TRUE)) +
-    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))]) +
-    scale_y_continuous(limits = c(0,1), expand=c(0,0), labels=percent) +
-    theme_classic() +
-    theme(
-      strip.background = element_rect(color = "white", size = 10),
-      strip.text = element_text(size = 12),
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank(),
-      plot.title = element_text(hjust = 0.5)
-      ) +
-    labs(x="", y="Relative abundance", title = "Sample type and\nVOC label", fill="Variants")
-  }
-
-```
-
-\newpage
-
-### Figure showing different USHER placements through Pangolin
-
-```{r multiple variant assignments, fig.height=9, fig.width=8}
-
-s_toPlot %>%
-  select(sample_id, pangolin_note, ww_group, nextclade_qc_overallstatus) %>%
-  #remove "Usher placements" text in the front of note and scorpio notes
-  mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
-  filter(pangolin_note != "Assigned from designation hash.") %>%
-  #split note into two variant columns by the space
-  separate(pangolin_note, into = c("variant1", "variant2"), sep = " ", extra = "merge") %>%
-  mutate(variant1_prop = gsub(".*\\(|\\)", "", variant1)) %>%
-  #if the notes say assigned, it means that PANGO software was used and found an exact match of the sequence to a representative lineage
-  mutate(variant1_prop = gsub("Assigned from designation hash.", "1", variant1_prop)) %>%
-  mutate(variant1_prop = unlist(lapply(variant1_prop, function(x) eval(parse(text=x))))) %>%
-  mutate(variant2_prop = gsub(".*\\(|\\)", "", variant2)) %>%
-  mutate(variant2_prop = unlist(lapply(variant2_prop, function(x) eval(parse(text=x))))) %>%
-  pivot_longer(cols = c("variant1_prop", "variant2_prop"), names_to = "variant_num", values_to = "props") %>%
-  mutate(variants = case_when(variant_num == "variant1_prop" ~ gsub("\\(.*", "", variant1),
-                             variant_num == "variant2_prop" ~ gsub("\\(.*", "", variant2),
-                             TRUE ~ NA_character_)) %>%
-  filter(!is.na(props)) %>%
-  mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
-  mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = c("good", "mediocre", "bad"))) %>%
-  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
-  droplevels() %>%
-  {
-  ggplot(., aes(x=props, y=sample_id, fill=variants)) +
-    geom_bar(stat="identity", position = position_fill(reverse = TRUE)) +
-    facet_grid(nextclade_qc_overallstatus+ww_group~., space="free", scales="free",
-               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
-    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))]) +
-    scale_x_continuous(limits = c(0,1), expand=c(0,0), labels=percent) +
-    theme_classic() +
-    theme(
-      strip.background = element_blank(),
-      strip.text.y = element_text(angle = 0, size = 6)
-      ) +
-    labs(y="", x="Relative abundance", fill="Variants")
-  }
-
-```
-
-\newpage
-
-### Figure showing conflicting variant assignments between Nextclade, Pangolin, and Freyja
-Stars in boxes mean that the variants/sub-variants from different software agree \newline
-Only the top Freyja result for each sample was used here \newline
-White boxes indicate variants that are not assigned a color
-
-```{r conflicting assignments, fig.height=9, fig.width=8}
+other_lineage_fct_lvl <- c("Other lineages", "Unresolved")
 
 freyja_grouping %>%
-  select(sample_id, ww_group, lineages, relative_abundances) %>%
-  group_by(sample_id) %>%
-  filter(relative_abundances == max(relative_abundances)) %>%
-  slice(1) %>%
+  group_by(sample_id, ww_group, combined_lineage) %>%
+  summarize(relative_abundances = sum(relative_abundances)) %>%
+  mutate(combined_lineage = gsub("\\.$", "", combined_lineage),
+         combined_lineage = fct_lump_n(combined_lineage, n = 3, w = relative_abundances, other_level = "Other lineages")) %>%
   ungroup() %>%
-  mutate(lineages = gsub("\\.$", "", lineages)) %>%
-  merge(select(s_toPlot, sample_id, pangolin_lineage, Nextclade_pango, ww_group, coverage_qc_status), by = c("sample_id", "ww_group"), all.y = TRUE) %>%
-  rename(Pangolin = "pangolin_lineage", NextClade = "Nextclade_pango", Freyja = "lineages") %>%
-  rowwise() %>%
-  mutate(pn = grepl(Pangolin, NextClade) | grepl(NextClade, Pangolin)) %>%
-  mutate(nf = grepl(NextClade, Freyja) | grepl(Freyja, NextClade)) %>%
-  mutate(fp = grepl(Freyja, Pangolin) | grepl(Pangolin, Freyja)) %>%
-  mutate(across(c(pn, nf, fp), ~ replace_na(., FALSE))) %>%
-  pivot_longer(cols = c("Pangolin", "NextClade", "Freyja"), names_to = "software", values_to = "variants") %>%
-  mutate(uniq = case_when((pn + nf + fp) == 3 & grepl("Pangolin|NextClade|Freyja", software) ~ "***",
-                          pn & grepl("Pangolin|NextClade", software) ~ "*",
-                          nf & grepl("NextClade|Freyja", software) ~ "*",
-                          fp & grepl("Freyja|Pangolin", software) ~ "*",
-                          TRUE ~ "")) %>%
-  mutate(software = factor(software, levels = c("NextClade", "Pangolin", "Freyja"))) %>%
-  mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
-  mutate(coverage_qc_status = factor(coverage_qc_status, levels = c("Good", "Poor"))) %>%
-  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
-  droplevels() %>%
+  complete(nesting(sample_id, ww_group), combined_lineage, fill = list(relative_abundances = NA)) %>%
+  mutate(combined_lineage = factor(combined_lineage,
+                                   levels = rev(c(str_sort(levels(combined_lineage)[!levels(combined_lineage) %in% other_lineage_fct_lvl], numeric = TRUE),
+                                              other_lineage_fct_lvl)))) %>%
+  ungroup() %>%
+  group_by(sample_id, ww_group, combined_lineage) %>%
+  summarise(relative_abundances = sum(relative_abundances)) %>%
+  ungroup() %>%
   {
-  ggplot(., aes(x=software, y=sample_id, fill=variants, label=uniq)) +
-    geom_tile(stat="identity") +
-    geom_text() +
-    facet_grid(coverage_qc_status+ww_group~., space="free", scales="free",
-               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
-    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))],
-                      na.value = "white") +
+    ggplot(., aes(y = combined_lineage, x = sample_id, fill = relative_abundances)) +
+    geom_tile(color = "black") +
+    coord_fixed() +
+    scale_fill_gradientn(colors = rev(brewer.pal(11, "Spectral")),
+                         labels = percent,
+                         limits = c(0, 1)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.text.y.left = element_text(color = ifelse(grepl("^A$|^A\\.|^B$|^B\\.", levels(.$combined_lineage)), "red",
+                                                  ifelse(grepl("^Unresolved$|^Other lineages$", levels(.$combined_lineage)), "blue", "black")),
+                                          size = 5),
+          axis.ticks.x.bottom = element_blank(),
+          axis.text.x.bottom = element_blank(),
+          axis.title.x.bottom = element_blank(),
+          plot.margin= margin(0, 0, 0, 0, "pt")
+          ) +
+    labs(x = "", y = "", fill = "Relative\nProportion",
+         title = "Only the top 3 lineages within each sample are shown")
+  } /
+  sample_group_legend + 
+    theme(axis.text.x.bottom = element_text(size = convert_sample_size_2_font_size(nrow(s), max_font = 8)))
+
+```
+
+\newpage
+
+### Shannon diversity based on Freyja results
+
+The Shannon diversity index shows the diversity within a sample based on the number of lineages identified and is weighted by abundance. Higher numbers mean greater "eveness" (e.g. one hugely abundant lineage and 9 scarce ones has a lower Shannon value than 10 equally abundant lineages)
+
+```{r shannon diversity}
+
+freyja_matrix %>% 
+  diversity %>%
+  merge(s, by.x = "row.names", by.y = "sample_id", all.x = TRUE) %>%
+  rename(`Shannon diversity` = x) %>%
+  droplevels() %>%
+  ggplot(aes(x=`Shannon diversity`, y=sample_name, fill = ww_group)) +
+    geom_col() +
+    facet_grid(sample_group~., scales = "free", space = "free") +
+    scale_x_continuous(labels = label_number()) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    theme(panel.grid = element_blank(),
+          strip.text.y.right = element_text(angle = 0)) +
+    labs(
+      x="Shannon diversity",
+      y="", fill = "Samples and Sites"
+    )
+
+```
+
+\newpage
+
+### PCoA plot
+
+Differences between samples were calculated using the Bray-Curtis dissimilarity, a statistic used to quantify the compositional distinctiveness between two different samples. The Bray–Curtis dissimilarity is bounded between 0 and 1, where 0 means the two samples have the same composition (that is they share all the species), and 1 means the two samples do not share any species \newline
+
+A PCoA (Principal Coordinates Analysis) plot then attempts to summarize and represent the dissimilarity between all samples in a reduced dimensional plane
+
+```{r bray curtis pcoa}
+
+bc <- vegdist(freyja_matrix)
+pc <- pcoa(bc)
+pct <- round(pc$values$Relative_eig * 100)
+
+s %>%
+  filter(!isControl) %>%
+  merge(pc$vectors[, 1:3], by.x="sample_id", by.y="row.names") %>%
+  {
+  ggplot(., aes(x=Axis.1, y=Axis.2)) +
+    geom_point(aes(fill = ww_group), size = 3, shape=21) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
+    facet_wrap(~sample_group) +
+    #stat_ellipse(mapping = aes(x=Axis.1, y=Axis.2, color = sample_group), inherit.aes = FALSE) +
+    #scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() +
+    theme(
+      axis.text=element_blank(),
+      axis.ticks=element_blank(),
+      panel.grid = element_blank(), 
+      aspect.ratio = 1,
+      strip.background = element_blank()
+    ) + 
+    labs(x=paste0("PCoA axis 1 (", pct[1], "%)"), 
+         y=paste0("PCoA axis 2 (", pct[2], "%)"),
+         color="Samples and Sites", fill = "Samples and Sites", shape="Samples and Sites",
+         title="Bray Curtis PCoA")
+  }
+
+```
+
+\newpage
+
+### Freyja grouped by sample type
+
+Relative lineage abundances within each sample type
+
+```{r freyja results grouped, fig.height=10, fig.width=8}
+
+freyja_sample_type %>%
+  {
+  ggplot(., aes(x = sample_group, y = avg_rel_abund, fill = combined_lineage)) +
+    geom_col() +
+    scale_fill_manual(values = 
+                        c(colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$combined_lineage))-2),
+                          "#808080", "#000000")) +
+    scale_y_continuous(labels = percent, expand=c(0,0), limits = c(0, 1)) +
     theme_classic() +
-    theme(
-      strip.background = element_blank(),
-      strip.text.y = element_text(angle = 0, size = 6),
-      axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)
-      ) +
-    labs(y="", x="Software used to determine variants", fill="Variants")
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.ticks.x.bottom = element_blank(),
+          axis.text.x.bottom = element_text(angle = -30, hjust = 0)
+          ) +
+    labs(x = "", y = "Relative proportions", fill = "Variants")
   }
 
 ```
 
-### Plateview of results
+### Freyja table by sample type
 
-```{r coverage qc plate, fig.width=9, fig.height=12}
+Relative lineage abundances within each sample type. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample type and getting the square root \newline
+Only lineages with abundance >0.01% in at least one sample type are kept
 
-empty_plate %>%
-  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
-  mutate(ww_group = gsub(" - Poor|Mock DNA ", "", ww_group)) %>%
-  mutate(ww_group = gsub(" |-", "\n", ww_group)) %>%
-  mutate(ww_group = gsub("Environmental", "Environ", ww_group)) %>%
-  filter(!is.na(plate_coord)) %>%
-  mutate(plate = paste("Plate", plate)) %>%
-  mutate(plate_col = as.numeric(plate_col)) %>%
-  droplevels() %>%
-  mutate(coverage_qc_status = factor(coverage_qc_status, levels = c("Good", "Poor"))) %>%
-  {
-  ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = coverage_qc_status, label = ww_group)) +
-    geom_tile(fill = "white") +
-    geom_point(shape = 21, size = 18) +
-    geom_text(check_overlap = TRUE, size = 2, color = "black") +
-    scale_fill_manual(values = ann_geom_values$coverage_qc_status) +
-    facet_wrap(~plate, ncol = 1) +
-    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
-    theme_bw() +
-    theme(
-      strip.background = element_blank(),
-      strip.placement = "outside",
-      panel.grid = element_blank(),
-      legend.position = "bottom",
-      aspect.ratio = 0.66
-    ) +
-    labs(
-      x="",
-      y="Plate row",
-      fill = "Coverage status (>60% at 10X)",
-    ) +
-    guides(fill = guide_legend(override.aes = list(size = 8)))  
+```{r freyja table, fig.height=11, fig.width=8}
+
+freyja_table_delim <- freyja_sample_type %>%
+  select(combined_lineage, main_lineage) %>%
+  unique() %>%
+  group_by(main_lineage) %>%
+  summarize(total_lineage = n()) %>%
+  ungroup() %>%
+  mutate(line_position = cumsum(total_lineage)) %>%
+  select(line_position) %>%
+  pull()
+
+freyja_sample_type %>%
+  mutate(print_rel_abund = ifelse(!is.na(total_sd),
+                                  paste0(round(avg_rel_abund*100, 2), "% +/- ",
+                                         round(total_sd*100, 2), "%"),
+                                  paste0(round(avg_rel_abund*100, 2), "%"))) %>%
+  select(-c(total_sd, avg_rel_abund)) %>%
+  pivot_wider(names_from = "ww_group", values_from = "print_rel_abund", values_fill = "") %>%
+  filter(!is.na(combined_lineage)) %>%
+  arrange(combined_lineage) %>%
+  rename(Lineage = "combined_lineage") %>%
+  select(-main_lineage) %>%
+  { if(use_kable)
+    mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
+      select_all(~gsub(" ", "\n", .)) %>%
+      select_all(~gsub("_", "\\\\_", .)) %>%
+      kable("latex", longtable = T, digits=2, booktabs=T, escape=F, col.names = linebreak(colnames(.), align = "l")) %>%
+      kable_styling(latex_options = c("repeat_header", "HOLD_position"), font_size = 10) %>%
+      row_spec(0, bold = T, color="#7C0A02") %>%
+      row_spec(freyja_table_delim[1:length(freyja_table_delim)-1], hline_after = T)
+    else
+      pander(.)
   }
 
 ```
 
-```{r nextclade pangolin plate, fig.width=9, fig.height=12}
+\newpage
 
-empty_plate %>%
-  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
-  filter(!is.na(plate_coord)) %>%
-  mutate(Nextclade_pango = factor(Nextclade_pango, levels = names(ann_geom_values$variants))) %>%
-  mutate(plate = paste("Plate", plate)) %>%
-  mutate(plate_col = as.numeric(plate_col)) %>%
-  droplevels() %>%
+### Freyja summarized
+
+Relative abundances of the summarized results by Freyja within each sample
+
+```{r freyja results summarized, fig.height=10, fig.width=8}
+
+s %>%
+  select(sample_id, ww_group, freyja_summarized) %>%
+  mutate(freyja_summarized = gsub("\\[\\(|\\)\\]", "", freyja_summarized)) %>%
+  group_by(sample_id) %>%
+  mutate(summarized_lineages = list(freyja_summarized)) %>%
+  separate_longer_delim(summarized_lineages, delim = "), (") %>%
+  mutate(summarized_lineages = ifelse(summarized_lineages == "[]", NA, summarized_lineages)) %>%
+  separate_wider_delim(summarized_lineages,
+                       delim = ", ",
+                       names = c("summarized_lineages", "relative_abundances")) %>%
+  mutate(summarized_lineages = gsub("'", "", summarized_lineages),
+         relative_abundances = as.numeric(relative_abundances)) %>%
+  ungroup() %>%
+  mutate(summarized_lineages = factor(summarized_lineages,
+                                   levels = str_sort(unique(summarized_lineages), numeric = TRUE))) %>%
   {
-  ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = Nextclade_pango, label = Nextclade_pango)) +
-    geom_tile(fill = "white") +
-    geom_point(shape = 21, size = 18) +
-    geom_text(check_overlap = TRUE, size = 4, color = "white") +
-    facet_wrap(~plate, ncol = 1) +
-    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$Nextclade_pango), names(ann_geom_values$variants))]) +
-    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
-    theme_bw() +
-    theme(
-      strip.background = element_blank(),
-      strip.placement = "outside",
-      panel.grid = element_blank(),
-      legend.position = "bottom",
-      aspect.ratio = 0.66
-    ) +
-    labs(
-      x="",
-      y="Plate row",
-      fill = "Variants"
-    ) +
-    guides(fill = guide_legend(override.aes = list(size = 8)))  
-  }
+  ggplot(., aes(x = sample_id, y = relative_abundances, fill = summarized_lineages)) +
+    geom_col() +
+    scale_fill_manual(values = colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$summarized_lineages)))) +
+    scale_y_continuous(labels = percent, expand=c(0,0)) +
+    theme_classic() +
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.ticks.x.bottom = element_blank(),
+          axis.text.x.bottom = element_blank()
+          ) +
+    labs(x = "", y = "Relative proportions", fill = "Variants")
+  } /
+  sample_group_legend + 
+    theme(axis.text.x.bottom = element_text(size = convert_sample_size_2_font_size(nrow(s), max_font = 8)))
 
 ```
 
@@ -1376,229 +1328,201 @@ snp_dist_reorder %>%
 
 \newpage
 
-## Freyja results
 
-### Heatmap
+## Nextclade quality control
 
-Only top 3 lineage in each sample is shown. The rest are grouped into "Other lineages" \newline
-No freyja results or results assigned "Misc" are grouped into "Unresolved"
+### Coverage and QC status
 
-```{r freyja heatmap, fig.height=11, fig.width=9}
-
-other_lineage_fct_lvl <- c("Other lineages", "Unresolved")
-
-freyja_grouping %>%
-  group_by(sample_id, ww_group, combined_lineage) %>%
-  summarize(relative_abundances = sum(relative_abundances)) %>%
-  mutate(combined_lineage = gsub("\\.$", "", combined_lineage),
-         combined_lineage = fct_lump_n(combined_lineage, n = 3, w = relative_abundances, other_level = "Other lineages")) %>%
-  ungroup() %>%
-  complete(nesting(sample_id, ww_group), combined_lineage, fill = list(relative_abundances = NA)) %>%
-  mutate(combined_lineage = factor(combined_lineage,
-                                   levels = rev(c(str_sort(levels(combined_lineage)[!levels(combined_lineage) %in% other_lineage_fct_lvl], numeric = TRUE),
-                                              other_lineage_fct_lvl)))) %>%
-  ungroup() %>%
-  group_by(sample_id, ww_group, combined_lineage) %>%
-  summarise(relative_abundances = sum(relative_abundances)) %>%
-  ungroup() %>%
-  {
-    ggplot(., aes(y = combined_lineage, x = sample_id, fill = relative_abundances)) +
-    geom_tile(color = "black") +
-    coord_fixed() +
-    scale_fill_gradientn(colors = rev(brewer.pal(11, "Spectral")),
-                         labels = percent,
-                         limits = c(0, 1)) +
-    theme_bw() +
-    theme(panel.grid = element_blank(),
-          panel.border = element_blank(),
-          axis.text.y.left = element_text(color = ifelse(grepl("^A$|^A\\.|^B$|^B\\.", levels(.$combined_lineage)), "red",
-                                                  ifelse(grepl("^Unresolved$|^Other lineages$", levels(.$combined_lineage)), "blue", "black")),
-                                          size = 5),
-          axis.ticks.x.bottom = element_blank(),
-          axis.text.x.bottom = element_blank(),
-          axis.title.x.bottom = element_blank(),
-          plot.margin= margin(0, 0, 0, 0, "pt")
-          ) +
-    labs(x = "", y = "", fill = "Relative\nProportion",
-         title = "Only the top 3 lineages within each sample are shown")
-  } /
-  sample_group_legend + 
-    theme(axis.text.x.bottom = element_text(size = convert_sample_size_2_font_size(nrow(s), max_font = 8)))
-
-```
-
-\newpage
-
-### Shannon diversity based on Freyja results
-
-The Shannon diversity index shows the diversity within a sample based on the number of lineages identified and is weighted by abundance. Higher numbers mean greater "eveness" (e.g. one hugely abundant lineage and 9 scarce ones has a lower Shannon value than 10 equally abundant lineages)
-
-```{r shannon diversity}
-
-freyja_matrix %>% 
-  diversity %>%
-  merge(s, by.x = "row.names", by.y = "sample_id", all.x = TRUE) %>%
-  rename(`Shannon diversity` = x) %>%
-  ggplot(aes(y=`Shannon diversity`, x=ww_group, fill = ww_group)) +
-    geom_boxplot(outlier.alpha = 0) +
-    geom_point(size = 2, shape = 21, position = position_jitter(width = 0.2)) +
-    scale_y_continuous(labels = number_format(accuracy = 1)) +
-    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
-    theme_bw() + 
-    theme(panel.grid = element_blank(),
-          axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)) +
-    labs(
-      y="Shannon diversity",
-      x="", fill = "Samples and Sites", size = "Samples and Sites"
-    )
-
-```
-
-\newpage
-
-### PCoA plot
-
-Differences between samples were calculated using the Bray-Curtis dissimilarity, a statistic used to quantify the compositional distinctiveness between two different samples. The Bray–Curtis dissimilarity is bounded between 0 and 1, where 0 means the two samples have the same composition (that is they share all the species), and 1 means the two samples do not share any species \newline
-
-A PCoA (Principal Coordinates Analysis) plot then attempts to summarize and represent the dissimilarity between all samples in a reduced dimensional plane
-
-```{r bray curtis pcoa}
-
-bc <- vegdist(freyja_matrix)
-pc <- pcoa(bc)
-pct <- round(pc$values$Relative_eig * 100)
+```{r nextclade coverage, fig.height=8, fig.width=7}
 
 s %>%
-  merge(pc$vectors[, 1:3], by.x="sample_id", by.y="row.names") %>%
+  select(median_coverage, pct_genome_coverage_over_10x, coverage_qc_status, nextclade_qc_overallstatus) %>%
+  filter(!is.na(median_coverage)) %>%
+  mutate(coverage_qc_status = factor(coverage_qc_status, levels = c("Good", "Poor"))) %>%
+  mutate(nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus,
+                                             levels = c("good", "mediocre", "bad"))) %>%
   {
-  ggplot(., aes(x=Axis.1, y=Axis.2)) +
-    geom_point(aes(fill = ww_group), size = 3, shape=21) +
-    stat_ellipse(mapping = aes(x=Axis.1, y=Axis.2, color = ww_group), inherit.aes = FALSE) +
-    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
-    scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
+  ggplot(., aes(x = nextclade_qc_overallstatus, y = pct_genome_coverage_over_10x)) +
+    geom_hline(yintercept = 0.6, color = "grey", linetype = "dotted", lwd=0.75) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_point(aes(fill = median_coverage, shape = coverage_qc_status), position = position_jitter(), size = 3) +
+    scale_shape_manual(values = setNames(c(21, 22), c("Good", "Poor"))) +
+    scale_fill_viridis_c() +
+    scale_y_continuous(labels=percent) +
+    theme_classic() +
+    theme(
+      strip.background = element_rect(color = "white", size = 50)
+    ) +
+    labs(x="Nextclade QC Status", y="Percentage of genome\nwith >= 10X coverage", fill = "Median\nCoverage (X)", shape = "60% coverage at 10X")
+  }
+
+```
+
+\newpage
+
+### Nextclade QC score breakdown
+
+Nextclade uses an overall quality score to grade the assembled sequences based on various metrics. Each of these metrics are assigned a numeric score whereby a higher score indicates problematic sequencing quality and should be investigated further. The following figure displays the breakdown of the Nextclade QC scores used to calculate the overall score. \newline
+For more information, please visit: \newline https://docs.nextstrain.org/projects/nextclade/en/stable/user/algorithm/07-quality-control.html
+
+```{r nextclade scores}
+
+s %>%
+  select(sample_id, sample_group, nextclade_qc_overallstatus, nextclade_qc_overallscore, matches("^qc\\..*\\.score$")) %>%
+  pivot_longer(cols = matches("^qc\\..*\\.score$"), names_to = "Nextclade QC score", values_to = "qc_value") %>%
+  filter(!is.na(nextclade_qc_overallscore)) %>%
+  mutate(`Nextclade QC score` = gsub("^qc\\.|\\.score$", "", `Nextclade QC score`),
+         `Nextclade QC score` = factor(`Nextclade QC score`, levels = nextclade_qc_score_lvls),
+         qc_score_percent = ifelse(nextclade_qc_overallscore == 0, 0, qc_value^2/100/nextclade_qc_overallscore),
+         nextclade_qc_overallstatus = factor(nextclade_qc_overallstatus, levels = c("good", "mediocre", "bad"))) %>%
+  order_on_other_col(sample_id, nextclade_qc_overallscore) %>%
+  {
+  ggplot(., aes(y = sample_id, x = qc_score_percent, fill = `Nextclade QC score`)) +
+    geom_col() +
+    facet_grid(nextclade_qc_overallstatus~., space = "free", scales = "free") +
+    scale_fill_manual(values = ann_geom_values$nc_qc_scores) +
+    scale_x_continuous(labels = percent, expand = c(0, 0)) +
+    scale_y_discrete(breaks = .$sample_id, labels = .$sample_group) +
     theme_bw() +
     theme(
-      axis.text=element_blank(),
-      axis.ticks=element_blank(),
-      panel.grid = element_blank(), 
-      aspect.ratio = 1,
-      strip.background = element_blank()
-    ) + 
-    labs(x=paste0("PCoA axis 1 (", pct[1], "%)"), 
-         y=paste0("PCoA axis 2 (", pct[2], "%)"),
-         color="Samples and Sites", fill = "Samples and Sites", shape="Samples and Sites",
-         title="Bray Curtis PCoA")
+      strip.background = element_blank(),
+      strip.text.y = element_text(angle = 0),
+      panel.grid = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 1),
+      plot.margin= margin(0, 0, 0, 0, "pt")
+      ) +
+    labs(y="", x="QC score percentage")
   }
 
 ```
 
 \newpage
 
-### Freyja grouped by sample type
+## Lineage Results
 
-Relative lineage abundances within each sample type
+### Figure showing conflicting variant assignments between Nextclade, Pangolin, and Freyja
+Stars in boxes mean that the variants/sub-variants from different software agree \newline
+Only the top Freyja result for each sample was used here \newline
+White boxes indicate variants that are not assigned a color
 
-```{r freyja results grouped, fig.height=10, fig.width=8}
+```{r conflicting assignments, fig.height=9, fig.width=8}
 
-freyja_sample_type %>%
-  {
-  ggplot(., aes(x = ww_group, y = avg_rel_abund, fill = combined_lineage)) +
-    geom_col() +
-    scale_fill_manual(values = 
-                        c(colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$combined_lineage))-2),
-                          "#808080", "#000000")) +
-    scale_y_continuous(labels = percent, expand=c(0,0), limits = c(0, 1)) +
-    theme_classic() +
-    theme(panel.grid = element_blank(),
-          panel.border = element_blank(),
-          axis.ticks.x.bottom = element_blank(),
-          axis.text.x.bottom = element_text(angle = -30, hjust = 0)
-          ) +
-    labs(x = "", y = "Relative proportions", fill = "Variants")
-  }
-
-```
-
-### Freyja table by sample type
-
-Relative lineage abundances within each sample type. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample type and getting the square root \newline
-Only lineages with abundance >0.01% in at least one sample type are kept
-
-```{r freyja table, fig.height=11, fig.width=8}
-
-freyja_table_delim <- freyja_sample_type %>%
-  select(combined_lineage, main_lineage) %>%
-  unique() %>%
-  group_by(main_lineage) %>%
-  summarize(total_lineage = n()) %>%
-  ungroup() %>%
-  mutate(line_position = cumsum(total_lineage)) %>%
-  select(line_position) %>%
-  pull()
-
-freyja_sample_type %>%
-  mutate(print_rel_abund = ifelse(!is.na(total_sd),
-                                  paste0(round(avg_rel_abund*100, 2), "% +/- ",
-                                         round(total_sd*100, 2), "%"),
-                                  paste0(round(avg_rel_abund*100, 2), "%"))) %>%
-  select(-c(total_sd, avg_rel_abund)) %>%
-  pivot_wider(names_from = "ww_group", values_from = "print_rel_abund", values_fill = "") %>%
-  filter(!is.na(combined_lineage)) %>%
-  arrange(combined_lineage) %>%
-  rename(Lineage = "combined_lineage") %>%
-  select(-main_lineage) %>%
-  { if(use_kable)
-    mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
-      select_all(~gsub(" ", "\n", .)) %>%
-      select_all(~gsub("_", "\\\\_", .)) %>%
-      kable("latex", longtable = T, digits=2, booktabs=T, escape=F, col.names = linebreak(colnames(.), align = "l")) %>%
-      kable_styling(latex_options = c("repeat_header", "HOLD_position"), font_size = 10) %>%
-      row_spec(0, bold = T, color="#7C0A02") %>%
-      row_spec(freyja_table_delim[1:length(freyja_table_delim)-1], hline_after = T)
-    else
-      pander(.)
-  }
-
-```
-
-\newpage
-
-### Freyja summarized
-
-Relative abundances of the summarized results by Freyja within each sample
-
-```{r freyja results summarized, fig.height=10, fig.width=8}
-
-s %>%
-  select(sample_id, ww_group, freyja_summarized) %>%
-  mutate(freyja_summarized = gsub("\\[\\(|\\)\\]", "", freyja_summarized)) %>%
+freyja_grouping %>%
+  select(sample_id, ww_group, lineages, relative_abundances) %>%
   group_by(sample_id) %>%
-  mutate(summarized_lineages = list(freyja_summarized)) %>%
-  separate_longer_delim(summarized_lineages, delim = "), (") %>%
-  mutate(summarized_lineages = ifelse(summarized_lineages == "[]", NA, summarized_lineages)) %>%
-  separate_wider_delim(summarized_lineages,
-                       delim = ", ",
-                       names = c("summarized_lineages", "relative_abundances")) %>%
-  mutate(summarized_lineages = gsub("'", "", summarized_lineages),
-         relative_abundances = as.numeric(relative_abundances)) %>%
+  filter(relative_abundances == max(relative_abundances)) %>%
+  slice(1) %>%
   ungroup() %>%
-  mutate(summarized_lineages = factor(summarized_lineages,
-                                   levels = str_sort(unique(summarized_lineages), numeric = TRUE))) %>%
+  mutate(lineages = gsub("\\.$", "", lineages)) %>%
+  merge(select(s_toPlot, sample_id, pangolin_lineage, Nextclade_pango, ww_group, coverage_qc_status), by = c("sample_id", "ww_group"), all.y = TRUE) %>%
+  rename(Pangolin = "pangolin_lineage", Nextclade = "Nextclade_pango", Freyja = "lineages") %>%
+  rowwise() %>%
+  mutate(pn = grepl(Pangolin, Nextclade) | grepl(Nextclade, Pangolin)) %>%
+  mutate(nf = grepl(Nextclade, Freyja) | grepl(Freyja, Nextclade)) %>%
+  mutate(fp = grepl(Freyja, Pangolin) | grepl(Pangolin, Freyja)) %>%
+  mutate(across(c(pn, nf, fp), ~ replace_na(., FALSE))) %>%
+  pivot_longer(cols = c("Pangolin", "Nextclade", "Freyja"), names_to = "software", values_to = "variants") %>%
+  mutate(uniq = case_when((pn + nf + fp) == 3 & grepl("Pangolin|Nextclade|Freyja", software) ~ "***",
+                          pn & grepl("Pangolin|Nextclade", software) ~ "*",
+                          nf & grepl("Nextclade|Freyja", software) ~ "*",
+                          fp & grepl("Freyja|Pangolin", software) ~ "*",
+                          TRUE ~ "")) %>%
+  mutate(software = factor(software, levels = c("Nextclade", "Pangolin", "Freyja"))) %>%
+  mutate(variants = factor(variants, levels = names(ann_geom_values$variants))) %>%
+  mutate(coverage_qc_status = factor(coverage_qc_status, levels = c("Good", "Poor"))) %>%
+  mutate(sample_id = factor(sample_id, levels = unique(sample_id[order(variants, decreasing = TRUE)]))) %>%
+  droplevels() %>%
   {
-  ggplot(., aes(x = sample_id, y = relative_abundances, fill = summarized_lineages)) +
-    geom_col() +
-    scale_fill_manual(values = colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$summarized_lineages)))) +
-    scale_y_continuous(labels = percent, expand=c(0,0)) +
+  ggplot(., aes(x=software, y=sample_id, fill=variants, label=uniq)) +
+    geom_tile(stat="identity") +
+    geom_text() +
+    facet_grid(coverage_qc_status+ww_group~., space="free", scales="free",
+               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$variants), names(ann_geom_values$variants))],
+                      na.value = "white") +
     theme_classic() +
-    theme(panel.grid = element_blank(),
-          panel.border = element_blank(),
-          axis.ticks.x.bottom = element_blank(),
-          axis.text.x.bottom = element_blank()
-          ) +
-    labs(x = "", y = "Relative proportions", fill = "Variants")
-  } /
-  sample_group_legend + 
-    theme(axis.text.x.bottom = element_text(size = convert_sample_size_2_font_size(nrow(s), max_font = 8)))
+    theme(
+      strip.background = element_blank(),
+      strip.text.y = element_text(angle = 0, size = 6),
+      axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)
+      ) +
+    labs(y="", x="Software used to determine variants", fill="Variants")
+  }
+
+```
+
+### Plateview of results
+
+```{r coverage qc plate, fig.width=9, fig.height=12}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  mutate(ww_group = gsub(" - Poor|Mock DNA ", "", ww_group)) %>%
+  mutate(ww_group = gsub(" | - ", "\n", ww_group)) %>%
+  mutate(ww_group = gsub("Environmental", "Environ", ww_group)) %>%
+  filter(!is.na(plate_coord)) %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  droplevels() %>%
+  mutate(coverage_qc_status = factor(coverage_qc_status, levels = c("Good", "Poor"))) %>%
+  {
+  ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = coverage_qc_status, label = ww_group)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 18) +
+    geom_text(check_overlap = TRUE, size = 2, color = "black") +
+    scale_fill_manual(values = ann_geom_values$coverage_qc_status) +
+    facet_wrap(~plate, ncol = 1) +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      legend.position = "bottom",
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill = "Coverage status (>60% at 10X)",
+    ) +
+    guides(fill = guide_legend(override.aes = list(size = 8)))  
+  }
+
+```
+
+```{r nextclade pangolin plate, fig.width=9, fig.height=12}
+
+empty_plate %>%
+  merge(s, by = c("plate_coord", "plate_row", "plate_col", "plate"), all = TRUE) %>%
+  filter(!is.na(plate_coord)) %>%
+  mutate(Nextclade_pango = factor(Nextclade_pango, levels = names(ann_geom_values$variants))) %>%
+  mutate(plate = paste("Plate", plate)) %>%
+  mutate(plate_col = as.numeric(plate_col)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x=plate_col, y=fct_rev(plate_row), fill = Nextclade_pango, label = Nextclade_pango)) +
+    geom_tile(fill = "white") +
+    geom_point(shape = 21, size = 18) +
+    geom_text(check_overlap = TRUE, size = 4, color = "white") +
+    facet_wrap(~plate, ncol = 1) +
+    scale_fill_manual(values = ann_geom_values$variants[match(levels(.$Nextclade_pango), names(ann_geom_values$variants))]) +
+    scale_x_continuous(breaks=seq(1,12), expand=c(0,0), limit = c(0, 13), position = "top") +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      panel.grid = element_blank(),
+      legend.position = "bottom",
+      aspect.ratio = 0.66
+    ) +
+    labs(
+      x="",
+      y="Plate row",
+      fill = "Variants"
+    ) +
+    guides(fill = guide_legend(override.aes = list(size = 8)))  
+  }
 
 ```
 
