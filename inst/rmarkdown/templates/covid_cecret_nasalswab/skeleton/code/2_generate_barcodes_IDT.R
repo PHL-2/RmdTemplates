@@ -589,7 +589,7 @@ if(length(main_sample_type) > 1) {
   sample_type_acronym <- "Mix"
 }
 
-if(main_sample_type != "Nasal swab" | main_sample_type != "Testing sample type") {
+if(!grepl("Nasal swab|Testing sample type", main_sample_type)) {
   stop(simpleError(paste0("The sample type included in the metadata sheet is not nasal swab or a test sample type!\n",
                           "This may not be the appropriate workflow for this run!\n")))
 }
