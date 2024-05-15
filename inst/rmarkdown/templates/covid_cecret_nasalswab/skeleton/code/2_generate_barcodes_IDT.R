@@ -12,6 +12,8 @@ library(stringr)
 # Manual input
 ##############
 
+remove_sample_from_bcl_samplesheet <- c("")
+
 run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
@@ -763,6 +765,7 @@ if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
 ####################
 
 samp_sheet_2_write <- metadata_sheet %>%
+  filter(!sample_name %in% remove_sample_from_bcl_samplesheet) %>%
   # do not include lane in the sample sheet otherwise it will only demultiplex that sample in that specified lane, not in all lanes
   rowwise() %>%
   #BCL Convert does not take Index Plate
