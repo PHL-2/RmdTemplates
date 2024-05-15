@@ -166,6 +166,8 @@ quality_metrics <- read_delim(quality_metrics_fp) %>%
   mutate(ReadNumber = paste0("R", ReadNumber, "_Q30")) %>%
   pivot_wider(names_from = "ReadNumber", values_from = "Q30")
 
+merging_columns <- c("barcode_sequence", "index", "index2")
+
 #read counts by sample number
 samp_reads <- read_delim(demuxsum_fp) %>%
   rename_all(.funs = tolower) %>%
@@ -177,7 +179,8 @@ samp_reads <- read_delim(demuxsum_fp) %>%
          barcode_sequence = gsub("-", "+", barcode_sequence),
          read_counts = read_pairs*2) %>%
   merge(quality_metrics, by = c("lane", "sample_id"), all = TRUE) %>%
-  merge(select(s_meta, sample_id, uniq_sample_name), by = "sample_id", all = TRUE) %>%
+  merge(select(s_meta, sample_id, uniq_sample_name, merging_columns),
+        by = c("sample_id", merging_columns), all = TRUE) %>%
   mutate(across(starts_with("index"), ~replace_na(., "TTTTTTTTTT")),
          across(starts_with("barcode_sequence"), ~replace_na(., "TTTTTTTTTT+TTTTTTTTTT")),
          across(starts_with("percent_of_lane"), ~replace_na(., 0)),
@@ -746,7 +749,7 @@ snpdists <- read_csv(snpdists_fp)
 
 #df with all samples
 s <- s_meta %>%
-  merge(cecret_results, by = c("sample_id", "barcode_sequence", "index", "index2", "lane"), all = TRUE) %>%
+  merge(cecret_results, by = c("sample_id", "barcode_sequence", "index", "index2"), all = TRUE) %>%
   mutate(ww_group = case_when(grepl("^Undetermined$", sample_id) ~ "Unassigned reads",
                               (grepl("Merged", sample_id) & !isControl) ~ paste0(ww_group, " - Merged"),
                               (pct_genome_coverage_over_10x < 0.6 & !isControl) ~ paste0(ww_group, " - Poor"),
