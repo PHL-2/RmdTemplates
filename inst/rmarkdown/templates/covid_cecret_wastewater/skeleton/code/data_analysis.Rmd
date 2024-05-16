@@ -1119,9 +1119,9 @@ Red samples will not be reported (controls or no lineage results) \newline
 Orange samples also will not be reported due to low quality (bad or mediocre NextClade QC with <80% 30X coverage) \newline
 The total number of samples with acceptable results for reporting is `r n_samples_report` out of `r sum(!s$isControl, na.rm = TRUE)` non-control samples sequenced. \newline
 Number of samples to send to epidemiologists: \newline
-Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "gisaid_name", "sample_id"])` \newline
-Number of samples to upload to SRA: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])` \newline
-Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])`\newline
+Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_dcipher[all_sample_ids_from_dcipher$file == "gisaid_name", "sample_id"])` \newline
+Number of samples to upload to SRA: `r nrow(all_sample_ids_from_dcipher[all_sample_ids_from_dcipher$file == "sra_name", "sample_id"])` \newline
+Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_dcipher[all_sample_ids_from_dcipher$file == "genbank_name", "sample_id"])`\newline
 
 `r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge These non-control samples that didn't go through the pipeline correctly!! Try rerunning them through the pipeline again!}")}`
 

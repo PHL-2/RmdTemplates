@@ -785,12 +785,12 @@ if(any(is.na(s$ww_group))) {
 
 ```{r upload filepaths}
 
-#path of seqsender config file
-seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "seqsender_config.yaml", full.names = TRUE)
-seqsender_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "seqsender_config_test.yaml", full.names = TRUE)
+#path of dcipher config file
+dcipher_config_fp <- list.files(file.path(dirname(here()), "aux_files", "dcipher"), pattern = "dcipher_config.yaml", full.names = TRUE)
+dcipher_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "dcipher"), pattern = "dcipher_config_test.yaml", full.names = TRUE)
 
 epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
-seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.tsv", sep = "_"))
+dcipher_meta_fp <- here("upload", "dcipher", paste(project_name, "PHL2_dcipher_upload.tsv", sep = "_"))
 fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
 
 ```
@@ -827,7 +827,7 @@ if(length(s_upload) > 0) {
   
   #vadr is the software that can test for success or fail of GenBank submission
   #test to see if the FASTA file for vadr failed samples
-  #If using this filter, the Seqsender metadata will still contain the failed samples; can non-matching metadata and fasta file be submitted to GenBank?
+  #If using this filter, the dcipher metadata will still contain the failed samples; can non-matching metadata and fasta file be submitted to GenBank?
   fasta_upload_vadr_filter <- s_toPlot %>%
     filter(sample_id %in% s_upload) %>%
     filter(vadr_passfail == "PASS") %>%
@@ -882,10 +882,10 @@ epi_report %>%
 
 # need to update for ww samples
 
-dir.create(here("upload", "seqsender"), recursive = TRUE)
+dir.create(here("upload", "dcipher"), recursive = TRUE)
 
-# Export the data for seqsender upload to sra, genbank, and gisaid
-seqsender <- s_toPlot %>%
+# Export the data for dcipher upload to sra, genbank, and gisaid
+dcipher <- s_toPlot %>%
   filter4report() %>%
   #submit only nasal swabs for now. WW data needs additional metadata
   filter(sample_type == "Nasal swab") %>%
@@ -941,8 +941,8 @@ seqsender <- s_toPlot %>%
          instrument, library, assembly_method, library_strategy, library_source, library_selection, library_layout, structured_comment, median_coverage, genbank_note, design_description,
          collected_by, orig_lab, orig_lab_address, sra_file_path_1, sra_file_path_2)
 
-seqsender %>%
-  write_tsv(seqsender_meta_fp)
+dcipher %>%
+  write_tsv(dcipher_meta_fp)
 
 ```
 
@@ -967,10 +967,10 @@ rerun_samples <- s %>%
   pull()
 
 #number of samples to submit
-#check the seqsender file to upload to ncbi
-seqsender_2_upload_fp <- list.files(here("upload", "seqsender"), pattern = ".tsv", recursive = TRUE, full.names = TRUE)
+#check the dcipher file to upload to ncbi
+dcipher_2_upload_fp <- list.files(here("upload", "dcipher"), pattern = ".tsv", recursive = TRUE, full.names = TRUE)
 
-all_sample_ids_from_seqsender <- seqsender_2_upload_fp %>%
+all_sample_ids_from_dcipher <- dcipher_2_upload_fp %>%
   read_tsv()%>%
   select(sample_id, genbank_name, sra_name, gisaid_name) %>%
   mutate(gisaid_name = gsub(".*PA-", "", gisaid_name)) %>%
@@ -981,11 +981,11 @@ all_sample_ids_from_seqsender <- seqsender_2_upload_fp %>%
   mutate(upload_id = gsub(".*/USA/|/.*", "", upload_id)) %>%
   mutate(all_sample_same = upload_id == sample_id)
 
-if (!all(all_sample_ids_from_seqsender$all_sample_same)) {
-  stop (simpleError("Some of the database names don't match the sample_id names! The GenBank name may also be missing because it didn't pass vadr check. Try submitting the GenBank files anyway through seqsender to see if it passes"))
+if (!all(all_sample_ids_from_dcipher$all_sample_same)) {
+  stop (simpleError("Some of the database names don't match the sample_id names! The GenBank name may also be missing because it didn't pass vadr check. Try submitting the GenBank files anyway through dcipher to see if it passes"))
 }
 
-all_sample_ids_from_seqsender %<>% select(file, upload_id) %>%
+all_sample_ids_from_dcipher %<>% select(file, upload_id) %>%
   rename(sample_id = "upload_id")
 
 run_check_all_chunk <- any(grepl("Nasal swab", color_group_lvls))
@@ -1030,7 +1030,7 @@ fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_co
   mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
   select(-X1)
 
-check_all <- all_sample_ids_from_seqsender %>%
+check_all <- all_sample_ids_from_dcipher %>%
   rbind(fastq2_compare) %>%
   rbind(fasta_samples)
 

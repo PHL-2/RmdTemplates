@@ -703,7 +703,7 @@ for(x in c(cols2merge, "sample_id",
 metadata_sheet <- metadata_sheet %>%
   select(where(function(x) any(!is.na(x))))
 
-#add back these columns as NA if missing (needed for the report and for seqsender)
+#add back these columns as NA if missing
 for(x in c("qubit_conc_ng_ul", "sample_collection_date", "host_age_bin", "gender")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     metadata_sheet[[x]] <- NA
