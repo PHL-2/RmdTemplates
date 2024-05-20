@@ -3,10 +3,8 @@ library(dplyr)
 library(readxl)
 library(readr)
 library(stringr)
-library(openxlsx)
 
-#This Rscript filters out low RLU values from the metadata sheet received from the epidemiologists
-#Send this filtered sheet to the epidemiologists and scientists
+#This Rscript adds the relevant metadata fields to wastewater samples for sequencing
 
 ##############
 # Manual input
@@ -20,7 +18,7 @@ enviro_number <- 10
 # set this to FALSE to not copy the platemap to the shared drive (such as when rerunning this script with updated extra metadata info)
 copy_platemap <- TRUE
 
-sample_type_acronym <- "NS" #use NS for nasal swabs
+sample_type_acronym <- "WW" #use WW for wastewater samples
 
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
@@ -52,10 +50,9 @@ tryCatch(
   }
 )
 
-###################################################
-# Load the RLU report
-# Make sure these sheets are not uploaded to GitHub
-###################################################
+####################################
+# Load the general WW metadata sheet
+####################################
 
 # Look for this harvest report in extra_metadata folder
 RLU_file_name <- "COVID_harvest_report.csv"
