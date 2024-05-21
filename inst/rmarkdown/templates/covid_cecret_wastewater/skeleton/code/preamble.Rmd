@@ -880,22 +880,18 @@ epi_report %>%
 
 ```{r export data to upload to NCBI}
 
-# need to update for ww samples
-
 dir.create(here("upload", "dcipher"), recursive = TRUE)
 
 # Export the data for dcipher upload to sra, genbank, and gisaid
 dcipher <- s_toPlot %>%
   filter4report() %>%
   #submit only nasal swabs for now. WW data needs additional metadata
-  filter(sample_type == "Nasal swab") %>%
-  mutate(collection_date = case_when(!(is.na(sample_collection_date) |
-                                         as.character(sample_collection_date) == "Unknown") ~ as.character(sample_collection_date),
-                                     !is.na(PHL_sample_received_date) ~ as.character(PHL_sample_received_date),
-                                     TRUE ~ as.character(sequencing_date))) %>%
+  filter(sample_type == "Wastewater") %>%
+  mutate(sample_collect_date = case_when(!(is.na(sample_collect_date) | as.character(sample_collect_date) == "") ~ as.character(sample_collect_date),
+                                     TRUE ~ NA)) %>%
   #the number at the end of the name for these samples must be the collection year, or the databases will complain
-  mutate(collection_date = as.Date(collection_date, tryFormats = c("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y"))) %>%
-  mutate(collection_year = format(collection_date, format = "%Y")) %>%
+  mutate(sample_collect_date = as.Date(sample_collect_date, tryFormats = c("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y"))) %>%
+  mutate(sample_collect_year = format(sample_collect_date, format = "%Y")) %>%
   #make genbank name blank if it didn't pass vadr
   mutate(genbank_name = ifelse(vadr_passfail == "PASS",
                                paste0("SARS-CoV-2/Human/USA/", sample_id, "/", collection_year),
@@ -936,7 +932,7 @@ dcipher <- s_toPlot %>%
   mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC ", artic_primer_scheme,
                                      " primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length,
                                      " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
-  select(sample_id, genbank_name, sra_name, gisaid_name, gisaid_accession, collection_date, location, gisaid_location, zip, type, passage, organism,
+  select(sample_id, genbank_name, sra_name, gisaid_name, gisaid_accession, sample_collect_date, location, gisaid_location, zip, type, passage, organism,
          isolation_source, host, host_disease, host_age_bin, sex, patient_status, 
          instrument, library, assembly_method, library_strategy, library_source, library_selection, library_layout, structured_comment, median_coverage, genbank_note, design_description,
          collected_by, orig_lab, orig_lab_address, sra_file_path_1, sra_file_path_2)

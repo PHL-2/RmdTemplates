@@ -94,8 +94,8 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 # need to import the data into a single tsv for the first time?
 import_data <- TRUE
 
-# have the original sample accession numbers file to report the results to DDC?
-have_phi <- TRUE
+# do you need a final csv file generated for reporting and submitting the results?
+submitting_data <- TRUE
 
 ### =================
 ### End manual inputs

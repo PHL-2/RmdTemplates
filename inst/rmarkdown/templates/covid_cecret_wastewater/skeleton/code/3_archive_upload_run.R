@@ -147,8 +147,8 @@ if(run_uploaded_2_basespace) {
   submit_screen_job(message2display = "Generating md5 checksum",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-checksum",
-                    command2run = paste0("cd ", ec2_tmp_fp, ";",
-                                         "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, sequencing_run, ".md5;",
+                    command2run = paste0("cd ", ec2_tmp_fp, "; ",
+                                         "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, sequencing_run, ".md5; ",
                                          "cat ", ec2_tmp_fp, sequencing_run, ".md5")
   )
 
