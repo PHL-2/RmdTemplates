@@ -914,7 +914,7 @@ seqsender <- s_toPlot %>%
          assembly_method = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
          library_strategy = "AMPLICON",
          library_source = "VIRAL RNA",
-         library_selection = "PCR",
+         library_selection = "RT-PCR",
          library_layout = "PAIRED",
          structured_comment = "Assembly-Data",
          genbank_note = "") %>%
