@@ -42,35 +42,32 @@ library(ape)
 
 ```{r load variables, functions, and signature from common files}
 
-#this file needs to sit in a [aux_files/config] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 
-#this file needs to sit in a [aux_files/functions] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "functions", "R_all_functions_v3.R"))
   },
   error = function(e) {
-  stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory"))
   }
 )
 
-#this file needs to sit in a [aux_files/signature] directory path above this project directory
 tryCatch(
   {
-    signature_fp <- list.files(file.path(dirname(here()), "aux_files", "signature"), pattern = ".png|.jpeg|.tif*|.gif", full.names = TRUE)
+    signature_fp <- list.files(file.path(dirname(here()), "aux_files", "pdf_generation", "signature"), pattern = ".png|.jpeg|.tif*|.gif", full.names = TRUE)
     tag <- signature_fp[!grepl("blank.png", signature_fp)]
     blank <- signature_fp[grepl("blank.png", signature_fp)]
   },
   error = function(e) {
-  stop (simpleError("The signature image file needs to sit in a [aux_files/signature] directory path above this project directory"))
+    stop (simpleError("The signature image file needs to sit in a [aux_files/pdf_generation/signature] directory path above this project directory"))
   }
 )
 
@@ -764,10 +761,11 @@ s <- s_meta %>%
   arrange(sample_id) %>%
   droplevels()
 
-#df with samples that have results (including controls)
+#only get merged samples that have passing results and controls
 s_toPlot <- s %>%
   filter(!grepl("None|Undetermined", sample_id)) %>%
-  filter(!grepl(" - Poor$", ww_group)) %>%
+  filter(coverage_qc_status == "Good") %>%
+  filter(ww_group != "Wastewater sample")
   mutate(sample_id = as.character(sample_id)) %>%
   droplevels()
 
@@ -783,15 +781,168 @@ if(any(is.na(s$ww_group))) {
 
 <!-- Prepare files containing samples with good results for uploading -->
 
-```{r upload filepaths}
+```{r prepare freyja table and export report}
+
+# this table groups the sublineages with the same parent lineages together and gets the sum of the abundances
+freyja_grouping <- s %>%
+  select(sample_id, sample_name, sample_group, ww_group, sample_collection_date,
+         isControl, freyja_lineages, freyja_abundances, pct_genome_coverage_over_10x) %>%
+  group_by(sample_id) %>%
+  mutate(lineages = list(freyja_lineages),
+         relative_abundances = list(freyja_abundances)) %>%
+  separate_rows(c(lineages, relative_abundances), sep=" ") %>%
+  mutate(lineages = gsub("\\([0-9]*\\)|-like", "", lineages),
+         lineages = ifelse((is.na(lineages) | lineages == "Misc" | relative_abundances == "nan" | relative_abundances == "inf"),
+                           "Unresolved", lineages),
+         relative_abundances = as.numeric(gsub("nan|inf", "", relative_abundances)),
+         main_lineage = gsub("\\..*", "", lineages)) %>%
+  ungroup() %>%
+  select(-c("freyja_lineages", "freyja_abundances")) %>%
+  unique() %>%
+  arrange(sample_id, relative_abundances, str_rank(lineages, numeric = TRUE)) %>%
+  group_by(sample_id, main_lineage, relative_abundances) %>%
+  #add an extra period to the end to help with matching lineages correctly
+  mutate(lineages = gsub("$", ".", lineages),
+         least_common_substring = attr(adist(lineages, counts = TRUE), "trafos")[, 1],
+         end_match = do.call(rbind, stringi::stri_locate_all_regex(least_common_substring, "^M+"))[, 2],
+         has_lowest_str_length = str_length(lineages) == min(str_length(lineages)),
+         substring_end = ifelse(sum(has_lowest_str_length) == 1 &
+                                grepl("^M+$", least_common_substring), end_match, NA),
+         substring_end = ifelse(all(is.na(substring_end)), min(end_match), substring_end)) %>%
+  fill(substring_end, .direction = "down") %>%
+  ungroup() %>%
+  mutate(combined_lineage = stringi::stri_sub(lineages, 1, substring_end)) %>%
+  mutate(combined_lineage = gsub("\\.$", "", combined_lineage)) %>%
+  mutate(combined_lineage = factor(combined_lineage, levels = str_sort(unique(combined_lineage), numeric = TRUE))) %>%
+  mutate(relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", combined_lineage),
+                                      1, relative_abundances))
+
+freyja_matrix <- freyja_grouping %>%
+  complete(nesting(sample_id, ww_group), combined_lineage, fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, combined_lineage) %>%
+  summarize(relative_abundances = sum(relative_abundances)) %>%
+  ungroup() %>%
+  pivot_wider(names_from = "combined_lineage", values_from = "relative_abundances") %>%
+  column_to_rownames("sample_id")
+
+# this table groups the individual samples together and calculates the average
+freyja_average <- freyja_grouping %>%
+  filter(!isControl) %>%
+  filter(!grepl("Merged", ww_group)) %>%
+  droplevels() %>%
+  complete(nesting(sample_id, sample_group), nesting(combined_lineage, main_lineage), fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, sample_group, combined_lineage, main_lineage) %>%
+  summarize(relative_abundances = sum(relative_abundances)) %>%
+  ungroup() %>%
+  filter(!is.na(relative_abundances)) %>%
+  group_by(sample_group) %>%
+  mutate(total_samples = n_distinct(sample_id)) %>%
+  ungroup() %>%
+  # to calculate the total standard deviation of a combined distribution,
+  # get the total variance and square root it
+  group_by(sample_group, combined_lineage, main_lineage) %>%
+  mutate(avg_rel_abund = relative_abundances/total_samples,
+         variance = var(avg_rel_abund)) %>%
+  summarize(avg_rel_abund = sum(avg_rel_abund),
+            total_sd = sqrt(sum(variance))) %>%
+  ungroup() %>%
+  group_by(combined_lineage) %>%
+  filter(any(avg_rel_abund > 0.00005)) %>%
+  ungroup() %>%
+  droplevels()
+
+# this table groups the individual samples together and calculates the average
+freyja_merged <- freyja_grouping %>%
+  filter(!isControl) %>%
+  filter(grepl("Merged", ww_group)) %>%
+  droplevels() %>%
+  complete(nesting(sample_id, sample_group), nesting(combined_lineage, main_lineage), fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, sample_group, combined_lineage, main_lineage) %>%
+  summarize(relative_abundances = sum(relative_abundances)) %>%
+  ungroup() %>%
+  droplevels()
+
+#write freyja results for epi's
+
+dir.create(here("upload", "epi"), recursive = TRUE)
+epi_report_fp <- here("upload", "epi", paste0(project_name, "_PHL2_sequencing_results.csv"))
+
+#to do: merge lineages into the ones reported by CDC
+
+freyja_grouping %>%
+  filter(sample_id %in% s_toPlot$sample_id,
+         relative_abundances > 0.01) %>%
+  select(ww_group, sample_name, sample_collection_date,
+         pct_genome_coverage_over_10x, lineages) %>%
+  arrange(ww_group, sample_id) %>%
+  write_csv(epi_report_fp)
+
+```
+
+```{r load data submission metadata, eval = submitting_data}
 
 #path of dcipher config file
 dcipher_config_fp <- list.files(file.path(dirname(here()), "aux_files", "dcipher"), pattern = "dcipher_config.yaml", full.names = TRUE)
 dcipher_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "dcipher"), pattern = "dcipher_config_test.yaml", full.names = TRUE)
 
-epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
-dcipher_meta_fp <- here("upload", "dcipher", paste(project_name, "PHL2_dcipher_upload.tsv", sep = "_"))
+#path of dcipher upload files
+dcipher_meta_fp <- here("upload", "dcipher", paste0(project_name, "_PHL2_dcipher_upload.tsv"))
 fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
+
+#read in data submission metadata
+ww_submission_metadata_fp <- file.path(dirname(here()), "aux_files", "data_submission", "dcipher")
+ww_sample_metadata_fp <- file.path(ww_submission_metadata_fp, "nwss_wastewater_metadata.csv")
+data_submit_metadata_fp <- file.path(ww_submission_metadata_fp, "wastewater_data_submission_metadata.csv")
+
+ww_sample_metadata <- read_csv(ww_sample_metadata_fp)
+data_submit_metadata <- read_csv(data_submit_metadata_fp) %>%
+  select(common_field, value) %>%
+  pivot_wider(names_from = "common_field", values_from = "value")
+
+```
+
+```{r export data for reporting and submission, eval = submitting_data}
+
+#see dx.doi.org/10.17504/protocols.io.ewov14w27vr2/v10 for the ww submission guidance
+# Biosamples are created at the extraction level (each RNA extraction will get a unique BioSample ID). Create a base ID for each sample collection (for example, LABID_001), then add an index to represent each extraction (e.g. LABID_001.01). Every Sample Name from a single Submitter must be unique. 
+  
+dir.create(here("upload", "dcipher"), recursive = TRUE)
+
+samp_report <- s %>%
+  filter(sample_group %in% epi_report$sample_group) %>%
+  filter(ww_group != "Wastewater sample - Merged") %>%
+  cbind(data_submit_metadata) %>%
+  mutate(sample_collection_date = case_when(!(is.na(sample_collection_date) | as.character(sample_collection_date) == "") ~ as.character(sample_collection_date),
+                                           TRUE ~ NA),
+         sample_collection_date = as.Date(sample_collection_date, tryFormats = c("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y")),
+         sample_collection_year = format(sample_collection_date, format = "%Y"),
+         #create db names
+         #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/collection year. This name may conflict with samples collected/sequenced in different years
+         gisaid_name = paste0("hCoV-19/env/USA/PA-", gsub(str_sub(sequencing_date, 1, 4), "", sample_id), "/", sample_collection_year),
+         biosample_name = paste0("SARS-CoV-2/Wastewater/USA/", sample_id, "/", sample_collection_year),
+         specimen_processing_id = sample_name,
+         
+         #need to fill these in
+         ww_surv_target_1_known_present = "???", #this should be yes or no, depends on the ddPCR results
+         ww_surv_target_1_conc = "???", #this is the ddPCR transformed unit
+         ww_surv_target_2_known_present = "???", #this should be yes or no, depends on the ddPCR results
+         ww_surv_target_2_conc = "???",
+         
+         #fields that depend on the workflow
+         instrument = paste0("Illumina ", instrument_type),
+         library = paste0("ARTIC Network Protocol ", artic_primer_scheme),
+         assembly_method = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
+         description = paste(sample_description, "Viral sequencing was performed following a tiling amplicon strategy using the ARTIC", artic_primer_scheme, "primer scheme. Sequencing was performed using the Illumina", instrument_type, "instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit."),
+         gisaid_accession = "")
+
+samp_report %>%
+  write_tsv(dcipher_meta_fp)
+
+#additional items to add
+#population_served (NWSS) -> ww_population (BioSample)
+#wwtp_name (NWSS) -> collection_site_id (BioSample)
+#is lod_sewage the same as ww_flow?
+#ww_surv_system_sample_id (may need to get this id from the NWSS submmission process)
 
 ```
 
@@ -862,86 +1013,6 @@ if(length(s_upload) > 0) {
 
 ```
 
-```{r export data to epi, eval = FALSE}
-
-dir.create(here("upload", "epi"), recursive = TRUE)
-
-# Export the data for EPI's
-epi_report <- s_toPlot %>%
-  filter4report() %>%
-  select(sample_name, sample_collected_by, sequencing_date, Nextclade_pango, nextclade_clade_who) %>%
-  arrange(sample_collected_by, sample_name) %>%
-  rename(accession_number = "sample_name", who_label = "nextclade_clade_who", lineage = "Nextclade_pango")
-
-epi_report %>%
-  write_csv(epi_report_fp)
-
-```
-
-```{r export data to upload to NCBI}
-
-dir.create(here("upload", "dcipher"), recursive = TRUE)
-
-# Export the data for dcipher upload to sra, genbank, and gisaid
-dcipher <- s_toPlot %>%
-  filter4report() %>%
-  #submit only nasal swabs for now. WW data needs additional metadata
-  filter(sample_type == "Wastewater") %>%
-  mutate(sample_collect_date = case_when(!(is.na(sample_collect_date) | as.character(sample_collect_date) == "") ~ as.character(sample_collect_date),
-                                     TRUE ~ NA)) %>%
-  #the number at the end of the name for these samples must be the collection year, or the databases will complain
-  mutate(sample_collect_date = as.Date(sample_collect_date, tryFormats = c("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y"))) %>%
-  mutate(sample_collect_year = format(sample_collect_date, format = "%Y")) %>%
-  #make genbank name blank if it didn't pass vadr
-  mutate(genbank_name = ifelse(vadr_passfail == "PASS",
-                               paste0("SARS-CoV-2/Human/USA/", sample_id, "/", collection_year),
-                               "")) %>%
-  mutate(sra_name = paste0("SARS-CoV-2/Human/USA/", sample_id)) %>%
-  #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/collection year. This name may conflict with samples collected/sequenced in different years
-  mutate(gisaid_name = paste0("hCoV-19/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sample_id), "/", collection_year)) %>%
-  mutate(gisaid_accession = "",
-         location = "USA: Pennsylvania",
-         gisaid_location = "North America/USA/Pennsylvania",
-         zip = "19145",
-         type = "betacoronavirus",
-         passage = "Original") %>%
-  #make gender and age for Temple samples as Unknown for now until they confirm its okay to submit these fields on their behalf
-  mutate(host_age_bin = ifelse(is.na(host_age_bin)|sample_collected_by == "Temple University", "Unknown", host_age_bin),
-         gender = ifelse(is.na(gender)|sample_collected_by == "Temple University", "Unknown", gender),
-         collected_by = sample_collected_by) %>%
-  select(-c(isolation_source)) %>%
-  rename(isolation_source = "sample_type",
-         host = "host_scientific_name",
-         sex = "gender",
-         orig_lab = "sample_collected_by") %>%
-  mutate(patient_status = "Unknown",
-         instrument = paste0("Illumina ", instrument_type),
-         library = paste0("ARTIC Network Protocol ", artic_primer_scheme),
-         assembly_method = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
-         library_strategy = "AMPLICON",
-         library_source = "VIRAL RNA",
-         library_selection = "PCR",
-         library_layout = "PAIRED",
-         structured_comment = "Assembly-Data",
-         genbank_note = "") %>%
-  mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "1930 South Broad Street Suite 37, Philadelphia, PA 19145 USA",
-                                      orig_lab == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122 USA",
-                                      TRUE ~ "Unknown")) %>%
-  mutate(sra_file_path_1 = here("upload", "fastq", paste0(sample_id, "_filtered_R1.fastq.gz")),
-         sra_file_path_2 = here("upload", "fastq", paste0(sample_id, "_filtered_R2.fastq.gz"))) %>%
-  mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC ", artic_primer_scheme,
-                                     " primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length,
-                                     " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
-  select(sample_id, genbank_name, sra_name, gisaid_name, gisaid_accession, sample_collect_date, location, gisaid_location, zip, type, passage, organism,
-         isolation_source, host, host_disease, host_age_bin, sex, patient_status, 
-         instrument, library, assembly_method, library_strategy, library_source, library_selection, library_layout, structured_comment, median_coverage, genbank_note, design_description,
-         collected_by, orig_lab, orig_lab_address, sra_file_path_1, sra_file_path_2)
-
-dcipher %>%
-  write_tsv(dcipher_meta_fp)
-
-```
-
 ```{r reported numbers}
 
 #double checking to see if number of samples match
@@ -967,13 +1038,13 @@ rerun_samples <- s %>%
 dcipher_2_upload_fp <- list.files(here("upload", "dcipher"), pattern = ".tsv", recursive = TRUE, full.names = TRUE)
 
 all_sample_ids_from_dcipher <- dcipher_2_upload_fp %>%
-  read_tsv()%>%
-  select(sample_id, genbank_name, sra_name, gisaid_name) %>%
+  read_tsv() %>%
+  select(sample_id, biosample_name, gisaid_name) %>%
   mutate(gisaid_name = gsub(".*PA-", "", gisaid_name)) %>%
   #changing the year at the end of the gisaid name back to the sequencing year
   mutate(gisaid_name = gsub("/.*$", paste0("/", str_sub(project_name, 1, 4)), gisaid_name)) %>%
   mutate(gisaid_name = gsub(format(sequencing_date, "%m%d/%Y"), format(sequencing_date, "%Y%m%d"), gisaid_name)) %>%
-  pivot_longer(cols = c("genbank_name", "sra_name", "gisaid_name"), names_to = "file", values_to = "upload_id") %>%
+  pivot_longer(cols = c("biosample_name", "gisaid_name"), names_to = "file", values_to = "upload_id") %>%
   mutate(upload_id = gsub(".*/USA/|/.*", "", upload_id)) %>%
   mutate(all_sample_same = upload_id == sample_id)
 
@@ -984,11 +1055,9 @@ if (!all(all_sample_ids_from_dcipher$all_sample_same)) {
 all_sample_ids_from_dcipher %<>% select(file, upload_id) %>%
   rename(sample_id = "upload_id")
 
-run_check_all_chunk <- any(grepl("Nasal swab", color_group_lvls))
-
 ```
 
-```{r check all files generated, eval = run_check_all_chunk}
+```{r check all files generated, eval = FALSE}
 
 #check the csv file for the epi's
 if(have_phi) {
@@ -1335,92 +1404,6 @@ for(sites in coverage_loop) {
     } %>%
     ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sample_sliding_coverage_100_bp_site_", sites, ".png")), plot = ., width = 11, height = 8)
 }
-
-```
-
-```{r export freyja table}
-
-# this table groups the sublineages with the same parent lineages together and gets the sum of the abundances
-freyja_grouping <- s %>%
-  as.data.frame() %>%
-  select(sample_id, sample_group, ww_group, freyja_lineages, freyja_abundances, pct_genome_coverage_over_10x) %>%
-  group_by(sample_id) %>%
-  mutate(lineages = list(freyja_lineages),
-         relative_abundances = list(freyja_abundances)) %>%
-  separate_rows(c(lineages, relative_abundances), sep=" ") %>%
-  mutate(lineages = gsub("\\([0-9]*\\)|-like", "", lineages),
-         lineages = ifelse((is.na(lineages) | lineages == "Misc" | relative_abundances == "nan" | relative_abundances == "inf"),
-                           "Unresolved", lineages),
-         relative_abundances = as.numeric(gsub("nan|inf", "", relative_abundances)),
-         main_lineage = gsub("\\..*", "", lineages)) %>%
-  ungroup() %>%
-  select(-c("freyja_lineages", "freyja_abundances")) %>%
-  unique() %>%
-  arrange(sample_id, relative_abundances, str_rank(lineages, numeric = TRUE)) %>%
-  group_by(sample_id, main_lineage, relative_abundances) %>%
-  #add an extra period to the end to help with matching lineages correctly
-  mutate(lineages = gsub("$", ".", lineages),
-         least_common_substring = attr(adist(lineages, counts = TRUE), "trafos")[, 1],
-         end_match = do.call(rbind, stringi::stri_locate_all_regex(least_common_substring, "^M+"))[, 2],
-         has_lowest_str_length = str_length(lineages) == min(str_length(lineages)),
-         substring_end = ifelse(sum(has_lowest_str_length) == 1 &
-                                grepl("^M+$", least_common_substring), end_match, NA),
-         substring_end = ifelse(all(is.na(substring_end)), min(end_match), substring_end)) %>%
-  fill(substring_end, .direction = "down") %>%
-  ungroup() %>%
-  mutate(combined_lineage = stringi::stri_sub(lineages, 1, substring_end)) %>%
-  mutate(combined_lineage = gsub("\\.$", "", combined_lineage)) %>%
-  mutate(combined_lineage = factor(combined_lineage, levels = str_sort(unique(combined_lineage), numeric = TRUE))) %>%
-  mutate(relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", combined_lineage),
-                                      1, relative_abundances))
-
-freyja_matrix <- freyja_grouping %>%
-  complete(nesting(sample_id, sample_group), combined_lineage, fill = list(relative_abundances = 0)) %>%
-  group_by(sample_id, combined_lineage) %>%
-  summarize(relative_abundances = sum(relative_abundances)) %>%
-  ungroup() %>%
-  pivot_wider(names_from = "combined_lineage", values_from = "relative_abundances") %>%
-  column_to_rownames("sample_id")
-
-# this table groups sample type numbers together
-freyja_sample_type <- freyja_grouping %>%
-  filter(sample_id %in% s_toPlot$sample_id) %>%
-  droplevels() %>%
-  complete(nesting(sample_id, sample_group), nesting(combined_lineage, main_lineage), fill = list(relative_abundances = 0)) %>%
-  group_by(sample_id, sample_group, combined_lineage, main_lineage) %>%
-  summarize(relative_abundances = sum(relative_abundances)) %>%
-  ungroup() %>%
-  filter(!is.na(relative_abundances)) %>%
-  group_by(sample_group) %>%
-  mutate(total_samples = n_distinct(sample_id)) %>%
-  ungroup() %>%
-  # to calculate the total standard deviation of a combined distribution,
-  # get the total variance and square root it
-  group_by(sample_group, combined_lineage, main_lineage) %>%
-  mutate(avg_rel_abund = relative_abundances/total_samples,
-         variance = var(avg_rel_abund)) %>%
-  summarize(avg_rel_abund = sum(avg_rel_abund),
-            total_sd = sqrt(sum(variance))) %>%
-  ungroup() %>%
-  group_by(combined_lineage) %>%
-  filter(any(avg_rel_abund > 0.00005)) %>%
-  ungroup() %>%
-  droplevels()
-
-dir.create(here("upload", "freyja"), recursive = TRUE)
-
-#add filter to remove low abundance lineages (<1%)
-freyja_sample_type %>%
-  mutate(print_rel_abund = ifelse(!is.na(total_sd),
-                                  paste0(round(avg_rel_abund*100, 2), "% +/- ",
-                                         round(total_sd*100, 2), "%"),
-                                  paste0(round(avg_rel_abund*100, 2), "%"))) %>%
-  select(-c(total_sd, avg_rel_abund)) %>%
-  pivot_wider(names_from = "sample_group", values_from = "print_rel_abund", values_fill = "") %>%
-  filter(!is.na(combined_lineage)) %>%
-  arrange(combined_lineage) %>%
-  rename(Lineage = "combined_lineage") %>%
-  write_csv(here("upload", "freyja", paste0(project_name, "_freyja_results.csv")))
 
 ```
 

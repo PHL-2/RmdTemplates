@@ -962,7 +962,7 @@ Relative lineage abundances within each sample type
 
 ```{r freyja results grouped, fig.height=10, fig.width=8}
 
-freyja_sample_type %>%
+freyja_average %>%
   {
   ggplot(., aes(x = sample_group, y = avg_rel_abund, fill = combined_lineage)) +
     geom_col() +
@@ -988,7 +988,7 @@ Only lineages with abundance >0.01% in at least one sample type are kept
 
 ```{r freyja table, fig.height=11, fig.width=8}
 
-freyja_table_delim <- freyja_sample_type %>%
+freyja_table_delim <- freyja_average %>%
   select(combined_lineage, main_lineage) %>%
   unique() %>%
   group_by(main_lineage) %>%
@@ -998,13 +998,13 @@ freyja_table_delim <- freyja_sample_type %>%
   select(line_position) %>%
   pull()
 
-freyja_sample_type %>%
+freyja_average %>%
   mutate(print_rel_abund = ifelse(!is.na(total_sd),
                                   paste0(round(avg_rel_abund*100, 2), "% +/- ",
                                          round(total_sd*100, 2), "%"),
                                   paste0(round(avg_rel_abund*100, 2), "%"))) %>%
   select(-c(total_sd, avg_rel_abund)) %>%
-  pivot_wider(names_from = "ww_group", values_from = "print_rel_abund", values_fill = "") %>%
+  pivot_wider(names_from = "sample_group", values_from = "print_rel_abund", values_fill = "") %>%
   filter(!is.na(combined_lineage)) %>%
   arrange(combined_lineage) %>%
   rename(Lineage = "combined_lineage") %>%
@@ -1071,18 +1071,18 @@ Percentages of variants only in samples that meet criteria (Nextclade pangolin r
 
 s_toPlot %>%
   filter4report() %>%
-  group_by(PHL_sample_received_date) %>%
+  group_by(sample_collect_date) %>%
   mutate(all_samples_n = n()) %>%
   ungroup() %>%
-  select(ww_group, PHL_sample_received_date, Nextclade_pango, nextclade_clade_who, all_samples_n) %>%
-  group_by(PHL_sample_received_date, ww_group, nextclade_clade_who, Nextclade_pango) %>%
+  select(ww_group, sample_collect_date, Nextclade_pango, nextclade_clade_who, all_samples_n) %>%
+  group_by(sample_collect_date, ww_group, nextclade_clade_who, Nextclade_pango) %>%
   summarise(variant_percentages = n()/all_samples_n*100) %>%
   mutate(variant_percentages_text = paste0(round(variant_percentages, digits = 2), "\\%")) %>%
   ungroup() %>%
-  arrange(PHL_sample_received_date, -variant_percentages) %>%
+  arrange(sample_collect_date, -variant_percentages) %>%
   select(-variant_percentages) %>%
   unique() %>%
-  rename(`Received date` = "PHL_sample_received_date", `Samples and Sites` = "ww_group", `WHO` = "nextclade_clade_who", `Variant` = "Nextclade_pango", `Variant percentage` = "variant_percentages_text") %>%
+  rename(`Received date` = "sample_collect_date", `Samples and Sites` = "ww_group", `WHO` = "nextclade_clade_who", `Variant` = "Nextclade_pango", `Variant percentage` = "variant_percentages_text") %>%
   { if(use_kable)
       kable(., "latex", longtable = F, digits=2, booktabs=T, escape=F,
             col.names = linebreak(c("Sample\nreceived", "Samples and Sites", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
@@ -1098,7 +1098,7 @@ s_toPlot %>%
 ```{r pc check}
 
 has_pos_ctrl <- s %>%
-  filter(grepl("ZeptoSC2", sample_name)) %>%
+  filter(grepl("SC2-Spiked", sample_name)) %>%
   filter(!grepl("Merged", sample_name)) %>%
   mutate(is_pos = Nextclade_pango == "A",
          pos_ctrl_pct = sum(is_pos)/n()) %>%
