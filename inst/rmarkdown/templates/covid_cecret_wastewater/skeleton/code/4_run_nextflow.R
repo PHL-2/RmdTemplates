@@ -13,6 +13,12 @@ ec2_tmp_fp <- "~/tmp_bs_dl/"
 
 system2("aws", c("sso login"))
 
+cecret_version <- "master"
+
+update_freyja_and_cecret_pipeline <- TRUE
+
+update_pangolin_dataset <- TRUE
+
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
@@ -267,35 +273,39 @@ if(!all(all_fastq_file_sizes$sum_check)) {
   stop (simpleError("Double check the concatenating FASTQ workflow. The file sizes of the FASTQ files don't add up"))
 }
 
-# Download most recent Nextclade dataset
-submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
-                  ec2_login = ec2_hostname,
-                  screen_session_name = "nextclade-dl",
-                  command2run = paste("mkdir -p ~/.local/bin/;",
-                                      "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
-                                      "chmod +x ~/.local/bin/nextclade;",
-                                      "nextclade --version;",
-                                      "nextclade dataset list --name sars-cov-2 --json > ~/nextclade-sars.json;",
-                                      "nextclade dataset get --name sars-cov-2 --output-zip ~/sars.zip;",
-                                      "aws s3 cp ~/nextclade-sars.json", paste0(s3_reference_bucket, "/nextclade/nextclade-sars.json;"),
-                                      "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
-                                      "rm ~/nextclade-sars.json ~/sars.zip")
-                  )
+# Download most recent Nextclade pangolin dataset
+if (update_pangolin_dataset) {
+  submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = "nextclade-dl",
+                    command2run = paste("mkdir -p ~/.local/bin/;",
+                                        "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
+                                        "chmod +x ~/.local/bin/nextclade;",
+                                        "nextclade --version;",
+                                        "nextclade dataset list --name sars-cov-2 --json > ~/nextclade-sars.json;",
+                                        "nextclade dataset get --name sars-cov-2 --output-zip ~/sars.zip;",
+                                        "aws s3 cp ~/nextclade-sars.json", paste0(s3_reference_bucket, "/nextclade/nextclade-sars.json;"),
+                                        "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
+                                        "rm ~/nextclade-sars.json ~/sars.zip")
+                    )
 
-check_screen_job(message2display = "Checking Nextclade download job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = "nextclade-dl")
+  check_screen_job(message2display = "Checking Nextclade download job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = "nextclade-dl")
+}
 
 # Update the Cecret pipeline; this should be done as often as possible as it also updates the freyja data used for assignment
-submit_screen_job(message2display = "Updating Cecret pipeline",
-                  ec2_login = ec2_hostname,
-                  screen_session_name = "update-cecret",
-                  command2run = "nextflow pull UPHL-BioNGS/Cecret -r master"
-                  )
+if(update_freyja_and_cecret_pipeline) {
+  submit_screen_job(message2display = "Updating Cecret pipeline",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = "update-cecret",
+                    command2run = "nextflow pull UPHL-BioNGS/Cecret -r master"
+                    )
 
-check_screen_job(message2display = "Checking Cecret update",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = "update-cecret")
+  check_screen_job(message2display = "Checking Cecret update",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = "update-cecret")
+}
 
 workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sep = "/")
 
@@ -307,7 +317,7 @@ submit_screen_job(message2display = "Processing data through Cecret pipeline",
                                       "nextflow run UPHL-BioNGS/Cecret",
                                       "-profile", cecret_profile,
                                       "-bucket-dir", paste0(s3_nextflow_work_bucket, "/cecret_", sample_type_acronym, "_", sequencing_date),
-                                      "-r master",
+                                      "-r", cecret_version,
                                       "-resume",
                                       "--reads", fastq_path,
                                       "--outdir", paste(workflow_output_fp, "processed_cecret", sep = "/"))
