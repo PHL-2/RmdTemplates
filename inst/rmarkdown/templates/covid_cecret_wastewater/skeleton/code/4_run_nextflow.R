@@ -26,13 +26,13 @@ if(sequencing_date == "") {
 # Load functions
 ################
 
-#this file needs to sit in a [aux_files/functions] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "functions", "R_all_functions_v3.R"))
   },
   error = function(e) {
-    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory"))
   }
 )
 
@@ -40,13 +40,13 @@ tryCatch(
 # Load config
 #############
 
-#this file needs to sit in a [aux_files/config] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 
@@ -198,7 +198,7 @@ if(length(s3_cp_nf_concat_samplesheet) == 0) {
 }
 
 # Run nextflow merge fastq file pipeline
-run_in_terminal(paste("scp", file.path(dirname(here()), "aux_files", "nf_scripts", "concat_fastq.nf"),
+run_in_terminal(paste("scp", file.path(dirname(here()), "aux_files", "external_scripts", "nextflow", "concat_fastq.nf"),
                       paste0(ec2_hostname, ":~/.tmp_screen/"))
 )
 

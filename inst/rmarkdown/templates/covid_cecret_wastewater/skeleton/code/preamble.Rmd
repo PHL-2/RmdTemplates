@@ -765,7 +765,7 @@ s <- s_meta %>%
 s_toPlot <- s %>%
   filter(!grepl("None|Undetermined", sample_id)) %>%
   filter(coverage_qc_status == "Good") %>%
-  filter(ww_group != "Wastewater sample")
+  filter(ww_group != "Wastewater sample") %>%
   mutate(sample_id = as.character(sample_id)) %>%
   droplevels()
 
@@ -874,7 +874,7 @@ freyja_grouping %>%
          relative_abundances > 0.01) %>%
   select(ww_group, sample_name, sample_collection_date,
          pct_genome_coverage_over_10x, lineages) %>%
-  arrange(ww_group, sample_id) %>%
+  arrange(ww_group, sample_name) %>%
   write_csv(epi_report_fp)
 
 ```
@@ -909,7 +909,8 @@ data_submit_metadata <- read_csv(data_submit_metadata_fp) %>%
 dir.create(here("upload", "dcipher"), recursive = TRUE)
 
 samp_report <- s %>%
-  filter(sample_group %in% epi_report$sample_group) %>%
+  filter(sample_group %in% s_toPlot$sample_group) %>%
+  filter(!isControl) %>%
   filter(ww_group != "Wastewater sample - Merged") %>%
   cbind(data_submit_metadata) %>%
   mutate(sample_collection_date = case_when(!(is.na(sample_collection_date) | as.character(sample_collection_date) == "") ~ as.character(sample_collection_date),

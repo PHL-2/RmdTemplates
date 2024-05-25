@@ -63,12 +63,12 @@ s %>%
   filter(sample_group != "Unassigned reads") %>%
   droplevels() %>%
   group_by(sample_group) %>%
-  mutate(n = n(),
+  mutate(n = n() - sum(grepl("Merged", ww_group)),
+         Merged = ifelse(!isControl, as.character(sum(grepl("Merged", ww_group))), ""),
          Good = sum(pct_genome_coverage_over_10x >= 0.6, na.rm = TRUE),
-         Poor = n - Good,
-         Merged = ifelse(!isControl, as.character(sum(grepl("Merged", ww_group))), "")) %>%
+         Poor = n + sum(grepl("Merged", ww_group)) - Good) %>%
   ungroup() %>%
-  select(sample_group, n, Good, Poor, Merged) %>%
+  select(sample_group, n, Merged, Good, Poor) %>%
   unique() %>%
   rename(`Samples/sites` = "sample_group") %>%
   {if(use_kable) kable_style(.) else pander(.)}
@@ -1071,18 +1071,18 @@ Percentages of variants only in samples that meet criteria (Nextclade pangolin r
 
 s_toPlot %>%
   filter4report() %>%
-  group_by(sample_collect_date) %>%
+  group_by(sample_collection_date) %>%
   mutate(all_samples_n = n()) %>%
   ungroup() %>%
-  select(ww_group, sample_collect_date, Nextclade_pango, nextclade_clade_who, all_samples_n) %>%
-  group_by(sample_collect_date, ww_group, nextclade_clade_who, Nextclade_pango) %>%
+  select(ww_group, sample_collection_date, Nextclade_pango, nextclade_clade_who, all_samples_n) %>%
+  group_by(sample_collection_date, ww_group, nextclade_clade_who, Nextclade_pango) %>%
   summarise(variant_percentages = n()/all_samples_n*100) %>%
   mutate(variant_percentages_text = paste0(round(variant_percentages, digits = 2), "\\%")) %>%
   ungroup() %>%
-  arrange(sample_collect_date, -variant_percentages) %>%
+  arrange(sample_collection_date, -variant_percentages) %>%
   select(-variant_percentages) %>%
   unique() %>%
-  rename(`Received date` = "sample_collect_date", `Samples and Sites` = "ww_group", `WHO` = "nextclade_clade_who", `Variant` = "Nextclade_pango", `Variant percentage` = "variant_percentages_text") %>%
+  rename(`Received date` = "sample_collection_date", `Samples and Sites` = "ww_group", `WHO` = "nextclade_clade_who", `Variant` = "Nextclade_pango", `Variant percentage` = "variant_percentages_text") %>%
   { if(use_kable)
       kable(., "latex", longtable = F, digits=2, booktabs=T, escape=F,
             col.names = linebreak(c("Sample\nreceived", "Samples and Sites", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
