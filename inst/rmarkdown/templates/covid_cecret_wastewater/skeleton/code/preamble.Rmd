@@ -811,11 +811,12 @@ freyja_grouping <- s %>%
          substring_end = ifelse(all(is.na(substring_end)), min(end_match), substring_end)) %>%
   fill(substring_end, .direction = "down") %>%
   ungroup() %>%
-  mutate(combined_lineage = stringi::stri_sub(lineages, 1, substring_end)) %>%
-  mutate(combined_lineage = gsub("\\.$", "", combined_lineage)) %>%
-  mutate(combined_lineage = factor(combined_lineage, levels = str_sort(unique(combined_lineage), numeric = TRUE))) %>%
-  mutate(relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", combined_lineage),
-                                      1, relative_abundances))
+  mutate(combined_lineage = stringi::stri_sub(lineages, 1, substring_end),
+         combined_lineage = gsub("\\.$", "", combined_lineage),
+         combined_lineage = factor(combined_lineage, levels = str_sort(unique(combined_lineage), numeric = TRUE)),
+         relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", combined_lineage),
+                                      1, relative_abundances),
+         lineages = gsub("\\.$", "", lineages))
 
 freyja_matrix <- freyja_grouping %>%
   complete(nesting(sample_id, ww_group), combined_lineage, fill = list(relative_abundances = 0)) %>%
@@ -873,8 +874,8 @@ freyja_grouping %>%
   filter(sample_id %in% s_toPlot$sample_id,
          relative_abundances > 0.01) %>%
   select(ww_group, sample_name, sample_collection_date,
-         pct_genome_coverage_over_10x, lineages) %>%
-  arrange(ww_group, sample_name) %>%
+         pct_genome_coverage_over_10x, lineages, relative_abundances) %>%
+  arrange(ww_group, sample_name, desc(relative_abundances)) %>%
   write_csv(epi_report_fp)
 
 ```

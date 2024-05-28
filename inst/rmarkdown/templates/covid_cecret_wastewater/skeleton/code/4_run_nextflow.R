@@ -2,22 +2,27 @@ library(here)
 library(dplyr)
 library(tidyr)
 library(stringr)
+library(readr)
 
 #This Rscript submits the relevant jobs to Nextflow once the sequencing run has been uploaded
 
-#####################
-# Get sequencing date
-#####################
+###############
+# Manual inputs
+###############
 
 ec2_tmp_fp <- "~/tmp_bs_dl/"
 
-system2("aws", c("sso login"))
-
-cecret_version <- "master"
+update_pangolin_dataset <- TRUE
 
 update_freyja_and_cecret_pipeline <- TRUE
 
-update_pangolin_dataset <- TRUE
+cecret_version <- "master"
+
+#########################
+# AWS and sequencing_date
+#########################
+
+system2("aws", c("sso login"))
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD

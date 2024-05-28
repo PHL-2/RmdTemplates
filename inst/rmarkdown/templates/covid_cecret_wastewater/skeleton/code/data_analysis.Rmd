@@ -1413,7 +1413,6 @@ freyja_grouping %>%
   filter(relative_abundances == max(relative_abundances)) %>%
   slice(1) %>%
   ungroup() %>%
-  mutate(lineages = gsub("\\.$", "", lineages)) %>%
   merge(select(s_toPlot, sample_id, pangolin_lineage, Nextclade_pango, ww_group, coverage_qc_status), by = c("sample_id", "ww_group"), all.y = TRUE) %>%
   rename(Pangolin = "pangolin_lineage", Nextclade = "Nextclade_pango", Freyja = "lineages") %>%
   rowwise() %>%
