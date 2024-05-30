@@ -1071,18 +1071,18 @@ Percentages of variants only in samples that meet criteria (Nextclade pangolin r
 
 s_toPlot %>%
   filter4report() %>%
-  group_by(sample_collection_date) %>%
+  group_by(sample_collect_date) %>%
   mutate(all_samples_n = n()) %>%
   ungroup() %>%
-  select(ww_group, sample_collection_date, Nextclade_pango, nextclade_clade_who, all_samples_n) %>%
-  group_by(sample_collection_date, ww_group, nextclade_clade_who, Nextclade_pango) %>%
+  select(ww_group, sample_collect_date, Nextclade_pango, nextclade_clade_who, all_samples_n) %>%
+  group_by(sample_collect_date, ww_group, nextclade_clade_who, Nextclade_pango) %>%
   summarise(variant_percentages = n()/all_samples_n*100) %>%
   mutate(variant_percentages_text = paste0(round(variant_percentages, digits = 2), "\\%")) %>%
   ungroup() %>%
-  arrange(sample_collection_date, -variant_percentages) %>%
+  arrange(sample_collect_date, -variant_percentages) %>%
   select(-variant_percentages) %>%
   unique() %>%
-  rename(`Received date` = "sample_collection_date", `Samples and Sites` = "ww_group", `WHO` = "nextclade_clade_who", `Variant` = "Nextclade_pango", `Variant percentage` = "variant_percentages_text") %>%
+  rename(`Received date` = "sample_collect_date", `Samples and Sites` = "ww_group", `WHO` = "nextclade_clade_who", `Variant` = "Nextclade_pango", `Variant percentage` = "variant_percentages_text") %>%
   { if(use_kable)
       kable(., "latex", longtable = F, digits=2, booktabs=T, escape=F,
             col.names = linebreak(c("Sample\nreceived", "Samples and Sites", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
@@ -1118,10 +1118,10 @@ if(length(has_pos_ctrl) == 0) {
 Red samples will not be reported (controls or no lineage results) \newline
 Orange samples also will not be reported due to low quality (bad or mediocre NextClade QC with <80% 30X coverage) \newline
 The total number of samples with acceptable results for reporting is `r n_samples_report` out of `r sum(!s$isControl, na.rm = TRUE)` non-control samples sequenced. \newline
-Number of samples to send to epidemiologists: \newline
-Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_dcipher[all_sample_ids_from_dcipher$file == "gisaid_name", "sample_id"])` \newline
-Number of samples to upload to SRA: `r nrow(all_sample_ids_from_dcipher[all_sample_ids_from_dcipher$file == "sra_name", "sample_id"])` \newline
-Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_dcipher[all_sample_ids_from_dcipher$file == "genbank_name", "sample_id"])`\newline
+Number of samples to send to epidemiologists: `r nrow(all_reported_samples[all_reported_samples$db == "epi", "sample_name"])` \newline
+Number of samples to upload to GISAID database: `r nrow(all_reported_samples[all_reported_samples$db == "gisaid", "sample_name"])` \newline
+Number of samples to upload to BioSample: `r nrow(all_reported_samples[all_reported_samples$db == "biosample", "sample_name"])` \newline
+Number of samples to upload to SRA: `r nrow(all_reported_samples[all_reported_samples$db == "sra", "sample_name"])` \newline
 
 `r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge These non-control samples that didn't go through the pipeline correctly!! Try rerunning them through the pipeline again!}")}`
 

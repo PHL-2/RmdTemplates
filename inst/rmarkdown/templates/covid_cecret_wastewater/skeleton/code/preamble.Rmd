@@ -785,7 +785,7 @@ if(any(is.na(s$ww_group))) {
 
 # this table groups the sublineages with the same parent lineages together and gets the sum of the abundances
 freyja_grouping <- s %>%
-  select(sample_id, sample_name, sample_group, ww_group, sample_collection_date,
+  select(sample_id, sample_name, sample_group, ww_group, sample_collect_date,
          isControl, freyja_lineages, freyja_abundances, pct_genome_coverage_over_10x) %>%
   group_by(sample_id) %>%
   mutate(lineages = list(freyja_lineages),
@@ -872,8 +872,9 @@ epi_report_fp <- here("upload", "epi", paste0(project_name, "_PHL2_sequencing_re
 
 freyja_grouping %>%
   filter(sample_id %in% s_toPlot$sample_id,
+         !isControl,
          relative_abundances > 0.01) %>%
-  select(ww_group, sample_name, sample_collection_date,
+  select(ww_group, sample_name, sample_collect_date,
          pct_genome_coverage_over_10x, lineages, relative_abundances) %>%
   arrange(ww_group, sample_name, desc(relative_abundances)) %>%
   write_csv(epi_report_fp)
@@ -887,18 +888,24 @@ dcipher_config_fp <- list.files(file.path(dirname(here()), "aux_files", "dcipher
 dcipher_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "dcipher"), pattern = "dcipher_config_test.yaml", full.names = TRUE)
 
 #path of dcipher upload files
-dcipher_meta_fp <- here("upload", "dcipher", paste0(project_name, "_PHL2_dcipher_upload.tsv"))
+nwss_upload_fp <- here("upload", "dcipher", paste0(project_name, "_PHL2_nwss_upload.csv"))
+gisaid_upload_fp <- here("upload", "dcipher", paste0(project_name, "_PHL2_gisaid_upload.csv"))
+biosample_upload_fp <- here("upload", "dcipher", paste0(project_name, "_PHL2_biosample_upload.csv"))
+sra_upload_fp <- here("upload", "dcipher", paste0(project_name, "_PHL2_sra_upload.csv"))
 fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
 
 #read in data submission metadata
-ww_submission_metadata_fp <- file.path(dirname(here()), "aux_files", "data_submission", "dcipher")
-ww_sample_metadata_fp <- file.path(ww_submission_metadata_fp, "nwss_wastewater_metadata.csv")
-data_submit_metadata_fp <- file.path(ww_submission_metadata_fp, "wastewater_data_submission_metadata.csv")
+data_submit_metadata_fp <- file.path(dirname(here()), "aux_files", "data_submission", "dcipher", "wastewater_data_submission_metadata.csv")
 
-ww_sample_metadata <- read_csv(ww_sample_metadata_fp)
 data_submit_metadata <- read_csv(data_submit_metadata_fp) %>%
-  select(common_field, value) %>%
-  pivot_wider(names_from = "common_field", values_from = "value")
+  separate_rows(c(db, db_specific_field), sep=", ")
+
+get_db_specific_fields <- function(df, db_name) {
+  df %>%
+    filter(db == db_name) %>%
+    select(db_specific_field, value) %>%
+    pivot_wider(names_from = "db_specific_field", values_from = "value")
+}
 
 ```
 
@@ -909,41 +916,78 @@ data_submit_metadata <- read_csv(data_submit_metadata_fp) %>%
   
 dir.create(here("upload", "dcipher"), recursive = TRUE)
 
-samp_report <- s %>%
-  filter(sample_group %in% s_toPlot$sample_group) %>%
-  filter(!isControl) %>%
-  filter(ww_group != "Wastewater sample - Merged") %>%
-  cbind(data_submit_metadata) %>%
-  mutate(sample_collection_date = case_when(!(is.na(sample_collection_date) | as.character(sample_collection_date) == "") ~ as.character(sample_collection_date),
-                                           TRUE ~ NA),
-         sample_collection_date = as.Date(sample_collection_date, tryFormats = c("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y")),
-         sample_collection_year = format(sample_collection_date, format = "%Y"),
-         #create db names
+data_upload_all <- s %>%
+  filter(sample_group %in% s_toPlot$sample_group,
+         !isControl,
+         ww_group != "Wastewater sample - Merged") %>%
+  mutate(sample_collection_year = format(sample_collect_date, format = "%Y"),
          #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/collection year. This name may conflict with samples collected/sequenced in different years
-         gisaid_name = paste0("hCoV-19/env/USA/PA-", gsub(str_sub(sequencing_date, 1, 4), "", sample_id), "/", sample_collection_year),
+         covv_virus_name = paste0("hCoV-19/env/USA/PA-", gsub(str_sub(sequencing_date, 1, 4), "", sample_id), "/", sample_collection_year),
          biosample_name = paste0("SARS-CoV-2/Wastewater/USA/", sample_id, "/", sample_collection_year),
          specimen_processing_id = sample_name,
-         
-         #need to fill these in
-         ww_surv_target_1_known_present = "???", #this should be yes or no, depends on the ddPCR results
-         ww_surv_target_1_conc = "???", #this is the ddPCR transformed unit
-         ww_surv_target_2_known_present = "???", #this should be yes or no, depends on the ddPCR results
-         ww_surv_target_2_conc = "???",
-         
          #fields that depend on the workflow
          instrument = paste0("Illumina ", instrument_type),
          library = paste0("ARTIC Network Protocol ", artic_primer_scheme),
          assembly_method = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
-         description = paste(sample_description, "Viral sequencing was performed following a tiling amplicon strategy using the ARTIC", artic_primer_scheme, "primer scheme. Sequencing was performed using the Illumina", instrument_type, "instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit."),
-         gisaid_accession = "")
+         design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC ", artic_primer_scheme, " primer scheme. Sequencing was performed using the Illumina ", instrument_type, " instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Assay."))
 
-samp_report %>%
-  write_tsv(dcipher_meta_fp)
+data_upload_all %>%
+  select(wwtp_name, sample_collect_date, zipcode, population_served, lod_sewage) %>%
+  cbind(data_submit_metadata %>%
+          get_db_specific_fields("NWSS")) %>%
+  write_csv(nwss_upload_fp)
+
+data_upload_all %>%
+  select(covv_virus_name,
+         covv_collection_date = "sample_collect_date",
+         covv_seq_technology = "instrument",
+         covv_assembly_method = "assembly_method",
+         covv_coverage = "median_coverage",
+         covv_orig_lab = "sample_collected_by",
+         covv_subm_sample_id = "sample_id") %>%
+  mutate(fn = "???") %>%
+  cbind(data_submit_metadata %>%
+          get_db_specific_fields("GISAID")) %>%
+  write_csv(gisaid_upload_fp)
+
+data_upload_all %>%
+  select(sample_name = "biosample_name",
+         organism,
+         collection_date = "sample_collect_date",
+         isolation_source,
+         collection_site_id = "wwtp_name",
+         collected_by = "sample_collected_by",
+         ww_population = "population_served",
+         specimen_processing_id,
+         design_description) %>%
+  cbind(data_submit_metadata %>%
+          get_db_specific_fields("BioSample")) %>%
+  mutate(description = paste(sample_description, design_description),
+        #need to fill these in
+         ww_surv_target_1_known_present = "???", #this should be yes or no, depends on the ddPCR results
+         ww_surv_target_1_conc = "???", #this is the ddPCR transformed unit
+         ww_surv_target_2_known_present = "???", #this should be yes or no, depends on the ddPCR results
+         ww_surv_target_2_conc = "???",
+         gisaid_accession = "") %>%
+  select(-c(sample_description, design_description)) %>%
+  write_csv(biosample_upload_fp)
+
+data_upload_all %>%
+  select(sample_name = "biosample_name",
+         instrument_model = "instrument",
+         design_description,
+         amplicon_PCR_primer_scheme = "library",
+         library_preparation_kit = "library",
+         raw_sequence_data_processing_method = "assembly_method") %>%
+  mutate(filename = "???",
+         filename2 = "???") %>%
+  cbind(data_submit_metadata %>%
+          get_db_specific_fields("SRA")) %>%
+  write_csv(sra_upload_fp)
+
 
 #additional items to add
-#population_served (NWSS) -> ww_population (BioSample)
-#wwtp_name (NWSS) -> collection_site_id (BioSample)
-#is lod_sewage the same as ww_flow?
+#is lod_sewage the same as ww_flow? Seems like flow data is separate
 #ww_surv_system_sample_id (may need to get this id from the NWSS submmission process)
 
 ```
@@ -1035,27 +1079,29 @@ rerun_samples <- s %>%
   select(sample_id) %>%
   pull()
 
+#number of epi samples
+epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
+
+reported_samples <- epi_2_upload_fp %>%
+  read_csv() %>%
+  select(sample_name) %>%
+  unique() %>%
+  mutate(db = "epi")
+
 #number of samples to submit
 #check the dcipher file to upload to ncbi
-dcipher_2_upload_fp <- list.files(here("upload", "dcipher"), pattern = ".tsv", recursive = TRUE, full.names = TRUE)
+dcipher_2_upload_fp <- list.files(here("upload", "dcipher"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
 
-all_sample_ids_from_dcipher <- dcipher_2_upload_fp %>%
-  read_tsv() %>%
-  select(sample_id, biosample_name, gisaid_name) %>%
-  mutate(gisaid_name = gsub(".*PA-", "", gisaid_name)) %>%
-  #changing the year at the end of the gisaid name back to the sequencing year
-  mutate(gisaid_name = gsub("/.*$", paste0("/", str_sub(project_name, 1, 4)), gisaid_name)) %>%
-  mutate(gisaid_name = gsub(format(sequencing_date, "%m%d/%Y"), format(sequencing_date, "%Y%m%d"), gisaid_name)) %>%
-  pivot_longer(cols = c("biosample_name", "gisaid_name"), names_to = "file", values_to = "upload_id") %>%
-  mutate(upload_id = gsub(".*/USA/|/.*", "", upload_id)) %>%
-  mutate(all_sample_same = upload_id == sample_id)
-
-if (!all(all_sample_ids_from_dcipher$all_sample_same)) {
-  stop (simpleError("Some of the database names don't match the sample_id names! The GenBank name may also be missing because it didn't pass vadr check. Try submitting the GenBank files anyway through dcipher to see if it passes"))
-}
-
-all_sample_ids_from_dcipher %<>% select(file, upload_id) %>%
-  rename(sample_id = "upload_id")
+all_reported_samples <- dcipher_2_upload_fp %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_csv(.$FileName, col_names = TRUE)) %>%
+  ungroup() %>%
+  filter(!grepl("nwss_upload.csv", FileName)) %>%
+  mutate(sample_name = ifelse(is.na(sample_name), covv_virus_name, sample_name),
+         db = gsub(".*PHL2_|_upload.*", "",  FileName)) %>%
+  select(db, sample_name) %>%
+  rbind(reported_samples)
 
 ```
 

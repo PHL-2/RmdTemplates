@@ -315,7 +315,7 @@ if(ncol(ddPCR_data) == 0) {
 
   ddPCR_data <- data.frame(
     sample_group = NA_character_,
-    sample_collection_date = NA,
+    sample_collect_date = NA,
     pcr_gene_target = NA_character_,
     pcr_target_gc_uL = NA_real_
   )
@@ -328,7 +328,7 @@ if(ncol(ddPCR_data) == 0) {
     mutate(across(c(sample_group, pcr_gene_target), as.character)) %>%
     select(where(function(x) any(!is.na(x)))) %>%
     select(!matches("^\\.\\.\\.")) %>%
-    mutate(sample_collection_date = as.Date(sample_collection_date)) %>%
+    mutate(sample_collect_date = as.Date(sample_collect_date)) %>%
     as.data.frame()
 
 }
@@ -342,9 +342,9 @@ ENV_fp <- max(list.files(here("metadata", "extra_metadata"), pattern = "environm
 if(!is.na(ENV_fp)) {
 
   ENV_data <- read_csv(ENV_fp) %>%
-    #use the Tuesday of the sequencing week as the sample_collection_date
-    mutate(sample_collection_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
-    select(sample_name, sample_collection_date, environmental_site) %>%
+    #use the Tuesday of the sequencing week as the sample_collect_date
+    mutate(sample_collect_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
+    select(sample_name, sample_collect_date, environmental_site) %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     #filter empty columns
@@ -374,7 +374,7 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   #add in barcodes
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
   arrange(plate, plate_col, plate_row) %>%
-  rename(any_of(c(sample_collection_date = "sample_collection_date"))) %>%
+  rename(any_of(c(sample_collect_date = "sample_collection_date"))) %>%
   #find sample group from sample_name
   mutate(sample_group = as.character(lapply(sample_name,
                                             function(x) unlist(lapply(c(sample_group_controls, sample_group_sites),
@@ -397,7 +397,7 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
 # Fill in these columns in the metadata sheet if they were left blank
 #####################################################################
 
-fill_in_columns <- c("sample_type", "sample_collected_by", "sample_collection_date",
+fill_in_columns <- c("sample_type", "sample_collected_by", "sample_collect_date",
                      "organism", "host_scientific_name", "host_disease", "isolation_source",
                      "requester", "requester_email")
 
@@ -440,7 +440,7 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^[A-Z0-9][0-9]*$" = "Nasal swab",
                        "^WW-" = "Wastewater")
 
-extra_cols2merge <- c("sample_group", "sample_collection_date")
+extra_cols2merge <- c("sample_group", "sample_collect_date")
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
@@ -449,7 +449,7 @@ metadata_sheet <- metadata_sheet %>%
                                  TRUE ~ NA),
          sample_collected_by = case_when(!(is.na(sample_collected_by) | sample_collected_by == "") ~ sample_collected_by,
                                          TRUE ~ "Philadelphia Water Department"),
-         sample_collection_date = case_when(!(is.na(sample_collection_date) | as.character(sample_collection_date) == "") ~ as.Date(sample_collection_date),
+         sample_collect_date = case_when(!(is.na(sample_collect_date) | as.character(sample_collect_date) == "") ~ as.Date(sample_collect_date),
                                          #if it's a wastewater sample without a date, throw an error
                                          sample_type == "Wastewater" ~ NA,
                                          #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet
@@ -527,7 +527,7 @@ if(ncol(ddPCR_data) > 0) {
     filter(grepl(paste0(sample_group_sites, collapse = "|"), sample_group)) %>%
     merge(metadata_sheet, by = extra_cols2merge, all.x = TRUE) %>%
     filter(is.na(sample_id)) %>%
-    mutate(date_n_name = paste(sample_collection_date, "-", sample_group)) %>%
+    mutate(date_n_name = paste(sample_collect_date, "-", sample_group)) %>%
     select(date_n_name) %>%
     pull() %>%
     str_sort()
@@ -550,7 +550,7 @@ missing_metadata_non_ctrl_samples <- metadata_sheet %>%
   filter(!grepl("control", sample_type))
 
 missing_sample_date <- missing_metadata_non_ctrl_samples %>%
-  filter(is.na(sample_collection_date)) %>%
+  filter(is.na(sample_collect_date)) %>%
   select(sample_name) %>%
   pull() %>%
   str_sort()
@@ -583,7 +583,7 @@ if(nrow(missing_ddPCR_data) > 0){
 #check lowest date of sample collection
 oldest_ww_date <- metadata_sheet %>%
   filter(!grepl("control", ww_group)) %>%
-  select(sample_collection_date) %>%
+  select(sample_collect_date) %>%
   pull() %>%
   min()
 
@@ -600,7 +600,7 @@ for(x in c(cols2merge, "sample_id",
            "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
            "index", "index2", "UDI_Index_ID", "I7_Index_ID", "I5_Index_ID",
            "sequencing_date", "prj_descrip", "instrument_type", "read_length", "index_length",
-           "environmental_site", "sample_collection_date", "zipcode")) {
+           "environmental_site", "sample_collect_date", "zipcode")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     stop(simpleError(paste0("\nMissing column [", x, "] in the metadata sheet template!!!")))
   }
