@@ -753,11 +753,13 @@ s <- s_meta %>%
                               TRUE ~ ww_group),
          ww_group = factor(ww_group, levels = color_group_lvls),
          sample_group = case_when(grepl("^Undetermined$", sample_id) ~ "Unassigned reads",
-                                  TRUE ~ sample_group)) %>%
-  arrange(sample_group) %>%
-  order_on_other_col(sample_group, ww_group, decreasing = FALSE) %>%
-  #order the sample_id by sample type then by plate position
-  mutate(sample_id = factor(sample_id, levels = unique(sample_id[str_order(as.numeric(sample_group), decreasing = FALSE, numeric = TRUE)]))) %>%
+                                  TRUE ~ sample_group),
+         sample_group = factor(sample_group,
+                               levels = unique(c("Unassigned reads",
+                                                 ctrl_fct_lvls,
+                                                 str_sort(unique(sample_group), numeric = TRUE)))),
+         #order the sample_id by sample type then by plate position
+         sample_id = factor(sample_id, levels = unique(sample_id[str_order(as.numeric(sample_group), decreasing = FALSE, numeric = TRUE)]))) %>%
   arrange(sample_id) %>%
   droplevels()
 
@@ -932,34 +934,34 @@ data_upload_all <- s %>%
          design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC ", artic_primer_scheme, " primer scheme. Sequencing was performed using the Illumina ", instrument_type, " instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Assay."))
 
 data_upload_all %>%
-  select(wwtp_name, sample_collect_date, zipcode, population_served, lod_sewage) %>%
+  select(any_of(c("wwtp_name", "sample_collect_date", "zipcode", "population_served", "lod_sewage"))) %>%
   cbind(data_submit_metadata %>%
           get_db_specific_fields("NWSS")) %>%
   write_csv(nwss_upload_fp)
 
 data_upload_all %>%
-  select(covv_virus_name,
-         covv_collection_date = "sample_collect_date",
-         covv_seq_technology = "instrument",
-         covv_assembly_method = "assembly_method",
-         covv_coverage = "median_coverage",
-         covv_orig_lab = "sample_collected_by",
-         covv_subm_sample_id = "sample_id") %>%
+  select(any_of(c("covv_virus_name",
+                  "covv_collection_date" = "sample_collect_date",
+                  "covv_seq_technology" = "instrument",
+                  "covv_assembly_method" = "assembly_method",
+                  "covv_coverage" = "median_coverage",
+                  "covv_orig_lab" = "sample_collected_by",
+                  "covv_subm_sample_id" = "sample_id"))) %>%
   mutate(fn = "???") %>%
   cbind(data_submit_metadata %>%
           get_db_specific_fields("GISAID")) %>%
   write_csv(gisaid_upload_fp)
 
 data_upload_all %>%
-  select(sample_name = "biosample_name",
-         organism,
-         collection_date = "sample_collect_date",
-         isolation_source,
-         collection_site_id = "wwtp_name",
-         collected_by = "sample_collected_by",
-         ww_population = "population_served",
-         specimen_processing_id,
-         design_description) %>%
+  select(any_of(c("sample_name" = "biosample_name",
+                  "organism",
+                  "collection_date" = "sample_collect_date",
+                  "isolation_source",
+                  "collection_site_id" = "wwtp_name",
+                  "collected_by" = "sample_collected_by",
+                  "ww_population" = "population_served",
+                  "specimen_processing_id",
+                  "design_description"))) %>%
   cbind(data_submit_metadata %>%
           get_db_specific_fields("BioSample")) %>%
   mutate(description = paste(sample_description, design_description),
@@ -973,18 +975,17 @@ data_upload_all %>%
   write_csv(biosample_upload_fp)
 
 data_upload_all %>%
-  select(sample_name = "biosample_name",
-         instrument_model = "instrument",
-         design_description,
-         amplicon_PCR_primer_scheme = "library",
-         library_preparation_kit = "library",
-         raw_sequence_data_processing_method = "assembly_method") %>%
+  select(any_of(c("sample_name" = "biosample_name",
+                  "instrument_model" = "instrument",
+                  "design_description",
+                  "amplicon_PCR_primer_scheme" = "library",
+                  "library_preparation_kit" = "library",
+                  "raw_sequence_data_processing_method" = "assembly_method"))) %>%
   mutate(filename = "???",
          filename2 = "???") %>%
   cbind(data_submit_metadata %>%
           get_db_specific_fields("SRA")) %>%
   write_csv(sra_upload_fp)
-
 
 #additional items to add
 #is lod_sewage the same as ww_flow? Seems like flow data is separate
