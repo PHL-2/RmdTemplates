@@ -2,7 +2,7 @@
 ```{r only run this chunk once to install packages, include=FALSE, eval=FALSE}
 
 # vegan package requires fortran compiler; see MacBook setup SOP for how to install
-install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx", "ggsci", "reticulate", "vegan", "ape"))
+install.packages(c("knitr", "here", "tidyverse", "rvest", "pander", "kableExtra", "RColorBrewer", "readxl", "patchwork", "zoo", "ggthemes", "stringdist", "openxlsx", "ggsci", "reticulate", "vegan", "ape", "RSocrata"))
 
 ```
 
@@ -615,8 +615,9 @@ cecret_aggregate %>%
   unique() %>%
   mutate(software = case_when(grepl("^PUSHER-", version) ~ "PUSHER",
                               grepl("^PANGO-", version) ~ "PANGO",
+                              grepl("^SCORPIO_", version) ~ "SCORPIO",
                               TRUE ~ gsub("^pangolin_|.version$", "", software)),
-         version = gsub("^PUSHER-|^PANGO-", "", version)) %>%
+         version = gsub("^PUSHER-|^PANGO-|^SCORPIO_", "", version)) %>%
   mutate(pipeline = "UPHL-BioNGS-Cecret") %>%
   select(pipeline, software, version) %>%
   write_csv(file = software_version_fp, append = TRUE)
@@ -782,6 +783,65 @@ if(any(is.na(s$ww_group))) {
 ```
 
 <!-- Prepare files containing samples with good results for uploading -->
+
+```{r download pango names and CDC Tracker lineages}
+
+# pango_lineage_names_url <- "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json"
+# pango_lineage_names_fp <- here("data", paste0(sequencing_date, "_pango_designation_alias_key.json"))
+
+# dl_pango_names <- system2("curl", c("--output", pango_lineage_names_fp, pango_lineage_names_url))
+# if(dl_pango_names != 0) {
+#   stop(simpleError(paste("The pangolin designation names were not downloaded. Please manually download the file:\n",
+#                          pango_lineage_names_url, "\n and save it as\n", pango_lineage_names_fp)))
+# }
+# 
+# pango_lineage_names <- pango_lineage_names_fp %>%
+#   read_delim(delim = ":", col_names = c("key", "value"), skip = 1) %>%
+#   mutate(across(everything(), ~ gsub("\"| |,$", "", .)))
+
+cdc_tracker_url <- "https://data.cdc.gov/resource/jr58-6ysp.json?$select=variant"
+cdc_tracker_fp <- here("data", paste0(sequencing_date, "_cdc_data_tracker_lineages.csv"))
+
+tryCatch(
+  {
+    dl_cdc_names <- RSocrata::read.socrata(cdc_tracker_url)
+    
+    #Use the below code if the counts and creation dates are needed. Will need to remove the $select tag from the url if that's the case
+    # dl_cdc_names <- dl_cdc_names %>%
+    #   select(variant, creation_date) %>%
+    #   group_by(variant) %>%
+    #   summarize(count_variant = n(),
+    #             min_creation_date = min(creation_date),
+    #             max_creation_date = max(creation_date)) %>%
+    #   ungroup %>%
+    #   arrange(variant) %>%
+    #   mutate(across(ends_with("creation_date"), ~ as.Date(.)))
+    
+  },
+  error = function(e) {
+    stop(simpleError(paste0("The lineages from CDC COVID Data Tracker could not be downloaded\n",
+                            "Download the CDC json file using the following URL:\n",
+                            "https://data.cdc.gov/resource/jr58-6ysp.json?$query=SELECT%0A%20%20%60variant%60%2C%0A%20%20count(%60variant%60)%20AS%20%60count_variant%60%2C%0A%20%20min(%60creation_date%60)%20AS%20%60min_creation_date%60%2C%0A%20%20max(%60creation_date%60)%20AS%20%60max_creation_date%60%0AGROUP%20BY%20%60variant%60\n",
+                            "Save the file as:\n", cdc_tracker_fp,
+                            "\nUncomment the below code to read in the CDC variant list")))
+  }
+)
+    
+# cdc_lineages <- read_delim(cdc_tracker_fp, delim = "\",\"", col_names = c("variant", "count_variant", "min_creation_date", "max_creation_date")) %>%
+#   mutate(across(everything(), ~ gsub(".*\":\"", "", .)),
+#          max_creation_date = gsub("\"}", "", max_creation_date),
+#          count_variant = as.integer(count_variant),
+#          across(ends_with("creation_date"), ~ as.Date(.))) %>%
+#   select(variant)
+
+cdc_lineages <- dl_cdc_names %>%
+  unique() %>%
+  arrange(variant)
+
+cdc_lineages %>%
+  write_csv(cdc_tracker_fp)
+
+```
 
 ```{r prepare freyja table and export report}
 
