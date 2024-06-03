@@ -605,8 +605,9 @@ cecret_aggregate %>%
   unique() %>%
   mutate(software = case_when(grepl("^PUSHER-", version) ~ "PUSHER",
                               grepl("^PANGO-", version) ~ "PANGO",
+                              grepl("^SCORPIO_", version) ~ "SCORPIO",
                               TRUE ~ gsub("^pangolin_|.version$", "", software)),
-         version = gsub("^PUSHER-|^PANGO-", "", version)) %>%
+         version = gsub("^PUSHER-|^PANGO-|^SCORPIO_", "", version)) %>%
   mutate(pipeline = "UPHL-BioNGS-Cecret") %>%
   select(pipeline, software, version) %>%
   write_csv(file = software_version_fp, append = TRUE)
