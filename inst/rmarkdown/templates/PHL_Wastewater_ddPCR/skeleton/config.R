@@ -6,6 +6,10 @@
 
 dat_fp = "//Volumes/Export"
 
+## Filepath to wastewater metadata in aux folder
+
+wwMeta_fp = "/Users/christopher.gu/Library/CloudStorage/OneDrive-CityofPhiladelphia/Wastewater/aux_files"
+
 ###### Volumes used in experiment ######
 
 ## Wastewater volume (mL)

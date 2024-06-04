@@ -487,10 +487,13 @@ ww_SC2_conc_result <- d %>%
 
 ```{r summary table to file}
 
+wwMeta <- read_csv(file = file.path(wwMeta_fp, "wastewater_metadata/wwMeta.csv"))
+
 towrite <- ww_SC2_conc_result_summarised %>%
   ungroup() %>%
   select(-stock_conc_GCuL) %>%
-  select(pcr_gene_target = Target, pcr_target_avg_conc = stock_conc_GC1L, sample_id = Type, sample_collect_date = Sample_date)
+  select(pcr_gene_target = Target, pcr_target_avg_conc = stock_conc_GC1L, sample_id = Type, sample_collect_date = Sample_date) %>%
+  left_join(wwMeta, by = "sample_id")
 
 write_csv(towrite, "summary_tab.csv")
 

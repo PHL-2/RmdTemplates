@@ -150,11 +150,11 @@ d_pre %>%
 
 if (variance_test) {
   if (!all_var_check) {
+    varNominal <- TRUE
     print("Detected high variation in non-summarized wells; no wells removed")
   } else {
-    if(variance_test) {
+      varNominal <- FALSE
       print(paste("Detected wells with high variance:", paste(wellsToRemove1, collapse =", "), collapse = " "))
-    }
   }
 
   var_pander <- d_sd %>%
@@ -169,6 +169,7 @@ if (variance_test) {
       split.table = 500
   )
 } else {
+  varNominal <- TRUE
   print("Variation nominal")
 }
 
@@ -181,15 +182,27 @@ if (variance_test) {
 if (signal_check) {
       print(paste("Detected wells with no signal:", paste(wellsToRemove2, collapse =", "), collapse = " "))
 } else {
-      print("Signal nominal")
-    }
+  signalNominal <- TRUE
+  print("Signal nominal")
+}
 
+
+```
+
+
+```{r}
+
+if (signalNominal & varNominal) {
+  notNominal <- FALSE
+} else {
+  notNominal <- TRUE
+}
 
 ```
 
 ## Wells removed
 
-```{r}
+```{r, eval = notNominal}
 
     print(paste("Wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
 
