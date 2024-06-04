@@ -87,6 +87,7 @@ kraken_props_fp <- here("data", paste0(sequencing_date, "_kraken_props.csv"))
 snpdists_fp <- here("data", paste0(sequencing_date, "_snpdists.csv"))
 software_version_fp <- here("data", paste0(sequencing_date, "_software_version.csv"))
 cecret_results_fp <- here("data", paste0(sequencing_date, "_cecret_results.csv"))
+cdc_tracker_fp <- here("data", paste0(sequencing_date, "_cdc_data_tracker_lineages.csv"))
 
 ```
 
@@ -784,7 +785,7 @@ if(any(is.na(s$ww_group))) {
 
 <!-- Prepare files containing samples with good results for uploading -->
 
-```{r download pango names and CDC Tracker lineages}
+```{r download pango names and CDC Tracker lineages, eval = import_data}
 
 # pango_lineage_names_url <- "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json"
 # pango_lineage_names_fp <- here("data", paste0(sequencing_date, "_pango_designation_alias_key.json"))
@@ -799,8 +800,7 @@ if(any(is.na(s$ww_group))) {
 #   read_delim(delim = ":", col_names = c("key", "value"), skip = 1) %>%
 #   mutate(across(everything(), ~ gsub("\"| |,$", "", .)))
 
-cdc_tracker_url <- "https://data.cdc.gov/resource/jr58-6ysp.json?$select=variant"
-cdc_tracker_fp <- here("data", paste0(sequencing_date, "_cdc_data_tracker_lineages.csv"))
+cdc_tracker_url <- "https://data.cdc.gov/resource/jr58-6ysp.json?$select=variant, week_ending"
 
 tryCatch(
   {
@@ -836,7 +836,12 @@ tryCatch(
 
 cdc_lineages <- dl_cdc_names %>%
   unique() %>%
-  arrange(variant)
+  mutate(week_ending = as.Date(week_ending),
+         week_rank = factor(week_ending, levels = sort(unique(week_ending), decreasing = TRUE))) %>%
+  #filter for the two most recent weeks
+  filter(week_rank %in% levels(week_rank)[1:2]) %>%
+  arrange(week_ending, variant) %>%
+  select(-week_rank)
 
 cdc_lineages %>%
   write_csv(cdc_tracker_fp)
@@ -844,6 +849,29 @@ cdc_lineages %>%
 ```
 
 ```{r prepare freyja table and export report}
+
+cdc_lineages <- read_csv(cdc_tracker_fp) %>%
+  select(variant) %>%
+  unique()
+
+flodel <- function(word1, word2) {
+   # the length of the 2nd word
+   n <- nchar(word2)
+   # two vectors of characters of the same length n
+   c1 <- strsplit(word1, "", fixed = TRUE)[[1]][1:n]
+   c2 <- strsplit(word2, "", fixed = TRUE)[[1]][1:n]
+   # a vector that is TRUE as long as the characters match
+   m <- as.logical(cumprod(c1 == c2) & !is.na(cumprod(c1 == c2)))
+   # the answer
+   a <- paste(c1[m], collapse = "")
+   # return answer if ends with period and matches length of word2
+   if(sum(m) == n) {
+     a
+   }
+   else {
+     ""
+   }
+}
 
 # this table groups the sublineages with the same parent lineages together and gets the sum of the abundances
 freyja_grouping <- s %>%
@@ -862,79 +890,61 @@ freyja_grouping <- s %>%
   select(-c("freyja_lineages", "freyja_abundances")) %>%
   unique() %>%
   arrange(sample_id, relative_abundances, str_rank(lineages, numeric = TRUE)) %>%
-  group_by(sample_id, main_lineage, relative_abundances) %>%
-  #add an extra period to the end to help with matching lineages correctly
   mutate(lineages = gsub("$", ".", lineages),
-         least_common_substring = attr(adist(lineages, counts = TRUE), "trafos")[, 1],
-         end_match = do.call(rbind, stringi::stri_locate_all_regex(least_common_substring, "^M+"))[, 2],
-         has_lowest_str_length = str_length(lineages) == min(str_length(lineages)),
-         substring_end = ifelse(sum(has_lowest_str_length) == 1 &
-                                grepl("^M+$", least_common_substring), end_match, NA),
-         substring_end = ifelse(all(is.na(substring_end)), min(end_match), substring_end)) %>%
-  fill(substring_end, .direction = "down") %>%
-  ungroup() %>%
-  mutate(combined_lineage = stringi::stri_sub(lineages, 1, substring_end),
-         combined_lineage = gsub("\\.$", "", combined_lineage),
-         combined_lineage = factor(combined_lineage, levels = str_sort(unique(combined_lineage), numeric = TRUE)),
-         relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", combined_lineage),
-                                      1, relative_abundances),
-         lineages = gsub("\\.$", "", lineages))
+         longest_common_substring = sapply(lineages,
+                                           function(x) max(sapply(gsub("$", ".", cdc_lineages$variant),
+                                                                  function(y) flodel(x, y)))),
+         relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", lineages), 1, relative_abundances),
+         isCDClineage = grepl(paste0("^", paste0(gsub("\\.", "\\\\.", cdc_lineages$variant), collapse = "\\.|^"), "\\."), lineages),
+         lineages = gsub("\\.$", "", lineages),
+         CDC_lineages = fct_other(gsub("\\.$", "", longest_common_substring),
+                                  keep = cdc_lineages$variant,
+                                  other_level = "Other lineages"),
+         CDC_lineages = factor(CDC_lineages, levels = c(str_sort(cdc_lineages$variant, numeric = TRUE), "Other lineages"))) %>%
+  droplevels()
 
 freyja_matrix <- freyja_grouping %>%
-  complete(nesting(sample_id, ww_group), combined_lineage, fill = list(relative_abundances = 0)) %>%
-  group_by(sample_id, combined_lineage) %>%
+  complete(nesting(sample_id, ww_group), lineages, fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, lineages) %>%
   summarize(relative_abundances = sum(relative_abundances)) %>%
   ungroup() %>%
-  pivot_wider(names_from = "combined_lineage", values_from = "relative_abundances") %>%
+  pivot_wider(names_from = "lineages", values_from = "relative_abundances") %>%
   column_to_rownames("sample_id")
 
 # this table groups the individual samples together and calculates the average
 freyja_average <- freyja_grouping %>%
   filter(!isControl) %>%
-  filter(!grepl("Merged", ww_group)) %>%
   droplevels() %>%
-  complete(nesting(sample_id, sample_group), nesting(combined_lineage, main_lineage), fill = list(relative_abundances = 0)) %>%
-  group_by(sample_id, sample_group, combined_lineage, main_lineage) %>%
+  mutate(isMerged = ifelse(grepl("Merged$", ww_group), "Merged sample", "Individual samples")) %>%
+  complete(nesting(sample_id, sample_group, isMerged), nesting(lineages, main_lineage), fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, sample_group, isMerged, lineages, CDC_lineages, main_lineage) %>%
   summarize(relative_abundances = sum(relative_abundances)) %>%
   ungroup() %>%
   filter(!is.na(relative_abundances)) %>%
-  group_by(sample_group) %>%
+  group_by(sample_group, isMerged) %>%
   mutate(total_samples = n_distinct(sample_id)) %>%
   ungroup() %>%
   # to calculate the total standard deviation of a combined distribution,
   # get the total variance and square root it
-  group_by(sample_group, combined_lineage, main_lineage) %>%
+  group_by(sample_group, isMerged, lineages, CDC_lineages, main_lineage) %>%
   mutate(avg_rel_abund = relative_abundances/total_samples,
          variance = var(avg_rel_abund)) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
             total_sd = sqrt(sum(variance))) %>%
   ungroup() %>%
-  group_by(combined_lineage) %>%
+  group_by(CDC_lineages) %>%
   filter(any(avg_rel_abund > 0.00005)) %>%
   ungroup() %>%
   droplevels()
 
-# this table groups the individual samples together and calculates the average
-freyja_merged <- freyja_grouping %>%
-  filter(!isControl) %>%
-  filter(grepl("Merged", ww_group)) %>%
-  droplevels() %>%
-  complete(nesting(sample_id, sample_group), nesting(combined_lineage, main_lineage), fill = list(relative_abundances = 0)) %>%
-  group_by(sample_id, sample_group, combined_lineage, main_lineage) %>%
-  summarize(relative_abundances = sum(relative_abundances)) %>%
-  ungroup() %>%
-  droplevels()
-
 #write freyja results for epi's
-
 dir.create(here("upload", "epi"), recursive = TRUE)
 epi_report_fp <- here("upload", "epi", paste0(project_name, "_PHL2_sequencing_results.csv"))
-
-#to do: merge lineages into the ones reported by CDC
 
 freyja_grouping %>%
   filter(sample_id %in% s_toPlot$sample_id,
          !isControl,
+         isCDClineage,
          relative_abundances > 0.01) %>%
   select(ww_group, sample_name, sample_collect_date,
          pct_genome_coverage_over_10x, lineages, relative_abundances) %>%
@@ -1287,7 +1297,7 @@ sample_group_legend <- s %>%
       plot.margin= margin(0, 0, 0, 0, "pt"),
       legend.position = "bottom"
     ) +
-    labs(y = "", x = "", fill = "Samples/Sites") + 
+    labs(y = "", x = "", fill = "Samples/Groups") + 
     guides(fill = guide_legend(override.aes = list(size = 2)))
   }
 

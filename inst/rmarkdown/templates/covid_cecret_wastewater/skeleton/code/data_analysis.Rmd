@@ -847,21 +847,21 @@ No freyja results or results assigned "Misc" are grouped into "Unresolved"
 other_lineage_fct_lvl <- c("Other lineages", "Unresolved")
 
 freyja_grouping %>%
-  group_by(sample_id, ww_group, combined_lineage) %>%
+  group_by(sample_id, ww_group, CDC_lineages) %>%
   summarize(relative_abundances = sum(relative_abundances)) %>%
-  mutate(combined_lineage = gsub("\\.$", "", combined_lineage),
-         combined_lineage = fct_lump_n(combined_lineage, n = 3, w = relative_abundances, other_level = "Other lineages")) %>%
+  mutate(CDC_lineages = gsub("\\.$", "", CDC_lineages),
+         CDC_lineages = fct_lump_n(CDC_lineages, n = 3, w = relative_abundances, other_level = "Other lineages")) %>%
   ungroup() %>%
-  complete(nesting(sample_id, ww_group), combined_lineage, fill = list(relative_abundances = NA)) %>%
-  mutate(combined_lineage = factor(combined_lineage,
-                                   levels = rev(c(str_sort(levels(combined_lineage)[!levels(combined_lineage) %in% other_lineage_fct_lvl], numeric = TRUE),
+  complete(nesting(sample_id, ww_group), CDC_lineages, fill = list(relative_abundances = NA)) %>%
+  mutate(CDC_lineages = factor(CDC_lineages,
+                                   levels = rev(c(str_sort(levels(CDC_lineages)[!levels(CDC_lineages) %in% other_lineage_fct_lvl], numeric = TRUE),
                                               other_lineage_fct_lvl)))) %>%
   ungroup() %>%
-  group_by(sample_id, ww_group, combined_lineage) %>%
+  group_by(sample_id, ww_group, CDC_lineages) %>%
   summarise(relative_abundances = sum(relative_abundances)) %>%
   ungroup() %>%
   {
-    ggplot(., aes(y = combined_lineage, x = sample_id, fill = relative_abundances)) +
+    ggplot(., aes(y = CDC_lineages, x = sample_id, fill = relative_abundances)) +
     geom_tile(color = "black") +
     coord_fixed() +
     scale_fill_gradientn(colors = rev(brewer.pal(11, "Spectral")),
@@ -870,8 +870,8 @@ freyja_grouping %>%
     theme_bw() +
     theme(panel.grid = element_blank(),
           panel.border = element_blank(),
-          axis.text.y.left = element_text(color = ifelse(grepl("^A$|^A\\.|^B$|^B\\.", levels(.$combined_lineage)), "red",
-                                                  ifelse(grepl("^Unresolved$|^Other lineages$", levels(.$combined_lineage)), "blue", "black")),
+          axis.text.y.left = element_text(color = ifelse(grepl("^A$|^A\\.|^B$|^B\\.", levels(.$CDC_lineages)), "red",
+                                                  ifelse(grepl("^Unresolved$|^Other lineages$", levels(.$CDC_lineages)), "blue", "black")),
                                           size = 5),
           axis.ticks.x.bottom = element_blank(),
           axis.text.x.bottom = element_blank(),
@@ -892,7 +892,7 @@ freyja_grouping %>%
 
 The Shannon diversity index shows the diversity within a sample based on the number of lineages identified and is weighted by abundance. Higher numbers mean greater "eveness" (e.g. one hugely abundant lineage and 9 scarce ones has a lower Shannon value than 10 equally abundant lineages)
 
-```{r shannon diversity}
+```{r shannon diversity, fig.height=11, fig.width=9}
 
 freyja_matrix %>% 
   diversity %>%
@@ -909,7 +909,7 @@ freyja_matrix %>%
           strip.text.y.right = element_text(angle = 0)) +
     labs(
       x="Shannon diversity",
-      y="", fill = "Samples and Sites"
+      y="", fill = "Samples and groups"
     )
 
 ```
@@ -948,7 +948,7 @@ s %>%
     ) + 
     labs(x=paste0("PCoA axis 1 (", pct[1], "%)"), 
          y=paste0("PCoA axis 2 (", pct[2], "%)"),
-         color="Samples and Sites", fill = "Samples and Sites", shape="Samples and Sites",
+         color="Wastewater group", fill = "Wastewater group", shape="Wastewater group",
          title="Bray Curtis PCoA")
   }
 
@@ -956,18 +956,22 @@ s %>%
 
 \newpage
 
-### Freyja grouped by sample type
+### Freyja results by sample group
 
-Relative lineage abundances within each sample type
+Relative abundances of CDC lineages within each sample group
 
 ```{r freyja results grouped, fig.height=10, fig.width=8}
 
 freyja_average %>%
+  group_by(sample_group, isMerged, CDC_lineages) %>%
+  summarize(avg_rel_abund = sum(avg_rel_abund)) %>%
+  ungroup() %>%
   {
-  ggplot(., aes(x = sample_group, y = avg_rel_abund, fill = combined_lineage)) +
+  ggplot(., aes(x = isMerged, y = avg_rel_abund, fill = CDC_lineages)) +
     geom_col() +
+    facet_wrap(~sample_group) +
     scale_fill_manual(values = 
-                        c(colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$combined_lineage))-2),
+                        c(colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$CDC_lineages))-2),
                           "#808080", "#000000")) +
     scale_y_continuous(labels = percent, expand=c(0,0), limits = c(0, 1)) +
     theme_classic() +
@@ -976,20 +980,29 @@ freyja_average %>%
           axis.ticks.x.bottom = element_blank(),
           axis.text.x.bottom = element_text(angle = -30, hjust = 0)
           ) +
-    labs(x = "", y = "Relative proportions", fill = "Variants")
+    labs(x = "", y = "Relative proportions", fill = "CDC lineages")
   }
 
 ```
 
-### Freyja table by sample type
+\blandscape
 
-Relative lineage abundances within each sample type. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample type and getting the square root \newline
-Only lineages with abundance >0.01% in at least one sample type are kept
+### Freyja table: CDC variants
+
+Relative lineage abundances within each sample group. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample group and getting the square root \newline
+Only lineages with abundance >1% in at least one sample group are kept
 
 ```{r freyja table, fig.height=11, fig.width=8}
 
 freyja_table_delim <- freyja_average %>%
-  select(combined_lineage, main_lineage) %>%
+  group_by(sample_group, isMerged, CDC_lineages, main_lineage) %>%
+  summarize(avg_rel_abund = sum(avg_rel_abund),
+            total_sd = sum(total_sd)) %>%
+  ungroup() %>%
+  filter(CDC_lineages != "Other lineages",
+         avg_rel_abund >= 0.01) %>%
+  arrange(CDC_lineages) %>%
+  select(CDC_lineages, main_lineage) %>%
   unique() %>%
   group_by(main_lineage) %>%
   summarize(total_lineage = n()) %>%
@@ -999,16 +1012,80 @@ freyja_table_delim <- freyja_average %>%
   pull()
 
 freyja_average %>%
+  group_by(sample_group, isMerged, CDC_lineages) %>%
+  summarize(avg_rel_abund = sum(avg_rel_abund),
+            total_sd = sum(total_sd)) %>%
+  ungroup() %>%
+  filter(avg_rel_abund >= 0.01) %>%
   mutate(print_rel_abund = ifelse(!is.na(total_sd),
                                   paste0(round(avg_rel_abund*100, 2), "% +/- ",
                                          round(total_sd*100, 2), "%"),
-                                  paste0(round(avg_rel_abund*100, 2), "%"))) %>%
-  select(-c(total_sd, avg_rel_abund)) %>%
+                                  paste0(round(avg_rel_abund*100, 2), "%")),
+         sample_group = paste(sample_group, isMerged, sep = "\n")) %>%
+  select(-c(total_sd, avg_rel_abund, isMerged)) %>%
+  unique() %>%
   pivot_wider(names_from = "sample_group", values_from = "print_rel_abund", values_fill = "") %>%
-  filter(!is.na(combined_lineage)) %>%
-  arrange(combined_lineage) %>%
-  rename(Lineage = "combined_lineage") %>%
-  select(-main_lineage) %>%
+  filter(!is.na(CDC_lineages)) %>%
+  arrange(CDC_lineages) %>%
+  rename(Lineage = "CDC_lineages") %>%
+  { if(use_kable)
+    mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
+      select_all(~gsub(" ", "\n", .)) %>%
+      select_all(~gsub("_", "\\\\_", .)) %>%
+      kable("latex", longtable = T, digits=2, booktabs=T, escape=F, col.names = linebreak(colnames(.), align = "l")) %>%
+      kable_styling(latex_options = c("repeat_header", "HOLD_position"), font_size = 10) %>%
+      row_spec(0, bold = T, color="#7C0A02") %>%
+      row_spec(freyja_table_delim, hline_after = T)
+    else
+      pander(.)
+  }
+
+```
+
+\newpage
+
+### Freyja table: non CDC variants
+
+Relative lineage abundances within each sample group. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample group and getting the square root \newline
+Only lineages with abundance >1% in at least one sample group are kept
+
+```{r freyja table non CDC, fig.height=11, fig.width=8}
+
+freyja_table_delim <- freyja_average %>%
+  group_by(sample_group, isMerged, CDC_lineages, lineages, main_lineage) %>%
+  summarize(avg_rel_abund = sum(avg_rel_abund),
+            total_sd = sum(total_sd)) %>%
+  ungroup() %>%
+  filter(CDC_lineages == "Other lineages",
+         avg_rel_abund >= 0.01) %>%
+  arrange(lineages) %>%
+  select(lineages, main_lineage) %>%
+  unique() %>%
+  group_by(main_lineage) %>%
+  summarize(total_lineage = n()) %>%
+  ungroup() %>%
+  mutate(line_position = cumsum(total_lineage)) %>%
+  select(line_position) %>%
+  pull()
+
+freyja_average %>%
+  group_by(sample_group, isMerged, CDC_lineages, lineages) %>%
+  summarize(avg_rel_abund = sum(avg_rel_abund),
+            total_sd = sum(total_sd)) %>%
+  ungroup() %>%
+  filter(CDC_lineages == "Other lineages",
+         avg_rel_abund >= 0.01) %>%
+  mutate(print_rel_abund = ifelse(!is.na(total_sd),
+                                  paste0(round(avg_rel_abund*100, 2), "% +/- ",
+                                         round(total_sd*100, 2), "%"),
+                                  paste0(round(avg_rel_abund*100, 2), "%")),
+         sample_group = paste(sample_group, isMerged, sep = "\n")) %>%
+  select(-c(total_sd, avg_rel_abund, isMerged, CDC_lineages)) %>%
+  unique() %>%
+  pivot_wider(names_from = "sample_group", values_from = "print_rel_abund", values_fill = "") %>%
+  filter(!is.na(lineages)) %>%
+  arrange(lineages) %>%
+  rename(Lineage = "lineages") %>%
   { if(use_kable)
     mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
       select_all(~gsub(" ", "\n", .)) %>%
@@ -1023,82 +1100,12 @@ freyja_average %>%
 
 ```
 
-\newpage
-
-### Freyja summarized
-
-Relative abundances of the summarized results by Freyja within each sample
-
-```{r freyja results summarized, fig.height=10, fig.width=8}
-
-s %>%
-  select(sample_id, ww_group, freyja_summarized) %>%
-  mutate(freyja_summarized = gsub("\\[\\(|\\)\\]", "", freyja_summarized)) %>%
-  group_by(sample_id) %>%
-  mutate(summarized_lineages = list(freyja_summarized)) %>%
-  separate_longer_delim(summarized_lineages, delim = "), (") %>%
-  mutate(summarized_lineages = ifelse(summarized_lineages == "[]", NA, summarized_lineages)) %>%
-  separate_wider_delim(summarized_lineages,
-                       delim = ", ",
-                       names = c("summarized_lineages", "relative_abundances")) %>%
-  mutate(summarized_lineages = gsub("'", "", summarized_lineages),
-         relative_abundances = as.numeric(relative_abundances)) %>%
-  ungroup() %>%
-  mutate(summarized_lineages = factor(summarized_lineages,
-                                   levels = str_sort(unique(summarized_lineages), numeric = TRUE))) %>%
-  {
-  ggplot(., aes(x = sample_id, y = relative_abundances, fill = summarized_lineages)) +
-    geom_col() +
-    scale_fill_manual(values = colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$summarized_lineages)))) +
-    scale_y_continuous(labels = percent, expand=c(0,0)) +
-    theme_classic() +
-    theme(panel.grid = element_blank(),
-          panel.border = element_blank(),
-          axis.ticks.x.bottom = element_blank(),
-          axis.text.x.bottom = element_blank()
-          ) +
-    labs(x = "", y = "Relative proportions", fill = "Variants")
-  } /
-  sample_group_legend + 
-    theme(axis.text.x.bottom = element_text(size = convert_sample_size_2_font_size(nrow(s), max_font = 8)))
-
-```
-
-## Summary of variants
-Percentages of variants only in samples that meet criteria (Nextclade pangolin results)
-
-```{r percent table}
-
-s_toPlot %>%
-  filter4report() %>%
-  group_by(sample_collect_date) %>%
-  mutate(all_samples_n = n()) %>%
-  ungroup() %>%
-  select(ww_group, sample_collect_date, Nextclade_pango, nextclade_clade_who, all_samples_n) %>%
-  group_by(sample_collect_date, ww_group, nextclade_clade_who, Nextclade_pango) %>%
-  summarise(variant_percentages = n()/all_samples_n*100) %>%
-  mutate(variant_percentages_text = paste0(round(variant_percentages, digits = 2), "\\%")) %>%
-  ungroup() %>%
-  arrange(sample_collect_date, -variant_percentages) %>%
-  select(-variant_percentages) %>%
-  unique() %>%
-  rename(`Received date` = "sample_collect_date", `Samples and Sites` = "ww_group", `WHO` = "nextclade_clade_who", `Variant` = "Nextclade_pango", `Variant percentage` = "variant_percentages_text") %>%
-  { if(use_kable)
-      kable(., "latex", longtable = F, digits=2, booktabs=T, escape=F,
-            col.names = linebreak(c("Sample\nreceived", "Samples and Sites", "WHO", "Variant", "Variant\npercentage"), align = "l")) %>%
-      kable_styling(latex_options = c("scale_down", "repeat_header", "HOLD_position")) %>%
-      row_spec(0, bold = T, color="#7C0A02") %>%
-      collapse_rows(columns = 1:2, valign = "top")
-    else
-      pander(.)
-  }
-
-```
+\elandscape
 
 ```{r pc check}
 
 has_pos_ctrl <- s %>%
-  filter(grepl("SC2-Spiked", sample_name)) %>%
+  filter(grepl("ZeptoSC2", sample_name)) %>%
   filter(!grepl("Merged", sample_name)) %>%
   mutate(is_pos = Nextclade_pango == "A",
          pos_ctrl_pct = sum(is_pos)/n()) %>%
