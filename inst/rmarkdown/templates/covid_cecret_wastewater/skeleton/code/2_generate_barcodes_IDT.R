@@ -31,7 +31,7 @@ sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 index_length <- "10"
 
 #file location of the wastewater metadata
-ww_meta_fp <- file.path(dirname(here()), "aux_files", "data_submission", "dcipher", "nwss_wastewater_metadata.csv")
+ww_meta_fp <- file.path(dirname(here()), "aux_files", "data_submission", "dcipher", "wastewater_specific_metadata.csv")
 
 #file location of the nextera udi indices
 barcode_fp <- file.path(dirname(here()), "aux_files", "illumina_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")

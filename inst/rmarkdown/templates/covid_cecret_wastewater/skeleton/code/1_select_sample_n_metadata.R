@@ -67,7 +67,7 @@ ddPCR_data <- ddPCR_files %>%
   do(read_delim(.$FileName)) %>%
   ungroup() %>%
   mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName))) %>%
-  select(ddpcr_analysis_date, sample_id, sample_collect_date, pcr_gene_target, pcr_target_avg_conc, wwtp_name, zipcode, population_served) %>%
+  select(ddpcr_analysis_date, sample_id, sample_collect_date, pcr_gene_target, pcr_target_avg_conc) %>%
   group_by(sample_id, sample_collect_date) %>%
   #get the latest run only
   filter(ddpcr_analysis_date == max(ddpcr_analysis_date)) %>%
