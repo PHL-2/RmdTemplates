@@ -1,18 +1,18 @@
 ---
 title: |
-  ![](../../aux_files/forKnitting/logo_blk.png){width=5in}  
+  ![](../../aux_files/pdf_generation/forKnitting/logo_blk.png){width=5in}  
   `r paste0('Results for wastewater ddPCR run ', basename(here()))`
 author: "Philadelphia Public Health Labs"
 date: \today
 geometry: margin=2cm
 output:
     pdf_document:
-        template: ../../aux_files/forKnitting/toc_after.tex
+        template: ../../aux_files/pdf_generation/forKnitting/toc_after.tex
         keep_tex: false
         toc: true
         toc_depth: 3
         includes:
-            in_header: ../../aux_files/forKnitting/TeX_packages_commands.sty
+            in_header: ../../aux_files/pdf_generation/forKnitting/TeX_packages_commands.sty
 
 ---
 

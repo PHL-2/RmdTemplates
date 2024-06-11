@@ -9,11 +9,6 @@ library(here)
 
 ```{r functions}
 
-stock_concentration_calc = function(concentration, rxn_vol, input_vol, extraction_vol, elution_vol, end_concentration_vol, initial_concentration_vol, efficiency) {
-  result = (concentration * rxn_vol / input_vol) * (elution_vol / extraction_vol) * (end_concentration_vol / initial_concentration_vol) / efficiency
-  return(result)
-}
-
 #this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(
   {
@@ -100,6 +95,8 @@ if(run_date != dat_date) {
 ```{r saving data to rstudio metadata folder (for github upload), eval = useExportFolder}
 
 file.copy(run_dat_fp, to = here(), overwrite = T)
+
+copy_path <- list.files(path = here(), pattern = "Analyzed.csv", full.names = TRUE)
 
 ```
 
@@ -517,7 +514,14 @@ ww_SC2_conc_result <- d %>%
 
 ```{r summary table to file}
 
-wwMeta <- read_csv(file = file.path(wwMeta_fp, "wastewater_metadata/wwMeta.csv"))
+ww_site_metadata <- read_csv(ww_site_meta_fp) %>%
+  rename(sample_id = "sample_group")
+
+ww_nwss_metadata <- read_csv(ww_nwss_meta_fp) %>%
+  separate_rows(c(db, db_specific_field), sep=", ") %>%
+  filter_n_pivot(db, "NWSS", "db_specific_field", "value")
+
+wwMeta <- cbind(ww_site_metadata, ww_nwss_metadata)
 
 towrite <- ww_SC2_conc_result_summarised %>%
   ungroup() %>%
