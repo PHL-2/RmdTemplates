@@ -14,6 +14,16 @@ stock_concentration_calc = function(concentration, rxn_vol, input_vol, extractio
   return(result)
 }
 
+#this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
+tryCatch(
+  {
+    source(list.files(path = dirname(here()), pattern = "R_all_functions_v3.R", full.names = TRUE, recursive = TRUE))
+  },
+  error = function(e) {
+  stop (simpleError("The R_all_functions_v3.R file needs to sit in a directory in aux_files above this project directory"))
+  }
+)
+
 ```
 
 
