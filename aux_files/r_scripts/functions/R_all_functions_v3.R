@@ -294,3 +294,12 @@ filter_n_pivot <- function(df, db_field, db_name, col_name, col_value) {
     select(col_name, col_value) %>%
     pivot_wider(names_from = col_name, values_from = col_value)
 }
+
+## ======================================================================================
+##  Calculate final concentration after accounting for dilution and concentration factors
+## ======================================================================================
+
+stock_concentration_calc = function(concentration, rxn_vol, input_vol, extraction_vol, elution_vol, end_concentration_vol, initial_concentration_vol, efficiency) {
+  result = (concentration * rxn_vol / input_vol) * (elution_vol / extraction_vol) * (end_concentration_vol / initial_concentration_vol) / efficiency
+  return(result)
+}
