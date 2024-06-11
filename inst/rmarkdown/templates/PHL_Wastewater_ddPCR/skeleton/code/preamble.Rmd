@@ -23,6 +23,28 @@ source(here("config.R"))
 
 ```
 
+```{r file paths}
+
+## ddPCR analyzed data
+copy_path <- list.files(path = here(), pattern = "Analyzed.csv", full.names = TRUE)
+useExportFolder <- !file.exists(copy_path)
+
+## Filepath to wastewater metadata in aux folder
+wwMeta_fp = file.path(dirname(here::here()), "aux_files")
+
+## Filepath to wastewater metadata in aux folder
+ww_site_meta_fp = list.files(path = file.path(dirname(here()), "aux_files"),
+                             pattern = "wastewater_specific_metadata.csv",
+                             full.names = TRUE,
+                             recursive = TRUE)
+
+ww_nwss_meta_fp = list.files(path = file.path(dirname(here()), "aux_files"),
+                             pattern = "wastewater_data_submission_metadata.csv",
+                             full.names = TRUE,
+                             recursive = TRUE)
+
+```
+
 ```{r inital concentrations for efficiency calculations}
 
 
@@ -74,9 +96,7 @@ file.copy(run_dat_fp, to = here(), overwrite = T)
 
 ```{r Reading ddPCR file and selecting useful columns}
 
-copy_path <- list.files(path = here(), pattern = "Analyzed.csv")
-
-d_pre <- read_csv(file.path(here(), copy_path))
+d_pre <- read_csv(copy_path)
 
 if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
   d_pre <- d_pre %>%

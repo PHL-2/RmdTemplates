@@ -6,10 +6,6 @@
 
 dat_fp = "//Volumes/Export"
 
-## Filepath to wastewater metadata in aux folder
-
-wwMeta_fp = file.path(dirname(here::here()), "aux_files")
-
 ###### Volumes used in experiment ######
 
 ## Wastewater volume (mL)
