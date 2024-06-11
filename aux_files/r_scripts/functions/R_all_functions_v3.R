@@ -280,3 +280,17 @@ reverse_complement <- function(index) {
   reversed_index <- stringi::stri_reverse(index)
   chartr(old = "atcgATCG", new = "tagcTAGC", reversed_index)
 }
+
+## =================================================================
+##  Filter the dataframe and pivot wider with specified column names
+## =================================================================
+
+filter_n_pivot <- function(df, db_field, db_name, col_name, col_value) {
+
+  db_field <- enquo(db_field)
+
+  df %>%
+    filter(!!db_field == db_name) %>%
+    select(col_name, col_value) %>%
+    pivot_wider(names_from = col_name, values_from = col_value)
+}

@@ -972,13 +972,6 @@ data_submit_metadata_fp <- file.path(dirname(here()), "aux_files", "data_submiss
 data_submit_metadata <- read_csv(data_submit_metadata_fp) %>%
   separate_rows(c(db, db_specific_field), sep=", ")
 
-get_db_specific_fields <- function(df, db_name) {
-  df %>%
-    filter(db == db_name) %>%
-    select(db_specific_field, value) %>%
-    pivot_wider(names_from = "db_specific_field", values_from = "value")
-}
-
 ```
 
 ```{r export data for reporting and submission, eval = submitting_data}
@@ -1006,7 +999,7 @@ data_upload_all <- s %>%
 data_upload_all %>%
   select(any_of(c("wwtp_name", "sample_collect_date", "zipcode", "population_served", "lod_sewage"))) %>%
   cbind(data_submit_metadata %>%
-          get_db_specific_fields("NWSS")) %>%
+          filter_n_pivot(db, "NWSS", "db_specific_field", "value")) %>%
   write_csv(nwss_upload_fp)
 
 data_upload_all %>%
@@ -1019,7 +1012,7 @@ data_upload_all %>%
                   "covv_subm_sample_id" = "sample_id"))) %>%
   mutate(fn = "???") %>%
   cbind(data_submit_metadata %>%
-          get_db_specific_fields("GISAID")) %>%
+          filter_n_pivot(db, "GISAID", "db_specific_field", "value")) %>%
   write_csv(gisaid_upload_fp)
 
 data_upload_all %>%
@@ -1033,7 +1026,7 @@ data_upload_all %>%
                   "specimen_processing_id",
                   "design_description"))) %>%
   cbind(data_submit_metadata %>%
-          get_db_specific_fields("BioSample")) %>%
+          filter_n_pivot(db, "BioSample", "db_specific_field", "value")) %>%
   mutate(description = paste(sample_description, design_description),
         #need to fill these in
          ww_surv_target_1_known_present = "???", #this should be yes or no, depends on the ddPCR results
@@ -1054,7 +1047,7 @@ data_upload_all %>%
   mutate(filename = "???",
          filename2 = "???") %>%
   cbind(data_submit_metadata %>%
-          get_db_specific_fields("SRA")) %>%
+          filter_n_pivot(db, "SRA", "db_specific_field", "value")) %>%
   write_csv(sra_upload_fp)
 
 #additional items to add
