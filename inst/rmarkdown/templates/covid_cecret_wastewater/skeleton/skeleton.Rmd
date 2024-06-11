@@ -26,7 +26,7 @@ output:
 #this script filters the Excel file provided by the epidemiologist by excluding low RLU samples and samples received by the Health Centers
 #the Excel file should be placed in the extra_metadata folder along with the environmental swabs file
 #any samples from previous runs included should be placed in the prev_run folder, using the filtered Excel file
-source("code/1_merge_ww_metadata.R")
+source("code/1_select_sample_n_metadata.R")
 
 ```
 

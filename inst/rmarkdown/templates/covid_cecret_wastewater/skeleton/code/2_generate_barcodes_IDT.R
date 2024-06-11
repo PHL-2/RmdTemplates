@@ -315,20 +315,17 @@ if(ncol(ddPCR_data) == 0) {
 
   ddPCR_data <- data.frame(
     sample_group = NA_character_,
-    sample_collect_date = NA,
-    pcr_gene_target = NA_character_,
-    pcr_target_gc_uL = NA_real_
+    sample_collect_date = NA
   )
 
   # if ddPCR_data exists, reformat the columns
 } else {
 
   ddPCR_data <- ddPCR_data %>%
-    rename(sample_group = "sample_id") %>%
-    mutate(across(c(sample_group, pcr_gene_target), as.character)) %>%
-    select(where(function(x) any(!is.na(x)))) %>%
-    select(!matches("^\\.\\.\\.")) %>%
-    mutate(sample_collect_date = as.Date(sample_collect_date)) %>%
+    select(where(function(x) any(!is.na(x))),
+           !matches("^\\.\\.\\.")) %>%
+    mutate(sample_group = as.character(sample_group),
+           sample_collect_date = as.Date(sample_collect_date)) %>%
     as.data.frame()
 
 }
@@ -344,12 +341,12 @@ if(!is.na(ENV_fp)) {
   ENV_data <- read_csv(ENV_fp) %>%
     #use the Tuesday of the sequencing week as the sample_collect_date
     mutate(sample_collect_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
-    select(sample_name, sample_collect_date, environmental_site) %>%
+    select(sample_group = sample_name, sample_collect_date, environmental_site) %>%
     #filter rows where sample_id is NA
-    filter(!is.na(sample_name)) %>%
+    filter(!is.na(sample_group)) %>%
     #filter empty columns
-    select(where(function(x) any(!is.na(x)))) %>%
-    select(!matches("^\\.\\.\\."))
+    select(where(function(x) any(!is.na(x))),
+           !matches("^\\.\\.\\."))
 } else{
 
   ENV_data <- data.frame(environmental_site = NA_character_)
@@ -532,18 +529,16 @@ if(ncol(ddPCR_data) > 0) {
     pull() %>%
     str_sort()
 
-  #throw warning
+  #throw error
   if(length(ddPCR_sample_not_found) > 0) {
 
     message("\n*****")
     message("These samples were found in the ddPCR metadata sheet but not in the sequencing sample sheet")
-    message("Double check that the correct samples were sequenced")
-    message(paste0(pull(ddPCR_sample_not_found), collapse = ", "))
+    message("Double check that the correct samples were sequenced:")
     message("*****")
+    stop(simpleError(paste0(pull(ddPCR_sample_not_found), collapse = ", ")))
 
-    Sys.sleep(5)
   }
-
 }
 
 missing_metadata_non_ctrl_samples <- metadata_sheet %>%
@@ -566,7 +561,7 @@ if(length(missing_sample_date) > 0) {
 }
 
 missing_ddPCR_data <- missing_metadata_non_ctrl_samples %>%
-  filter(is.na(pcr_target_gc_uL)) %>%
+  filter(if_any(ends_with("_gc/L"), is.na)) %>%
   select(sample_name)
 
 #show warning
@@ -587,8 +582,8 @@ oldest_ww_date <- metadata_sheet %>%
   pull() %>%
   min()
 
-if(oldest_ww_date < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
-  warning(simpleError(paste0("\nSome samples have collection dates more than 2 months ago!!")))
+if(oldest_ww_date < seq(as.Date(sequencing_date), length=2, by='-4 month')[2]){
+  warning(simpleError(paste0("\nSome samples have collection dates more than 4 months ago!!")))
 }
 
 #############

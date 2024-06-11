@@ -50,6 +50,9 @@ sequencing_folder_fp <- "path/to/local/sequencing/folder"
 # full path of the shared drive to upload the pdf report
 shared_drive_fp <- "path/to/shared/drive"
 
+# full path of the directory holding the WW ddPCR run info
+ddPCR_run_fp <- "path/to/local/ddpcr/folder"
+
 # full path of where the seqsender repo was cloned
 seqsender_fp <- "path/to/seqsender"
 

@@ -773,7 +773,7 @@ s_toPlot <- s %>%
   mutate(sample_id = as.character(sample_id)) %>%
   droplevels()
 
-has_N2 <- any(grepl("^N2_cp-uL$", colnames(s)))
+has_N2 <- any(grepl("^N2_gc/L$", colnames(s)))
 
 has_qubit <- !all(is.na(s$qubit_conc_ng_ul))
 
