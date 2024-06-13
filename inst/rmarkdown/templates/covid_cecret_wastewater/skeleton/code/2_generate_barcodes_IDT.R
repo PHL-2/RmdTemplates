@@ -324,6 +324,7 @@ if(ncol(ddPCR_data) == 0) {
   ddPCR_data <- ddPCR_data %>%
     select(where(function(x) any(!is.na(x))),
            !matches("^\\.\\.\\.")) %>%
+    rename(any_of(c(sample_group = "sample_id"))) %>%
     mutate(sample_group = as.character(sample_group),
            sample_collect_date = as.Date(sample_collect_date)) %>%
     as.data.frame()
@@ -373,10 +374,13 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   arrange(plate, plate_col, plate_row) %>%
   rename(any_of(c(sample_collect_date = "sample_collection_date"))) %>%
   #find sample group from sample_name
-  mutate(sample_group = as.character(lapply(sample_name,
-                                            function(x) unlist(lapply(c(sample_group_controls, sample_group_sites),
-                                                                      function(y) y[grepl(y, x)])))),
-         sample_group = ifelse(sample_group == "character(0)", NA_character_, sample_group),
+  mutate(sample_group = gsub("^WW-([0-9]{4})-([0-9]{2})-([0-9]{2})-|-Rep.*$", "", sample_name),
+         # sample_group = as.character(lapply(sample_name,
+         #                                    function(x) unlist(lapply(c(sample_group_controls, sample_group_sites),
+         #                                                              function(y) y[grepl(y, x)])))),
+         sample_group = ifelse((sample_group == "character(0)" | sample_group == ""), NA_character_, sample_group),
+         sample_collect_date = ifelse(grepl("^WW-([0-9]{4})-([0-9]{2})-", sample_name),
+                                      gsub("^(WW)-([0-9]{4}-[0-9]{2}-[0-9]{2})-(.*)", "\\2", sample_name), NA),
          sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
          uniq_sample_name = gsub("-Rep[0-9]*", "", sample_name),
          sequencing_date = sequencing_date,
