@@ -121,29 +121,35 @@ if(run_uploaded_2_basespace) {
   # This command runs gzip separately from the tar command, in order to use the '-n' flag
   # The '-n' flag removes the time stamp from the header when compressing, which will allow generating the md5 checksum to be more consistent
   # The flags included in the tar command just tells the program to print a progress bar
-  #bars <- 99
-  minimum_bs_files <- c("'SampleSheet.csv'",
-                        "'*.xml'",
-                        "'Data'",
-                        "'InterOp'")
+  bars <- 99
+  #these are the minimum files from the sequencing run that are required for demultiplexing
+  minimum_bs_files_pattern <- c("'SampleSheet.csv$'",
+                                "'.xml$'",
+                                "'/Data/'",
+                                "'/InterOp/'")
+  grep_command <- paste("grep", paste("-e", minimum_bs_files_pattern, collapse = " "))
+
   submit_screen_job(message2display = "Creating tarball of the sequencing run folder",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-tarball",
                     command2run = paste("cd", paste0(sequencing_run_fp, ";"),
-                                        #"echo Estimated:", paste0(c("[", rep("=", bars+1), "];"), collapse = ""),
-                                        #"echo -n 'Progress:  [ ';",
-                                        # pipe find command to tar
-                                        "find . -name", paste(minimum_bs_files, collapse = " -o -name "),
+                                        "echo Estimate:", paste0(c("[", rep("=", bars+1), "];"), collapse = ""),
+                                        "echo -n 'Progress: [ ';",
+                                        # pipe find command to grep and then tar
+                                        "find . -type f |",
+                                        grep_command,
                                         "| tar",
-                                        #"--checkpoint=`du -sk --apparent-size", sequencing_run_fp, "| cut -f1 | awk '{print int($1 /", bars, ")}'`",
+                                        "--checkpoint=`find", sequencing_run_fp, "-type f -exec du -ak --apparent-size {} + |",
+                                        # this 2nd grep command is only used for finding the file sizes to create the progress bar
+                                        grep_command, "| cut -f1 | awk '{s+=$1} END {print int(s /", bars, ")}'`",
                                         # this flag shows a progress bar
-                                        #"--checkpoint-action='ttyout=\b=>'",
+                                        "--checkpoint-action='ttyout=\b=>'",
                                         # this flag shows the read/write speed
-                                        "--checkpoint-action='ttyout=%{Bytes read, Bytes written, Bytes deleted}T, Time elapsed: %ds%*\r'",
+                                        #"--checkpoint-action='ttyout=%{Bytes read, Bytes written, Bytes deleted}T, Time elapsed: %ds%*\r'",
                                         "--record-size=1K",
                                         "-cT -",
                                         "| gzip -n >", paste0(ec2_tmp_fp, sequencing_run, ".tar.gz;"),
-                                        "echo '\nTar completed!'")
+                                        "echo ']\nTar completed!'")
   )
 
   check_screen_job(message2display = "Checking tar job",
