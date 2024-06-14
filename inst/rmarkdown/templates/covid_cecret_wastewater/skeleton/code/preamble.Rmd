@@ -88,6 +88,7 @@ snpdists_fp <- here("data", paste0(sequencing_date, "_snpdists.csv"))
 software_version_fp <- here("data", paste0(sequencing_date, "_software_version.csv"))
 cecret_results_fp <- here("data", paste0(sequencing_date, "_cecret_results.csv"))
 cdc_tracker_fp <- here("data", paste0(sequencing_date, "_cdc_data_tracker_lineages.csv"))
+download_cdc_tracker <- !file.exists(cdc_tracker_fp)
 
 ```
 
@@ -785,7 +786,7 @@ if(any(is.na(s$ww_group))) {
 
 <!-- Prepare files containing samples with good results for uploading -->
 
-```{r download pango names and CDC Tracker lineages, eval = import_data}
+```{r download pango names and CDC Tracker lineages, eval = download_cdc_tracker}
 
 # pango_lineage_names_url <- "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json"
 # pango_lineage_names_fp <- here("data", paste0(sequencing_date, "_pango_designation_alias_key.json"))
@@ -953,7 +954,7 @@ freyja_grouping %>%
 
 ```
 
-```{r load data submission metadata, eval = submitting_data}
+```{r load data submission metadata}
 
 #path of dcipher config file
 dcipher_config_fp <- list.files(file.path(dirname(here()), "aux_files", "dcipher"), pattern = "dcipher_config.yaml", full.names = TRUE)
@@ -974,7 +975,7 @@ data_submit_metadata <- read_csv(data_submit_metadata_fp) %>%
 
 ```
 
-```{r export data for reporting and submission, eval = submitting_data}
+```{r export data for reporting and submission}
 
 #see dx.doi.org/10.17504/protocols.io.ewov14w27vr2/v10 for the ww submission guidance
 # Biosamples are created at the extraction level (each RNA extraction will get a unique BioSample ID). Create a base ID for each sample collection (for example, LABID_001), then add an index to represent each extraction (e.g. LABID_001.01). Every Sample Name from a single Submitter must be unique. 
@@ -984,71 +985,77 @@ dir.create(here("upload", "dcipher"), recursive = TRUE)
 data_upload_all <- s %>%
   filter(sample_group %in% s_toPlot$sample_group,
          !isControl,
-         ww_group != "Wastewater sample - Merged") %>%
-  mutate(sample_collection_year = format(sample_collect_date, format = "%Y"),
-         #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/collection year. This name may conflict with samples collected/sequenced in different years
-         covv_virus_name = paste0("hCoV-19/env/USA/PA-", gsub(str_sub(sequencing_date, 1, 4), "", sample_id), "/", sample_collection_year),
-         biosample_name = paste0("SARS-CoV-2/Wastewater/USA/", sample_id, "/", sample_collection_year),
-         specimen_processing_id = sample_name,
-         #fields that depend on the workflow
-         instrument = paste0("Illumina ", instrument_type),
-         library = paste0("ARTIC Network Protocol ", artic_primer_scheme),
-         assembly_method = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
-         design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC ", artic_primer_scheme, " primer scheme. Sequencing was performed using the Illumina ", instrument_type, " instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Assay."))
+         ww_group != "Wastewater sample - Merged")
 
-data_upload_all %>%
-  select(any_of(c("wwtp_name", "sample_collect_date", "zipcode", "population_served", "lod_sewage"))) %>%
-  cbind(data_submit_metadata %>%
-          filter_n_pivot(db, "NWSS", "db_specific_field", "value")) %>%
-  write_csv(nwss_upload_fp)
+if(nrow(data_upload_all) != 0) {
 
-data_upload_all %>%
-  select(any_of(c("covv_virus_name",
-                  "covv_collection_date" = "sample_collect_date",
-                  "covv_seq_technology" = "instrument",
-                  "covv_assembly_method" = "assembly_method",
-                  "covv_coverage" = "median_coverage",
-                  "covv_orig_lab" = "sample_collected_by",
-                  "covv_subm_sample_id" = "sample_id"))) %>%
-  mutate(fn = "???") %>%
-  cbind(data_submit_metadata %>%
-          filter_n_pivot(db, "GISAID", "db_specific_field", "value")) %>%
-  write_csv(gisaid_upload_fp)
+  data_upload_all <- data_upload_all %>%
+    mutate(sample_collection_year = format(sample_collect_date, format = "%Y"),
+           #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/collection year. This name may conflict with samples collected/sequenced in different years
+           covv_virus_name = paste0("hCoV-19/env/USA/PA-", gsub(str_sub(sequencing_date, 1, 4), "", sample_id), "/", sample_collection_year),
+           biosample_name = paste0("SARS-CoV-2/Wastewater/USA/", sample_id, "/", sample_collection_year),
+           specimen_processing_id = sample_name,
+           #fields that depend on the workflow
+           instrument = paste0("Illumina ", instrument_type),
+           library = paste0("ARTIC Network Protocol ", artic_primer_scheme),
+           assembly_method = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
+           design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC ", artic_primer_scheme, " primer scheme. Sequencing was performed using the Illumina ", instrument_type, " instrument with 2x", read_length, " bp chemistry. Libraries were prepared using Illumina COVIDSeq Assay."))
+  
+  data_upload_all %>%
+    select(any_of(c("wwtp_name", "sample_collect_date", "zipcode", "population_served", "lod_sewage"))) %>%
+    cbind(data_submit_metadata %>%
+            filter_n_pivot(db, "NWSS", "db_specific_field", "value")) %>%
+    write_csv(nwss_upload_fp)
+  
+  data_upload_all %>%
+    select(any_of(c("covv_virus_name",
+                    "covv_collection_date" = "sample_collect_date",
+                    "covv_seq_technology" = "instrument",
+                    "covv_assembly_method" = "assembly_method",
+                    "covv_coverage" = "median_coverage",
+                    "covv_orig_lab" = "sample_collected_by",
+                    "covv_subm_sample_id" = "sample_id"))) %>%
+    mutate(fn = "???") %>%
+    cbind(data_submit_metadata %>%
+            filter_n_pivot(db, "GISAID", "db_specific_field", "value")) %>%
+    write_csv(gisaid_upload_fp)
+  
+  data_upload_all %>%
+    select(any_of(c("sample_name" = "biosample_name",
+                    "organism",
+                    "collection_date" = "sample_collect_date",
+                    "isolation_source",
+                    "collection_site_id" = "wwtp_name",
+                    "collected_by" = "sample_collected_by",
+                    "ww_population" = "population_served",
+                    "specimen_processing_id",
+                    "design_description"))) %>%
+    cbind(data_submit_metadata %>%
+            filter_n_pivot(db, "BioSample", "db_specific_field", "value")) %>%
+    mutate(description = paste(sample_description, design_description),
+          #need to fill these in
+           ww_surv_target_1_known_present = "???", #this should be yes or no, depends on the ddPCR results
+           ww_surv_target_1_conc = "???", #this is the ddPCR transformed unit
+           ww_surv_target_2_known_present = "???", #this should be yes or no, depends on the ddPCR results
+           ww_surv_target_2_conc = "???",
+           gisaid_accession = "") %>%
+    select(-c(sample_description, design_description)) %>%
+    write_csv(biosample_upload_fp)
+  
+  data_upload_all %>%
+    select(any_of(c("sample_name" = "biosample_name",
+                    "instrument_model" = "instrument",
+                    "design_description",
+                    "amplicon_PCR_primer_scheme" = "library",
+                    "library_preparation_kit" = "library",
+                    "raw_sequence_data_processing_method" = "assembly_method"))) %>%
+    mutate(filename = "???",
+           filename2 = "???") %>%
+    cbind(data_submit_metadata %>%
+            filter_n_pivot(db, "SRA", "db_specific_field", "value")) %>%
+    write_csv(sra_upload_fp)
 
-data_upload_all %>%
-  select(any_of(c("sample_name" = "biosample_name",
-                  "organism",
-                  "collection_date" = "sample_collect_date",
-                  "isolation_source",
-                  "collection_site_id" = "wwtp_name",
-                  "collected_by" = "sample_collected_by",
-                  "ww_population" = "population_served",
-                  "specimen_processing_id",
-                  "design_description"))) %>%
-  cbind(data_submit_metadata %>%
-          filter_n_pivot(db, "BioSample", "db_specific_field", "value")) %>%
-  mutate(description = paste(sample_description, design_description),
-        #need to fill these in
-         ww_surv_target_1_known_present = "???", #this should be yes or no, depends on the ddPCR results
-         ww_surv_target_1_conc = "???", #this is the ddPCR transformed unit
-         ww_surv_target_2_known_present = "???", #this should be yes or no, depends on the ddPCR results
-         ww_surv_target_2_conc = "???",
-         gisaid_accession = "") %>%
-  select(-c(sample_description, design_description)) %>%
-  write_csv(biosample_upload_fp)
-
-data_upload_all %>%
-  select(any_of(c("sample_name" = "biosample_name",
-                  "instrument_model" = "instrument",
-                  "design_description",
-                  "amplicon_PCR_primer_scheme" = "library",
-                  "library_preparation_kit" = "library",
-                  "raw_sequence_data_processing_method" = "assembly_method"))) %>%
-  mutate(filename = "???",
-         filename2 = "???") %>%
-  cbind(data_submit_metadata %>%
-          filter_n_pivot(db, "SRA", "db_specific_field", "value")) %>%
-  write_csv(sra_upload_fp)
+}
 
 #additional items to add
 #is lod_sewage the same as ww_flow? Seems like flow data is separate
@@ -1126,14 +1133,8 @@ if(length(s_upload) > 0) {
 ```{r reported numbers}
 
 #double checking to see if number of samples match
-n_samples_report <- s %>%
-  filter(!grepl("None|Undetermined", sample_id)) %>%
-  filter(!grepl("control", ww_group, ignore.case = TRUE)) %>%
-  filter(!is.na(pangolin_lineage)) %>%
-  filter(!is.na(Nextclade_pango)) %>%
-  filter(!is.na(nextclade_qc_overallstatus)) %>%
-  filter(coverage_qc_status != "Poor") %>%
-  filter(pangolin_qc_status != "fail") %>%
+n_samples_report <- s_toPlot %>%
+  filter(!isControl) %>%
   nrow()
 
 #these are samples that failed in the pipeline for whatever reason. Can rerun pipeline to generate results for these samples
@@ -1156,16 +1157,20 @@ reported_samples <- epi_2_upload_fp %>%
 #check the dcipher file to upload to ncbi
 dcipher_2_upload_fp <- list.files(here("upload", "dcipher"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
 
-all_reported_samples <- dcipher_2_upload_fp %>%
-  data_frame(FileName = .) %>%
-  group_by(FileName) %>%
-  do(read_csv(.$FileName, col_names = TRUE)) %>%
-  ungroup() %>%
-  filter(!grepl("nwss_upload.csv", FileName)) %>%
-  mutate(sample_name = ifelse(is.na(sample_name), covv_virus_name, sample_name),
-         db = gsub(".*PHL2_|_upload.*", "",  FileName)) %>%
-  select(db, sample_name) %>%
-  rbind(reported_samples)
+if(length(dcipher_2_upload_fp) != 0) {
+  all_reported_samples <- dcipher_2_upload_fp %>%
+    data_frame(FileName = .) %>%
+    group_by(FileName) %>%
+    do(read_csv(.$FileName, col_names = TRUE)) %>%
+    ungroup() %>%
+    filter(!grepl("nwss_upload.csv", FileName)) %>%
+    mutate(sample_name = ifelse(is.na(sample_name), covv_virus_name, sample_name),
+           db = gsub(".*PHL2_|_upload.*", "",  FileName)) %>%
+    select(db, sample_name) %>%
+    rbind(reported_samples)
+} else {
+  all_reported_samples <- tibble(db = "", sample_name = "")
+}
 
 ```
 

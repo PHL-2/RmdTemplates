@@ -94,9 +94,6 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 # need to import the data into a single tsv for the first time?
 import_data <- TRUE
 
-# do you need a final csv file generated for reporting and submitting the results?
-submitting_data <- TRUE
-
 ### =================
 ### End manual inputs
 ### =================
