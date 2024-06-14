@@ -514,8 +514,7 @@ ww_SC2_conc_result <- d %>%
 
 ```{r summary table to file}
 
-ww_site_metadata <- read_csv(ww_site_meta_fp) %>%
-  rename(sample_id = "sample_group")
+ww_site_metadata <- read_csv(ww_site_meta_fp)
 
 ww_nwss_metadata <- read_csv(ww_nwss_meta_fp) %>%
   separate_rows(c(db, db_specific_field), sep=", ") %>%
@@ -527,9 +526,41 @@ towrite <- ww_SC2_conc_result_summarised %>%
   ungroup() %>%
   select(-stock_conc_GCuL) %>%
   select(pcr_gene_target = Target, pcr_target_avg_conc = stock_conc_GC1L, sample_id = Type, sample_collect_date = Sample_date) %>%
-  left_join(wwMeta, by = "sample_id")
+  left_join(wwMeta, by = c("sample_id" = "sample_group"))
 
 write_csv(towrite, "summary_tab.csv")
 
 ```
 
+```{r concentration file for sequencing}
+
+sequencing_metadata <- d %>%
+  filter(grepl(pattern = "oldWW|ZeptoSC2|NorthEast|SouthEast|SouthWest", x = Type),
+         (Process == "Concentrated" | grepl("oldWW", Type)),
+         !(Well %in% wellsToRemove),
+         ) %>%
+  group_by(Type, Process, Spiked, Target, Sample_date) %>%
+  summarise(avg_conc = mean(`Conc(copies/uL)`)) %>%
+  mutate(stock_conc = stock_concentration_calc(concentration = avg_conc, 
+                                               rxn_vol = rxn_vol_uL, 
+                                               input_vol = input_vol_uL, 
+                                               extraction_vol = extraction_vol_uL, 
+                                               elution_vol = elution_vol_uL,
+                                               efficiency = 1, 
+                                               end_concentration_vol = end_concentration_vol_uL,
+                                               initial_concentration_vol = init_concentration_vol_uL)*1000*1000) %>%
+  ungroup() %>%
+  pivot_longer(cols = c(avg_conc, stock_conc), names_to = "concentration", values_to = "values") %>%
+  mutate(Target = case_when(concentration == "avg_conc" ~ paste0(Target, "_gc/uL"),
+                            concentration == "stock_conc" ~ paste0(Target, "_gc/L"),
+                            TRUE ~ NA)) %>%
+  select(sample_group = "Type", sample_collect_date = "Sample_date", Target, values) %>%
+  pivot_wider(names_from = "Target", values_from = "values") %>%
+  merge(ww_site_metadata, by.x = "sample_group", all.x = TRUE)
+
+dir.create(here("sequencing_metadata"), recursive = TRUE)
+
+write_csv(sequencing_metadata, here("sequencing_metadata",
+                                    paste0(as.Date(gsub("_.*", "", project_name)), "ww_sequencing_metadata.csv")))
+
+```
