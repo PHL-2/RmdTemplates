@@ -561,6 +561,6 @@ sequencing_metadata <- d %>%
 dir.create(here("sequencing_metadata"), recursive = TRUE)
 
 write_csv(sequencing_metadata, here("sequencing_metadata",
-                                    paste0(as.Date(gsub("_.*", "", project_name)), "ww_sequencing_metadata.csv")))
+                                    paste0(as.Date(gsub("_.*", "", project_name)), "_ww_sequencing_metadata.csv")))
 
 ```
