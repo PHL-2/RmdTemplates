@@ -23,7 +23,6 @@ ww_output_fp <- here("output", paste0(project_name, '.report_gen.on.', Sys.Date(
 has_oldWW <- TRUE
 has_dilutions <- FALSE
 has_QE <- FALSE
-useExportFolder <- TRUE
 
 rmarkdown::render(ww_report_fp, output_file = ww_output_fp, knit_root_dir = here())
 
