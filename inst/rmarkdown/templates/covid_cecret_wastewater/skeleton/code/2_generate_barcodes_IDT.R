@@ -93,21 +93,6 @@ barcodes <- tryCatch(
   }
 )
 
-##########################
-# Load wastewater metadata
-##########################
-
-ww_meta <- tryCatch(
-  {
-    read_csv(ww_meta_fp) %>%
-    select(where(function(x) any(!is.na(x)))) %>%
-    select(!matches("^\\.\\.\\."))
-  },
-  error = function(e) {
-    stop (simpleError("The wastewater_metadata.csv file needs to sit in an [aux_files/data_submission/dcipher] directory path above this project directory"))
-  }
-)
-
 #######################
 # Load run sample sheet
 #######################
@@ -481,7 +466,6 @@ metadata_sheet <- metadata_sheet %>%
                               grepl(paste0(sample_group_controls, collapse = "|"), uniq_sample_name) ~ "Wastewater control",
                               TRUE ~ "Wastewater sample")) %>%
   merge(extra_metadata_merge, by = extra_cols2merge, all.x = TRUE, sort = FALSE) %>%
-  merge(ww_meta, by = "sample_group", all.x = TRUE, sort = FALSE) %>%
   mutate(environmental_site = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
                                  grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
                                  TRUE ~ environmental_site))
