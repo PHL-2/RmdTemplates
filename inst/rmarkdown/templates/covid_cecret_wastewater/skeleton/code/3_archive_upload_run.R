@@ -27,13 +27,13 @@ if(sequencing_date == "") {
 # Load functions
 ###################################################
 
-#this file needs to sit in a [aux_files/functions] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "functions", "R_all_functions_v3.R"))
   },
   error = function(e) {
-    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory"))
   }
 )
 
@@ -41,13 +41,13 @@ tryCatch(
 # Load config
 ###################################################
 
-#this file needs to sit in a [aux_files/config] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 
@@ -122,20 +122,33 @@ if(run_uploaded_2_basespace) {
   # The '-n' flag removes the time stamp from the header when compressing, which will allow generating the md5 checksum to be more consistent
   # The flags included in the tar command just tells the program to print a progress bar
   bars <- 99
+  #these are the minimum files from the sequencing run that are required for demultiplexing
+  minimum_bs_files_pattern <- c("'SampleSheet.csv$'",
+                                "'.xml$'",
+                                "'/Data/'",
+                                "'/InterOp/'")
+  grep_command <- paste("grep", paste("-e", minimum_bs_files_pattern, collapse = " "))
+
   submit_screen_job(message2display = "Creating tarball of the sequencing run folder",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-tarball",
-                    command2run = paste("echo Estimated:", paste0(c("[", rep("=", bars+1), "];"), collapse = ""),
-                                        "echo -n 'Progress:  [ ';",
-                                        "tar",
-                                        "--checkpoint=`du -sk --apparent-size", sequencing_run_fp, "| cut -f1 | awk '{print int($1 /", bars, ")}'`",
+                    command2run = paste("cd", paste0(sequencing_run_fp, ";"),
+                                        "echo Estimate:", paste0(c("[", rep("=", bars+1), "];"), collapse = ""),
+                                        "echo -n 'Progress: [ ';",
+                                        # pipe find command to grep and then tar
+                                        "find . -type f |",
+                                        grep_command,
+                                        "| tar",
+                                        "--checkpoint=`find", sequencing_run_fp, "-type f -exec du -ak --apparent-size {} + |",
+                                        # this 2nd grep command is only used for finding the file sizes to create the progress bar
+                                        grep_command, "| cut -f1 | awk '{s+=$1} END {print int(s /", bars, ")}'`",
                                         # this flag shows a progress bar
                                         "--checkpoint-action='ttyout=\b=>'",
                                         # this flag shows the read/write speed
                                         #"--checkpoint-action='ttyout=%{Bytes read, Bytes written, Bytes deleted}T, Time elapsed: %ds%*\r'",
                                         "--record-size=1K",
-                                        "-cC", sequencing_run_fp, ". |",
-                                        "gzip -n >", paste0(ec2_tmp_fp, sequencing_run, ".tar.gz;"),
+                                        "-cT -",
+                                        "| gzip -n >", paste0(ec2_tmp_fp, sequencing_run, ".tar.gz;"),
                                         "echo ']\nTar completed!'")
   )
 
@@ -147,8 +160,8 @@ if(run_uploaded_2_basespace) {
   submit_screen_job(message2display = "Generating md5 checksum",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-checksum",
-                    command2run = paste0("cd ", ec2_tmp_fp, ";",
-                                         "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, sequencing_run, ".md5;",
+                    command2run = paste0("cd ", ec2_tmp_fp, "; ",
+                                         "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, sequencing_run, ".md5; ",
                                          "cat ", ec2_tmp_fp, sequencing_run, ".md5")
   )
 

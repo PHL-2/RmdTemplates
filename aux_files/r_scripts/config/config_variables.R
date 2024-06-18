@@ -12,7 +12,6 @@ epi_email <- NA
 # s3 bucket holding the raw sequencing data (including the md5sum file and the sample sheet)
 # this variable is mandatory if using the COVID_Cecret RmdTemplate
 s3_run_bucket <- "s3://"
-
 # s3 bucket holding the demultiplexed fastq files for each sample
 s3_fastq_bucket <- "s3://"
 # s3 bucket holding the Nextflow output files
@@ -51,6 +50,9 @@ sequencing_folder_fp <- "path/to/local/sequencing/folder"
 # full path of the shared drive to upload the pdf report
 shared_drive_fp <- "path/to/shared/drive"
 
+# full path of the directory holding the WW ddPCR run info
+ddPCR_run_fp <- "path/to/local/ddpcr/folder"
+
 # full path of where the seqsender repo was cloned
 seqsender_fp <- "path/to/seqsender"
 
@@ -76,3 +78,10 @@ if(Sys.info()["sysname"] == "Windows")
   sh_exe_fp <- "path/to/Git/bin/sh.exe"
 
 }
+
+#find s3 path variables and remove any trailing slashes
+ls(pattern = "^s3_") %>%
+  mapply(assign,
+         .,
+         sapply(., function(x) gsub("/$", "", eval(parse(text = x)))),
+         MoreArgs=list(envir=parent.frame()))

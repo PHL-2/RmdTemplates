@@ -12,6 +12,8 @@ library(stringr)
 # Manual input
 ##############
 
+remove_sample_from_bcl_samplesheet <- c("")
+
 run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
@@ -28,10 +30,11 @@ sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
 index_length <- "10"
 
-phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
+#file location of the wastewater metadata
+ww_meta_fp <- file.path(dirname(here()), "aux_files", "data_submission", "dcipher", "wastewater_specific_metadata.csv")
 
 #file location of the nextera udi indices
-barcode_fp <- file.path(dirname(here()), "aux_files", "metadata_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
+barcode_fp <- file.path(dirname(here()), "aux_files", "illumina_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
 if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
   stop(simpleError(paste0("Please use the 'YYYY-MM-DD' format for this RStudio project date. This date should correspond to the desired sequencing run date")))
@@ -44,13 +47,13 @@ if (prj_description == "") {
 # Load functions
 ###################################################
 
-#this file needs to sit in a [aux_files/functions] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "functions", "R_all_functions_v3.R"))
   },
   error = function(e) {
-    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory"))
   }
 )
 
@@ -58,13 +61,13 @@ tryCatch(
 # Load config
 ###################################################
 
-#this file needs to sit in a [aux_files/config] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 
@@ -86,7 +89,7 @@ barcodes <- tryCatch(
       select(idt_plate_coord, I7_Index_ID, I5_Index_ID, UDI_Index_ID, index, index2)
   },
   error = function(e) {
-    stop (simpleError("The nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv file needs to sit in an [aux_files/metadata_references] directory path above this project directory"))
+    stop (simpleError("The nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv file needs to sit in an [aux_files/illumina_references] directory path above this project directory"))
   }
 )
 
@@ -284,107 +287,33 @@ read_sheet <- function(fp, sheet_name) {
 index_sheet <- read_sheet(metadata_input_fp, "Index")
 sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
 
-###################################################################################
-# Load the metadata sheet from epidemiologists and merge with sample metadata sheet
-# Make sure these sheets are not uploaded to GitHub
-###################################################################################
+#######################################################
+# Load the wastewater metadata sheet from the ddPCR run
+#######################################################
 
-PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xlsx", full.names = TRUE, recursive = TRUE)
+ddPCR_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.csv", full.names = TRUE, recursive = TRUE)
 
-PHL_data <- PHL_fp %>%
-  lapply(function(x) read_excel_safely(x, "PHL")) %>%
-  bind_rows()
+ddPCR_data <- read_csv(ddPCR_fp)
 
-#if PHL_data exists, do the following
-# if it's just a blank sheet, just save sample_name and RLU column names
-if(ncol(PHL_data) == 2) {
+# if ddPCR_data does not exist, create an empty dataframe
+if(ncol(ddPCR_data) == 0) {
 
-  PHL_data <- PHL_fp %>%
-    lapply(function(x) read_excel_safely(x, "PHL")) %>%
-    bind_rows() %>%
-    rename(sample_name = "SPECIMEN_NUMBER") %>%
-    #filter rows where sample_id is NA
-    filter(!is.na(sample_name)) %>%
-    #make these columns character vectors
-    mutate(sample_name = as.character(sample_name))
+  ddPCR_data <- data.frame(
+    sample_group = NA_character_,
+    sample_collect_date = NA
+  )
 
-} else if (ncol(PHL_data) > 2) {
+  # if ddPCR_data exists, reformat the columns
+} else {
 
-  PHL_data <- PHL_data %>%
-    mutate(SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y"), BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y")) %>%
-    rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
-    select(any_of(phi_info), sample_collection_date, DOB, age, gender, RLU) %>%
-    mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
-    #filter rows where sample_id is NA
-    filter(!is.na(sample_name)) %>%
-    #make these columns character vectors
-    mutate(across(c(sample_name, case_id, breakthrough_case, priority, gender), as.character))
-
-}
-
-#if PHL_data is not empty, do the following
-if(nrow(PHL_data) > 0) {
-
-  PHL_data <- PHL_data %>%
-    #filter empty columns
-    select(where(function(x) any(!is.na(x)))) %>%
-    select(!matches("^\\.\\.\\.")) %>%
-    #use the first day of the week (starting on Monday) as the sample_collection_date
-    mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week"))) %>%
-    mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:6, 9)), Inf),
-                              labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
-                              include.lowest = TRUE)) %>%
-    #don't include age because it may be PHI if included with zipcode and gender
-    select(-c(age, DOB)) %>%
+  ddPCR_data <- ddPCR_data %>%
+    select(where(function(x) any(!is.na(x))),
+           !matches("^\\.\\.\\.")) %>%
+    rename(any_of(c(sample_group = "sample_id"))) %>%
+    mutate(sample_group = as.character(sample_group),
+           sample_collect_date = as.Date(sample_collect_date)) %>%
     as.data.frame()
-}
 
-###################################################################################
-# Load the metadata sheet from epidemiologists and merge with sample metadata sheet
-# Make sure these sheets are not uploaded to GitHub
-###################################################################################
-
-TU_data <- PHL_fp %>%
-  lapply(function(x) read_excel_safely(x, "Temple")) %>%
-  lapply(function(x) mutate(x, SPECIMEN_NUMBER = as.character(SPECIMEN_NUMBER))) %>%
-  bind_rows()
-
-if(ncol(TU_data) == 2) {
-
-  TU_data <- PHL_fp %>%
-    lapply(function(x) read_excel_safely(x, "Temple")) %>%
-    bind_rows() %>%
-    rename(sample_name = "SPECIMEN_NUMBER", CT = "ct value") %>%
-    #filter rows where sample_id is NA
-    filter(!is.na(sample_name)) %>%
-    mutate(sample_name = as.character(sample_name))
-
-} else if(ncol(TU_data) > 2) {
-
-  TU_data <- TU_data %>%
-    mutate(Collection_date = as.Date(Collection_date, format = "%m/%d/%Y")) %>%
-    rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value", gender = "GENDER") %>%
-    select(any_of(phi_info), sample_collection_date, CT, age, gender) %>%
-    #filter rows where sample_id is NA
-    filter(!is.na(sample_name)) %>%
-    #make these columns character vectors
-    mutate(across(c(sample_name, case_id, breakthrough_case, priority, gender), as.character))
-}
-
-if(nrow(TU_data) > 0) {
-
-  TU_data <- TU_data %>%
-    #filter empty columns
-    select(where(function(x) any(!is.na(x)))) %>%
-    select(!matches("^\\.\\.\\.")) %>%
-    #use the first day of the week (starting on Monday) as the sample_collection_date
-    mutate(sample_collection_date = as.Date(cut(as.POSIXct(sample_collection_date), "week"))) %>%
-    mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:6, 9)), Inf),
-                              labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
-                              include.lowest = TRUE)) %>%
-    #don't include age because it may be PHI if included with zipcode and gender
-    select(-age) %>%
-    as.data.frame()
 }
 
 ################################
@@ -396,90 +325,48 @@ ENV_fp <- max(list.files(here("metadata", "extra_metadata"), pattern = "environm
 if(!is.na(ENV_fp)) {
 
   ENV_data <- read_csv(ENV_fp) %>%
-    #use the Tuesday of the sequencing week as the sample_collection_date
-    mutate(sample_collection_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
-    select(sample_name, sample_collection_date, environmental_site) %>%
+    #use the Tuesday of the sequencing week as the sample_collect_date
+    mutate(sample_collect_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
+    select(sample_group = sample_name, sample_collect_date, environmental_site) %>%
     #filter rows where sample_id is NA
-    filter(!is.na(sample_name)) %>%
+    filter(!is.na(sample_group)) %>%
     #filter empty columns
-    select(where(function(x) any(!is.na(x)))) %>%
-    select(!matches("^\\.\\.\\."))
+    select(where(function(x) any(!is.na(x))),
+           !matches("^\\.\\.\\."))
 } else{
 
-  ENV_data <- data.frame(environmental_site = NA)
+  ENV_data <- data.frame(environmental_site = NA_character_)
 }
 
-########################
-# Load all other samples
-########################
-
-other_sheets <- unique(unlist(lapply(PHL_fp, excel_sheets)))
-other_sheets <- other_sheets[!grepl("PHL|Temple", other_sheets)]
-
-other_data <- data.frame(sample_name = NA,
-                         case_id = NA,
-                         sample_collection_date = NA,
-                         CT = NA_real_,
-                         RLU = NA_real_,
-                         gender = NA,
-                         age = NA_integer_,
-                         zip_char = NA_integer_
-)
-
-for(sheet_name in other_sheets) {
-
-  possible_sample_names <- "SPECIMEN_NUMBER"
-
-  possible_case_id <- "cdms_id"
-
-  possible_zip_char <- "zip_code"
-
-  possible_ct_value <- "ct_value"
-
-  other_sheet <- PHL_fp %>%
-    lapply(function(x) read_excel_safely(x, sheet_name)) %>%
-    bind_rows() %>%
-    rename_at(vars(contains(possible_sample_names)),
-              ~gsub(possible_sample_names, "sample_name", ., ignore.case = TRUE)) %>%
-    mutate(sample_name = gsub("\\s", "", sample_name)) %>%
-    rename_at(vars(contains(possible_case_id)),
-              ~gsub(possible_case_id, "case_id", ., ignore.case = TRUE)) %>%
-    mutate(case_id = gsub("\\s", "", case_id)) %>%
-    rename_at(vars(contains(possible_zip_char)),
-              ~gsub(possible_zip_char, "zip_char", ., ignore.case = TRUE)) %>%
-    rename_at(vars(contains(possible_ct_value)),
-              ~gsub(possible_ct_value, "CT", ., ignore.case = TRUE)) %>%
-    mutate(host_age_bin = cut(age, breaks = c(0, 9, as.numeric(paste0(1:6, 9)), Inf),
-                              labels = c("0 - 9", paste(seq(10, 60, by = 10), "-",as.numeric(paste0(1:6, 9))), "70+"),
-                              include.lowest = TRUE)) %>%
-    as.data.frame()
-
-  other_data <- bind_rows(other_data, other_sheet) %>%
-    select(-c(sample_type, age))
-
-}
-
-###########################
-# Merge all metadata sheets
-###########################
-
-PHL_TU_merge <- PHL_data %>%
-  bind_rows(TU_data) %>%
+extra_metadata_merge <- ddPCR_data %>%
   bind_rows(ENV_data) %>%
-  bind_rows(other_data) %>%
-  mutate(sample_collection_date = as.character(sample_collection_date)) %>%
-  select(-any_of(c("age", "DOB")))
+  unique()
+
+#########################################
+# Merge read in sequencing metadata sheet
+#########################################
+
+sequencing_controls <- c("Water control", "Reagent control", "Mock DNA positive control")
+sample_group_controls <- c("PBS", "oldWW", "ZeptoSC2")
+sample_group_sites <- c("NorthEast", "SouthEast", "SouthWest")
 
 cols2merge <- c("sample_name", "plate", "plate_row", "plate_col", "plate_coord")
 
-#merge all the individual sheets
+#merge all the sequencing sheets
 metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   #add in barcodes
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
-  #merge the metadata
-  merge(PHL_TU_merge, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
   arrange(plate, plate_col, plate_row) %>%
-  mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
+  rename(any_of(c(sample_collect_date = "sample_collection_date"))) %>%
+  #find sample group from sample_name
+  mutate(sample_group = gsub("^WW-([0-9]{4})-([0-9]{2})-([0-9]{2})-|-Rep.*$", "", sample_name),
+         # sample_group = as.character(lapply(sample_name,
+         #                                    function(x) unlist(lapply(c(sample_group_controls, sample_group_sites),
+         #                                                              function(y) y[grepl(y, x)])))),
+         sample_group = ifelse((sample_group == "character(0)" | sample_group == ""), NA_character_, sample_group),
+         sample_collect_date = ifelse(grepl("^WW-([0-9]{4})-([0-9]{2})-", sample_name),
+                                      gsub("^(WW)-([0-9]{4}-[0-9]{2}-[0-9]{2})-(.*)", "\\2", sample_name), NA),
+         sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
          uniq_sample_name = gsub("-Rep[0-9]*", "", sample_name),
          sequencing_date = sequencing_date,
          prj_descrip = prj_description,
@@ -496,7 +383,7 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
 # Fill in these columns in the metadata sheet if they were left blank
 #####################################################################
 
-fill_in_columns <- c("sample_type", "sample_collected_by", "PHL_sample_received_date",
+fill_in_columns <- c("sample_type", "sample_collected_by", "sample_collect_date",
                      "organism", "host_scientific_name", "host_disease", "isolation_source",
                      "requester", "requester_email")
 
@@ -539,49 +426,53 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^[A-Z0-9][0-9]*$" = "Nasal swab",
                        "^WW-" = "Wastewater")
 
+extra_cols2merge <- c("sample_group", "sample_collect_date")
+
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
                                  sample_name %in% ENV_data$sample_name ~ "Environmental control",
                                  (is.na(sample_type) | sample_type == "") ~ multi_grep(named_sample_type, sample_name),
-                                 TRUE ~ NA)) %>%
-  mutate(sample_collected_by = case_when(!(is.na(sample_collected_by) | sample_collected_by == "") ~ sample_collected_by,
-                                         TRUE ~ "Philadelphia Department of Public Health")) %>%
-  mutate(PHL_sample_received_date = case_when(!(is.na(PHL_sample_received_date) | as.character(PHL_sample_received_date) == "") ~ as.Date(PHL_sample_received_date),
-                                              #if it's a wastewater sample without a date, throw an error
-                                              sample_type == "Wastewater" ~ NA,
-                                              #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet
-                                              TRUE ~ as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1)) %>%
-  mutate(sample_collection_date = case_when(!(is.na(sample_collection_date) | as.character(sample_collection_date) == "") ~ as.Date(sample_collection_date),
-                                            #if it's a wastewater sample without a date, use the PHL sample received date
-                                            sample_type == "Wastewater" ~ PHL_sample_received_date,
-                                            TRUE ~ NA)) %>%
-  mutate(organism = case_when(!(is.na(organism) | organism == "") ~ organism,
+                                 TRUE ~ NA),
+         sample_collected_by = case_when(!(is.na(sample_collected_by) | sample_collected_by == "") ~ sample_collected_by,
+                                         TRUE ~ "Philadelphia Water Department"),
+         sample_collect_date = case_when(!(is.na(sample_collect_date) | as.character(sample_collect_date) == "") ~ as.Date(sample_collect_date),
+                                         #if it's a wastewater sample without a date, throw an error
+                                         sample_type == "Wastewater" ~ NA,
+                                         #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet
+                                         TRUE ~ as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1),
+         organism = case_when(!(is.na(organism) | organism == "") ~ organism,
                               sample_type == "Wastewater" ~ "Wastewater metagenome",
                               !is.na(sample_type) ~ sample_type,
-                              TRUE ~ NA)) %>%
-  mutate(host_scientific_name = case_when(!(is.na(host_scientific_name) | host_scientific_name == "") ~ host_scientific_name,
+                              TRUE ~ NA),
+         host_scientific_name = case_when(!(is.na(host_scientific_name) | host_scientific_name == "") ~ host_scientific_name,
                                           !is.na(sample_type) ~ "not applicable",
-                                          TRUE ~ NA)) %>%
-  mutate(host_disease = case_when(!(is.na(host_disease) | host_disease == "") ~ host_disease,
+                                          TRUE ~ NA),
+         host_disease = case_when(!(is.na(host_disease) | host_disease == "") ~ host_disease,
                                   !is.na(sample_type) ~ "not applicable",
-                                  TRUE ~ NA)) %>%
-  mutate(isolation_source = case_when(!(is.na(isolation_source) | isolation_source == "") ~ isolation_source,
+                                  TRUE ~ NA),
+         isolation_source = case_when(!(is.na(isolation_source) | isolation_source == "") ~ isolation_source,
                                       sample_type == "Wastewater" ~ "Wastewater",
                                       grepl("control$", sample_type) ~ "Environmental",
                                       grepl("test", sample_type, ignore.case = TRUE) ~ "Test sample",
-                                      TRUE ~ NA)) %>%
-  mutate(requester = case_when(!(is.na(requester) | requester == "") ~ requester,
-                               TRUE ~ epi_name)) %>%
-  mutate(requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
-                                     TRUE ~ epi_email)) %>%
-  mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
-                                        grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
-                                        TRUE ~ environmental_site)) %>%
-  mutate(sample_group = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ sample_type,
-                                        TRUE ~ gsub("^WW-|^Test", "", uniq_sample_name))) %>%
-  mutate(ww_group = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ sample_type,
-                              grepl("PBS|oldWW|ZeptoSC2", uniq_sample_name) ~ "Wastewater control",
-                              TRUE ~ "Wastewater sample"))
+                                      TRUE ~ NA),
+         requester = case_when(!(is.na(requester) | requester == "") ~ requester,
+                               TRUE ~ epi_name),
+         requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
+                                     TRUE ~ epi_email),
+         sample_group = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ sample_type,
+                                  !(is.na(sample_group) | sample_group == "") ~ sample_group,
+                                  TRUE ~ gsub("^WW-|^Test", "", uniq_sample_name)),
+         ww_group = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ sample_type,
+                              grepl(paste0(sample_group_controls, collapse = "|"), uniq_sample_name) ~ "Wastewater control",
+                              TRUE ~ "Wastewater sample")) %>%
+  merge(extra_metadata_merge, by = extra_cols2merge, all.x = TRUE, sort = FALSE) %>%
+  mutate(environmental_site = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
+                                 grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
+                                 TRUE ~ environmental_site))
+
+##########################
+# Check the metadata sheet
+##########################
 
 main_sample_type <- unique(metadata_sheet$sample_type)[!grepl("control", unique(metadata_sheet$sample_type))]
 
@@ -592,7 +483,7 @@ if(length(main_sample_type) > 1) {
   sample_type_acronym <- "Mix"
 }
 
-if(main_sample_type != "Wastewater" | main_sample_type != "Testing sample type") {
+if(!grepl("Wastewater|Testing sample type", main_sample_type)) {
   stop(simpleError(paste0("The sample type included in the metadata sheet is not wastewater or a test sample type!\n",
                           "This may not be the appropriate workflow for this run!\n")))
 }
@@ -611,40 +502,38 @@ for(x in fill_in_columns) {
   }
 }
 
-######################################################################################
-# Samples in epi metadata but we don't have the samples or they could not be extracted
-######################################################################################
+#######################################################################################################
+# Check for the samples in the ddPCR metadata sheet that didn't appear in the sequencing metadata sheet
+#######################################################################################################
 
-epi_sample_not_found <- PHL_data %>%
-  select(any_of("sample_name")) %>%
-  rbind(select(TU_data, any_of("sample_name")))
+if(ncol(ddPCR_data) > 0) {
 
-if(ncol(epi_sample_not_found > 0)) {
-
-  epi_sample_not_found <- epi_sample_not_found %>%
-    filter(!sample_name %in% metadata_sheet$sample_name) %>%
+  ddPCR_sample_not_found <- ddPCR_data %>%
+    filter(grepl(paste0(sample_group_sites, collapse = "|"), sample_group)) %>%
+    merge(metadata_sheet, by = extra_cols2merge, all.x = TRUE) %>%
+    filter(is.na(sample_id)) %>%
+    mutate(date_n_name = paste(sample_collect_date, "-", sample_group)) %>%
+    select(date_n_name) %>%
     pull() %>%
     str_sort()
 
   #throw error
-  if(length(epi_sample_not_found) > 0) {
+  if(length(ddPCR_sample_not_found) > 0) {
 
     message("\n*****")
-    message("These samples were found in the epidemiologists metadata sheet but not in our sample sheet. Something might be wrong!")
-    message("Check email to see if these samples could not be located by the receiving department")
-    message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check:")
+    message("These samples were found in the ddPCR metadata sheet but not in the sequencing sample sheet")
+    message("Double check that the correct samples were sequenced:")
     message("*****")
+    stop(simpleError(paste0(pull(ddPCR_sample_not_found), collapse = ", ")))
 
-    stop(simpleError(paste0(epi_sample_not_found, collapse = ", ")))
   }
-
 }
 
 missing_metadata_non_ctrl_samples <- metadata_sheet %>%
   filter(!grepl("control", sample_type))
 
 missing_sample_date <- missing_metadata_non_ctrl_samples %>%
-  filter(is.na(sample_collection_date)) %>%
+  filter(is.na(sample_collect_date)) %>%
   select(sample_name) %>%
   pull() %>%
   str_sort()
@@ -659,27 +548,30 @@ if(length(missing_sample_date) > 0) {
   stop(simpleError(paste0(missing_sample_date, collapse = ", ")))
 }
 
-missing_sample_RLU <- missing_metadata_non_ctrl_samples %>%
-  filter(sample_collected_by == "Philadelphia Department of Public Health") %>%
-  filter(is.na(RLU)) %>%
+missing_ddPCR_data <- missing_metadata_non_ctrl_samples %>%
+  filter(if_any(ends_with("_gc/L"), is.na)) %>%
   select(sample_name)
-
-missing_sample_CT <- missing_metadata_non_ctrl_samples %>%
-  filter(sample_collected_by == "Temple University") %>%
-  filter(is.na(CT)) %>%
-  select(sample_name)
-
-missing_metadata_samples <- rbind(missing_sample_RLU, missing_sample_CT)
 
 #show warning
-if(nrow(missing_metadata_samples) > 0){
+if(nrow(missing_ddPCR_data) > 0){
   message("\n*****")
-  message("These non-control samples are in the sample sheet but are missing RLU or CT values")
-  message("They may also be GeneXpert samples. These samples should be double checked:")
-  message(paste0(pull(missing_metadata_samples), collapse = ", "))
+  message("These non-control samples are in the sample sheet but are missing ddPCR values")
+  message("Check to see if the ddPCR has been performed for these samples:")
+  message(paste0(pull(missing_ddPCR_data), collapse = ", "))
   message("*****")
 
   Sys.sleep(5)
+}
+
+#check lowest date of sample collection
+oldest_ww_date <- metadata_sheet %>%
+  filter(!grepl("control", ww_group)) %>%
+  select(sample_collect_date) %>%
+  pull() %>%
+  min()
+
+if(oldest_ww_date < seq(as.Date(sequencing_date), length=2, by='-4 month')[2]){
+  warning(simpleError(paste0("\nSome samples have collection dates more than 4 months ago!!")))
 }
 
 #############
@@ -691,7 +583,7 @@ for(x in c(cols2merge, "sample_id",
            "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
            "index", "index2", "UDI_Index_ID", "I7_Index_ID", "I5_Index_ID",
            "sequencing_date", "prj_descrip", "instrument_type", "read_length", "index_length",
-           "environmental_site", "sample_collection_date", "gender", "zip_char")) {
+           "environmental_site", "sample_collect_date", "zipcode")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     stop(simpleError(paste0("\nMissing column [", x, "] in the metadata sheet template!!!")))
   }
@@ -700,18 +592,6 @@ for(x in c(cols2merge, "sample_id",
 #remove columns that are all empty
 metadata_sheet <- metadata_sheet %>%
   select(where(function(x) any(!is.na(x))))
-
-#add back these columns as NA if missing (needed for the report and for seqsender)
-for(x in c("qubit_conc_ng_ul", "sample_collection_date", "host_age_bin", "gender")) {
-  if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
-    metadata_sheet[[x]] <- NA
-  }
-}
-
-#check lowest date of sample collection
-if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
-  stop(simpleError(paste0("\nSome samples have collection dates more than 2 months ago. Investigate!!")))
-}
 
 print('What do the sample_id look like?')
 print(unique(metadata_sheet$sample_id))
@@ -765,6 +645,7 @@ if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
 ####################
 
 samp_sheet_2_write <- metadata_sheet %>%
+  filter(!sample_name %in% remove_sample_from_bcl_samplesheet) %>%
   # do not include lane in the sample sheet otherwise it will only demultiplex that sample in that specified lane, not in all lanes
   rowwise() %>%
   #BCL Convert does not take Index Plate

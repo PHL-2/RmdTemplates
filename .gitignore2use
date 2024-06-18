@@ -7,7 +7,8 @@
 processed_*/
 fastq/
 epi/
-aux_files/seqsender/
+aux_files/data_submission/seqsender/
+aux_files/data_submission/dcipher/
 **/metadata/*
 !**/metadata/*_COVIDSeq_metadata.csv
 *.fastq.gz

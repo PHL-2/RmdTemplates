@@ -12,6 +12,8 @@ library(stringr)
 # Manual input
 ##############
 
+remove_sample_from_samplesheets <- c("")
+
 run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
@@ -31,7 +33,7 @@ index_length <- "10"
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
 
 #file location of the nextera udi indices
-barcode_fp <- file.path(dirname(here()), "aux_files", "metadata_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
+barcode_fp <- file.path(dirname(here()), "aux_files", "metadata_references", "Illumina", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
 if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
   stop(simpleError(paste0("Please use the 'YYYY-MM-DD' format for this RStudio project date. This date should correspond to the desired sequencing run date")))
@@ -589,7 +591,7 @@ if(length(main_sample_type) > 1) {
   sample_type_acronym <- "Mix"
 }
 
-if(main_sample_type != "Nasal swab" | main_sample_type != "Testing sample type") {
+if(!grepl("Nasal swab|Testing sample type", main_sample_type)) {
   stop(simpleError(paste0("The sample type included in the metadata sheet is not nasal swab or a test sample type!\n",
                           "This may not be the appropriate workflow for this run!\n")))
 }
@@ -621,6 +623,7 @@ if(ncol(epi_sample_not_found > 0)) {
 
   epi_sample_not_found <- epi_sample_not_found %>%
     filter(!sample_name %in% metadata_sheet$sample_name) %>%
+    filter(!sample_name %in% remove_sample_from_samplesheets) %>%
     pull() %>%
     str_sort()
 
@@ -763,6 +766,7 @@ if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
 ####################
 
 samp_sheet_2_write <- metadata_sheet %>%
+  filter(!sample_name %in% remove_sample_from_samplesheets) %>%
   # do not include lane in the sample sheet otherwise it will only demultiplex that sample in that specified lane, not in all lanes
   rowwise() %>%
   #BCL Convert does not take Index Plate
@@ -814,6 +818,7 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 
 #does not contain PHI and accession numbers
 metadata_sheet %>%
+  filter(!sample_name %in% remove_sample_from_samplesheets) %>%
   select(-c(I7_Index_ID, I5_Index_ID, any_of(phi_info))) %>%
   # NextSeq runs have index2 sequences in the reverse complement of the ones listed in the reference barcode sheet
   # however, the sample sheet used for demultiplexing needs to be the same orientation as the reference barcode sheet
@@ -824,5 +829,6 @@ metadata_sheet %>%
 
 #contains PHI and accession numbers
 metadata_sheet %>%
+  filter(!sample_name %in% remove_sample_from_samplesheets) %>%
   select(sample_id, any_of(phi_info)) %>%
   write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")))

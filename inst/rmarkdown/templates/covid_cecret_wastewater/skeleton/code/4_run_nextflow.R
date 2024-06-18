@@ -2,14 +2,25 @@ library(here)
 library(dplyr)
 library(tidyr)
 library(stringr)
+library(readr)
 
 #This Rscript submits the relevant jobs to Nextflow once the sequencing run has been uploaded
 
-#####################
-# Get sequencing date
-#####################
+###############
+# Manual inputs
+###############
 
 ec2_tmp_fp <- "~/tmp_bs_dl/"
+
+update_pangolin_dataset <- TRUE
+
+update_freyja_and_cecret_pipeline <- TRUE
+
+cecret_version <- "master"
+
+#########################
+# AWS and sequencing_date
+#########################
 
 system2("aws", c("sso login"))
 
@@ -26,13 +37,13 @@ if(sequencing_date == "") {
 # Load functions
 ################
 
-#this file needs to sit in a [aux_files/functions] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "functions", "R_all_functions_v3.R"))
   },
   error = function(e) {
-    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory"))
   }
 )
 
@@ -40,13 +51,13 @@ tryCatch(
 # Load config
 #############
 
-#this file needs to sit in a [aux_files/config] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 
@@ -98,13 +109,15 @@ check_screen_job(message2display = "Checking BCLConvert job",
 # Checking the demultiplexing results
 aws_s3_fastq_files <- system2("aws", c("s3 ls", bclconvert_output_path,
                                        "--recursive",
-                                       "| grep 'R1_001.fastq.gz$'"), stdout = TRUE)
+                                       "| grep 'R1_001.fastq.gz$'",
+                                       "| grep -v 'Merged'"), stdout = TRUE)
 
 # If the aws-cli provides an SSL error on local machine, run the command through the instance
 if(length(aws_s3_fastq_files) == 0) {
   aws_s3_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
                                          shQuote(paste("aws s3 ls", bclconvert_output_path, "--recursive",
-                                                       "| grep 'R1_001.fastq.gz$'"), type = "sh")),
+                                                       "| grep 'R1_001.fastq.gz$'",
+                                                       "| grep -v 'Merged'"), type = "sh")),
                                 stdout = TRUE, stderr = TRUE) %>%
     head(-1)
 }
@@ -162,140 +175,149 @@ nf_concat_sample_sheet_pattern <- "nf_concat_fastq_samplesheet.csv"
 nf_concat_samplesheet_fp <- here("metadata", "munge",
                                  tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, nf_concat_sample_sheet_pattern, sep = "_")))
 
-message("Uploading samplesheets to AWS S3")
-s3_cp_nf_concat_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_concat_samplesheet_fp, type = "cmd"), paste0(bclconvert_output_path, "/nf_samplesheets/")), stdout = TRUE)
+is_nf_concat_samplesheet_empty <- read_csv(nf_concat_samplesheet_fp, show_col_types = FALSE) %>%
+  nrow() == 0
 
-if(length(s3_cp_nf_concat_samplesheet) == 0) {
+if(!is_nf_concat_samplesheet_empty) {
 
-  mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
-                                 shQuote(paste("mkdir -p", ec2_tmp_fp))),
-                        stdout = TRUE, stderr = TRUE)
+  message("Uploading nextflow concat samplesheet to AWS S3")
+  s3_cp_nf_concat_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_concat_samplesheet_fp, type = "cmd"), paste0(bclconvert_output_path, "/nf_samplesheets/")), stdout = TRUE)
 
-  if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
-    stop(simpleError("Failed to make temporary directory in EC2 instance"))
+  if(length(s3_cp_nf_concat_samplesheet) == 0) {
+    mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
+                                   shQuote(paste("mkdir -p", ec2_tmp_fp))),
+                          stdout = TRUE, stderr = TRUE)
+
+    if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
+      stop(simpleError("Failed to make temporary directory in EC2 instance"))
+    }
+
+    # Transfer sample sheet
+    run_in_terminal(paste("scp", nf_concat_samplesheet_fp,
+                          paste0(ec2_hostname, ":", ec2_tmp_fp))
+    )
+
+    # Upload concat fastq samplesheet
+    submit_screen_job(message2display = "Uploading samplesheet to S3",
+                      ec2_login = ec2_hostname,
+                      screen_session_name = "upload-concat-samplesheet",
+                      command2run = paste("aws s3 cp",
+                                          ec2_tmp_fp,
+                                          paste0(bclconvert_output_path, "/nf_samplesheets/"),
+                                          "--recursive",
+                                          "--exclude '*'",
+                                          paste0("--include '", basename(nf_concat_samplesheet_fp), "'"))
+    )
+
+    check_screen_job(message2display = "Checking samplesheet upload job",
+                     ec2_login = ec2_hostname,
+                     screen_session_name = "upload-concat-samplesheet")
   }
 
-  # Transfer sample sheet
-  run_in_terminal(paste("scp", nf_concat_samplesheet_fp,
-                        paste0(ec2_hostname, ":", ec2_tmp_fp))
+  # Run nextflow merge fastq file pipeline
+  run_in_terminal(paste("scp", file.path(dirname(here()), "aux_files", "external_scripts", "nextflow", "concat_fastq.nf"),
+                        paste0(ec2_hostname, ":~/.tmp_screen/"))
   )
+
+  submit_screen_job(message2display = "Concatenating FASTQ files",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = "concat-fastq",
+                    command2run = paste("cd ~/.tmp_screen/;",
+                                        "nextflow run concat_fastq.nf",
+                                        "-profile Bfx_profile_batch",
+                                        "-bucket-dir", paste0(s3_nextflow_work_bucket, "/concat_fastq_", sample_type_acronym, "_", sequencing_date),
+                                        "-resume",
+                                        "--concat_samplesheet", paste0(bclconvert_output_path, "/nf_samplesheets/", basename(nf_concat_samplesheet_fp)),
+                                        "--s3_outdir", fastq_path)
+  )
+
+  check_screen_job(message2display = "Checking concatenating FASTQ job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = "concat-fastq")
+
+  # Checking the merged file sizes
+  aws_s3_merged_fastq_files <- system2("aws", c("s3 ls", bclconvert_output_path,
+                                                "--recursive",
+                                                "| grep 'R1_001.fastq.gz$'",
+                                                "| grep 'Merged'"), stdout = TRUE)
+
+  # If the aws-cli provides an SSL error on local machine, run the command through the instance
+  if(length(aws_s3_merged_fastq_files) == 0) {
+
+    aws_s3_merged_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
+                                                  shQuote(paste("aws s3 ls", bclconvert_output_path, "--recursive",
+                                                                "| grep 'R1_001.fastq.gz$'",
+                                                                "| grep 'Merged'"),
+                                                          type = "sh")),
+                                         stdout = TRUE, stderr = TRUE) %>%
+      head(-1)
+  }
+
+  merged_fastq_file_sizes <- aws_s3_merged_fastq_files %>%
+    str_split("\\s+") %>%
+    do.call("rbind", .) %>%
+    as.data.frame() %>%
+    `colnames<-`(c("date", "time", "bytes", "filename")) %>%
+    select(bytes, filename) %>%
+    filter(!grepl("/Alignment_", filename)) %>%
+    filter(!grepl("/Fastq/", filename)) %>%
+    mutate(sequencing_folder = gsub(".*processed_bclconvert/", "", filename),
+           sequencing_folder = gsub("/.*", "", sequencing_folder),
+           filename = gsub(".*/", "", filename),
+           merged_bytes = as.numeric(bytes),
+           sample_id = gsub("_.*", "", filename)) %>%
+    filter(grepl(intended_sequencing_folder_regex, sequencing_folder))
+
+  all_fastq_file_sizes <- read_csv(nf_concat_samplesheet_fp) %>%
+    select(sample_id, fastq_1) %>%
+    mutate(fastq_1 = gsub(".*/|_.*", "", fastq_1)) %>%
+    merge(select(merged_fastq_file_sizes, sample_id, merged_bytes), by = "sample_id", all = TRUE) %>%
+    merge(select(fastq_file_sizes, filename, bytes) %>%
+            mutate(filename = gsub(".*/|_.*", "", filename)), by.x = "fastq_1", by.y = "filename", all = TRUE) %>%
+    filter(!is.na(sample_id)) %>%
+    group_by(sample_id) %>%
+    mutate(summed_bytes = sum(bytes)) %>%
+    ungroup() %>%
+    mutate(sum_check = merged_bytes == summed_bytes)
+
+  if(!all(all_fastq_file_sizes$sum_check)) {
+    stop (simpleError("Double check the concatenating FASTQ workflow. The file sizes of the FASTQ files don't add up"))
+  }
 }
 
-# Upload concat fastq samplesheet
-submit_screen_job(message2display = "Uploading samplesheet to S3",
-                  ec2_login = ec2_hostname,
-                  screen_session_name = "upload-concat-samplesheet",
-                  command2run = paste("aws s3 cp",
-                                      ec2_tmp_fp,
-                                      paste0(bclconvert_output_path, "/nf_samplesheets/"),
-                                      "--recursive",
-                                      "--exclude '*'",
-                                      paste0("--include '", basename(nf_concat_samplesheet_fp), "'"))
-)
+# Download most recent Nextclade pangolin dataset
+if (update_pangolin_dataset) {
+  submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = "nextclade-dl",
+                    command2run = paste("mkdir -p ~/.local/bin/;",
+                                        "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
+                                        "chmod +x ~/.local/bin/nextclade;",
+                                        "nextclade --version;",
+                                        "nextclade dataset list --name sars-cov-2 --json > ~/nextclade-sars.json;",
+                                        "nextclade dataset get --name sars-cov-2 --output-zip ~/sars.zip;",
+                                        "aws s3 cp ~/nextclade-sars.json", paste0(s3_reference_bucket, "/nextclade/nextclade-sars.json;"),
+                                        "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
+                                        "rm ~/nextclade-sars.json ~/sars.zip")
+                    )
 
-check_screen_job(message2display = "Checking samplesheet upload job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = "upload-concat-samplesheet")
-
-# Run nextflow merge fastq file pipeline
-run_in_terminal(paste("scp", file.path(dirname(here()), "aux_files", "nf_scripts", "concat_fastq.nf"),
-                      paste0(ec2_hostname, ":~/.tmp_screen/"))
-)
-
-submit_screen_job(message2display = "Concatenating FASTQ files",
-                  ec2_login = ec2_hostname,
-                  screen_session_name = "concat-fastq",
-                  command2run = paste("cd ~/.tmp_screen/;",
-                                      "nextflow run concat_fastq.nf",
-                                      "-profile Bfx_profile_batch",
-                                      "-bucket-dir", paste0(s3_nextflow_work_bucket, "/concat_fastq_", sample_type_acronym, "_", sequencing_date),
-                                      "-resume",
-                                      "--concat_samplesheet", paste0(bclconvert_output_path, "/nf_samplesheets/", basename(nf_concat_samplesheet_fp)),
-                                      "--s3_outdir", fastq_path)
-)
-
-check_screen_job(message2display = "Checking concatenating FASTQ job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = "concat-fastq")
-
-# Checking the merged file sizes
-aws_s3_merged_fastq_files <- system2("aws", c("s3 ls", bclconvert_output_path,
-                                              "--recursive",
-                                              "| grep 'R1_001.fastq.gz$'",
-                                              "| grep 'Merged'"), stdout = TRUE)
-
-# If the aws-cli provides an SSL error on local machine, run the command through the instance
-if(length(aws_s3_merged_fastq_files) == 0) {
-
-  aws_s3_merged_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
-                                                shQuote(paste("aws s3 ls", bclconvert_output_path, "--recursive",
-                                                              "| grep 'R1_001.fastq.gz$'",
-                                                              "| grep 'Merged'"),
-                                                        type = "sh")),
-                                       stdout = TRUE, stderr = TRUE) %>%
-    head(-1)
+  check_screen_job(message2display = "Checking Nextclade download job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = "nextclade-dl")
 }
-
-merged_fastq_file_sizes <- aws_s3_merged_fastq_files %>%
-  str_split("\\s+") %>%
-  do.call("rbind", .) %>%
-  as.data.frame() %>%
-  `colnames<-`(c("date", "time", "bytes", "filename")) %>%
-  select(bytes, filename) %>%
-  filter(!grepl("/Alignment_", filename)) %>%
-  filter(!grepl("/Fastq/", filename)) %>%
-  mutate(sequencing_folder = gsub(".*processed_bclconvert/", "", filename),
-         sequencing_folder = gsub("/.*", "", sequencing_folder),
-         filename = gsub(".*/", "", filename),
-         merged_bytes = as.numeric(bytes),
-         sample_id = gsub("_.*", "", filename)) %>%
-  filter(grepl(intended_sequencing_folder_regex, sequencing_folder))
-
-all_fastq_file_sizes <- read_csv(nf_concat_samplesheet_fp) %>%
-  select(sample_id, fastq_1) %>%
-  mutate(fastq_1 = gsub(".*/|_.*", "", fastq_1)) %>%
-  merge(select(merged_fastq_file_sizes, sample_id, merged_bytes), by = "sample_id", all = TRUE) %>%
-  merge(select(fastq_file_sizes, filename, bytes) %>%
-          mutate(filename = gsub(".*/|_.*", "", filename)), by.x = "fastq_1", by.y = "filename", all = TRUE) %>%
-  filter(!is.na(sample_id)) %>%
-  group_by(sample_id) %>%
-  mutate(summed_bytes = sum(bytes)) %>%
-  ungroup() %>%
-  mutate(sum_check = merged_bytes == summed_bytes)
-
-if(!all(all_fastq_file_sizes$sum_check)) {
-  stop (simpleError("Double check the concatenating FASTQ workflow. The file sizes of the FASTQ files don't add up"))
-}
-
-# Download most recent Nextclade dataset
-submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
-                  ec2_login = ec2_hostname,
-                  screen_session_name = "nextclade-dl",
-                  command2run = paste("mkdir -p ~/.local/bin/;",
-                                      "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
-                                      "chmod +x ~/.local/bin/nextclade;",
-                                      "nextclade --version;",
-                                      "nextclade dataset list --name sars-cov-2 --json > ~/nextclade-sars.json;",
-                                      "nextclade dataset get --name sars-cov-2 --output-zip ~/sars.zip;",
-                                      "aws s3 cp ~/nextclade-sars.json", paste0(s3_reference_bucket, "/nextclade/nextclade-sars.json;"),
-                                      "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
-                                      "rm ~/nextclade-sars.json ~/sars.zip")
-                  )
-
-check_screen_job(message2display = "Checking Nextclade download job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = "nextclade-dl")
 
 # Update the Cecret pipeline; this should be done as often as possible as it also updates the freyja data used for assignment
-submit_screen_job(message2display = "Updating Cecret pipeline",
-                  ec2_login = ec2_hostname,
-                  screen_session_name = "update-cecret",
-                  command2run = "nextflow pull UPHL-BioNGS/Cecret -r master"
-                  )
+if(update_freyja_and_cecret_pipeline) {
+  submit_screen_job(message2display = "Updating Cecret pipeline",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = "update-cecret",
+                    command2run = "nextflow pull UPHL-BioNGS/Cecret -r master"
+                    )
 
-check_screen_job(message2display = "Checking Cecret update",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = "update-cecret")
+  check_screen_job(message2display = "Checking Cecret update",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = "update-cecret")
+}
 
 workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sep = "/")
 
@@ -307,7 +329,7 @@ submit_screen_job(message2display = "Processing data through Cecret pipeline",
                                       "nextflow run UPHL-BioNGS/Cecret",
                                       "-profile", cecret_profile,
                                       "-bucket-dir", paste0(s3_nextflow_work_bucket, "/cecret_", sample_type_acronym, "_", sequencing_date),
-                                      "-r master",
+                                      "-r", cecret_version,
                                       "-resume",
                                       "--reads", fastq_path,
                                       "--outdir", paste(workflow_output_fp, "processed_cecret", sep = "/"))

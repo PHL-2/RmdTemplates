@@ -605,8 +605,9 @@ cecret_aggregate %>%
   unique() %>%
   mutate(software = case_when(grepl("^PUSHER-", version) ~ "PUSHER",
                               grepl("^PANGO-", version) ~ "PANGO",
+                              grepl("^SCORPIO_", version) ~ "SCORPIO",
                               TRUE ~ gsub("^pangolin_|.version$", "", software)),
-         version = gsub("^PUSHER-|^PANGO-", "", version)) %>%
+         version = gsub("^PUSHER-|^PANGO-|^SCORPIO_", "", version)) %>%
   mutate(pipeline = "UPHL-BioNGS-Cecret") %>%
   select(pipeline, software, version) %>%
   write_csv(file = software_version_fp, append = TRUE)
@@ -734,7 +735,7 @@ snpdists <- read_csv(snpdists_fp)
 
 #df with all samples
 s <- s_meta %>%
-  merge(cecret_results, by = c("sample_id", "barcode_sequence", "index", "index2", "lane"), all = TRUE) %>%
+  merge(cecret_results, by = c("sample_id", "barcode_sequence", "index", "index2"), all = TRUE) %>%
   mutate(sample_type = case_when(grepl("^Undetermined$", sample_id) ~ "Unassigned reads",
                                  ((pangolin_qc_status == "fail" | nextclade_qc_overallstatus == "bad") & !isControl) ~ paste0(sample_type, " - Poor"),
                                  TRUE ~ sample_type)) %>%
