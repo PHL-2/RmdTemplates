@@ -280,3 +280,26 @@ reverse_complement <- function(index) {
   reversed_index <- stringi::stri_reverse(index)
   chartr(old = "atcgATCG", new = "tagcTAGC", reversed_index)
 }
+
+## =================================================================
+##  Filter the dataframe and pivot wider with specified column names
+## =================================================================
+
+filter_n_pivot <- function(df, db_field, db_name, col_name, col_value) {
+
+  db_field <- enquo(db_field)
+
+  df %>%
+    filter(!!db_field == db_name) %>%
+    select(col_name, col_value) %>%
+    pivot_wider(names_from = col_name, values_from = col_value)
+}
+
+## ======================================================================================
+##  Calculate final concentration after accounting for dilution and concentration factors
+## ======================================================================================
+
+stock_concentration_calc = function(concentration, rxn_vol, input_vol, extraction_vol, elution_vol, end_concentration_vol, initial_concentration_vol, efficiency) {
+  result = (concentration * rxn_vol / input_vol) * (elution_vol / extraction_vol) * (end_concentration_vol / initial_concentration_vol) / efficiency
+  return(result)
+}
