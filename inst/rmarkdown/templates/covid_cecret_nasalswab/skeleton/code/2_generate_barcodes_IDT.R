@@ -31,7 +31,7 @@ index_length <- "10"
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
 
 #file location of the nextera udi indices
-barcode_fp <- file.path(dirname(here()), "aux_files", "metadata_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
+barcode_fp <- file.path(dirname(here()), "aux_files", "metadata_references", "Illumina", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
 if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
   stop(simpleError(paste0("Please use the 'YYYY-MM-DD' format for this RStudio project date. This date should correspond to the desired sequencing run date")))
