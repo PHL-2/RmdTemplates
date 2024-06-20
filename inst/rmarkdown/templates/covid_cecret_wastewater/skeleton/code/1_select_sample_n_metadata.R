@@ -66,11 +66,10 @@ ddPCR_data <- ddPCR_files %>%
   do(read_delim(.$FileName)) %>%
   ungroup() %>%
   mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName))) %>%
-  group_by(sample_id, sample_collect_date) %>%
+  group_by(sample_group, sample_collect_date) %>%
   #get the latest run only
   filter(ddpcr_analysis_date == max(ddpcr_analysis_date)) %>%
-  ungroup() %>%
-  rename(sample_group = "sample_id")
+  ungroup()
 
 ##########################
 # Load the selection sheet
@@ -81,9 +80,8 @@ select_fp <- select_fp[!grepl("_filtered.csv$", select_fp)]
 
 selection_data <- lapply(select_fp, read_csv) %>%
   do.call(rbind, .) %>%
-  filter(!is.na(sample_id)) %>%
   mutate(sample_collect_date = as.Date(sample_collect_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
-  select(sample_group = any_of("sample_id"), sample_collect_date) %>%
+  select(any_of("sample_group"), sample_collect_date) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x))),
          !matches("^\\.\\.\\.")) %>%

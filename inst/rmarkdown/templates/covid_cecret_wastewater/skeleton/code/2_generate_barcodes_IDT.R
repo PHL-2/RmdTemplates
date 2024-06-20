@@ -364,8 +364,9 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
          #                                    function(x) unlist(lapply(c(sample_group_controls, sample_group_sites),
          #                                                              function(y) y[grepl(y, x)])))),
          sample_group = ifelse((sample_group == "character(0)" | sample_group == ""), NA_character_, sample_group),
-         sample_collect_date = ifelse(grepl("^WW-([0-9]{4})-([0-9]{2})-", sample_name),
-                                      gsub("^(WW)-([0-9]{4}-[0-9]{2}-[0-9]{2})-(.*)", "\\2", sample_name), NA),
+         sample_collect_date = case_when(!(is.na(sample_collect_date) | as.character(sample_collect_date) == "") ~ as.character(sample_collect_date),
+                                         grepl("^WW-([0-9]{4})-([0-9]{2})-", sample_name) ~ gsub("^(WW)-([0-9]{4}-[0-9]{2}-[0-9]{2})-(.*)", "\\2", sample_name),
+                                         TRUE ~ NA),
          sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
          uniq_sample_name = gsub("-Rep[0-9]*", "", sample_name),
          sequencing_date = sequencing_date,
@@ -524,7 +525,7 @@ if(ncol(ddPCR_data) > 0) {
     message("These samples were found in the ddPCR metadata sheet but not in the sequencing sample sheet")
     message("Double check that the correct samples were sequenced:")
     message("*****")
-    stop(simpleError(paste0(pull(ddPCR_sample_not_found), collapse = ", ")))
+    stop(simpleError(paste0(ddPCR_sample_not_found, collapse = ", ")))
 
   }
 }
