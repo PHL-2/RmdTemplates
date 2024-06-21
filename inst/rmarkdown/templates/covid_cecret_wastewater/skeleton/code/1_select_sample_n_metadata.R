@@ -69,7 +69,8 @@ ddPCR_data <- ddPCR_files %>%
   group_by(sample_group, sample_collect_date) %>%
   #get the latest run only
   filter(ddpcr_analysis_date == max(ddpcr_analysis_date)) %>%
-  ungroup()
+  ungroup() %>%
+  select(-FileName)
 
 ##########################
 # Load the selection sheet

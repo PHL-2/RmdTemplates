@@ -359,7 +359,7 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   arrange(plate, plate_col, plate_row) %>%
   rename(any_of(c(sample_collect_date = "sample_collection_date"))) %>%
   #find sample group from sample_name
-  mutate(sample_group = gsub("^WW-([0-9]{4})-([0-9]{2})-([0-9]{2})-|-Rep.*$", "", sample_name),
+  mutate(sample_group = gsub("^WW-([0-9]{4})-([0-9]{2})-([0-9]{2})-|^WW-|-Rep.*$", "", sample_name),
          # sample_group = as.character(lapply(sample_name,
          #                                    function(x) unlist(lapply(c(sample_group_controls, sample_group_sites),
          #                                                              function(y) y[grepl(y, x)])))),

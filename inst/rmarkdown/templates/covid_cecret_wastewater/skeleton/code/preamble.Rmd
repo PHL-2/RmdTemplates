@@ -786,7 +786,7 @@ if(any(is.na(s$ww_group))) {
 
 <!-- Prepare files containing samples with good results for uploading -->
 
-```{r download pango names and CDC Tracker lineages, eval = download_cdc_tracker}
+```{r download pango names and CDC Tracker lineages, eval = download_cdc_tracker & report_only_cdc_lineages}
 
 # pango_lineage_names_url <- "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json"
 # pango_lineage_names_fp <- here("data", paste0(sequencing_date, "_pango_designation_alias_key.json"))
@@ -851,10 +851,6 @@ cdc_lineages %>%
 
 ```{r prepare freyja table and export report}
 
-cdc_lineages <- read_csv(cdc_tracker_fp) %>%
-  select(variant) %>%
-  unique()
-
 flodel <- function(word1, word2) {
    # the length of the 2nd word
    n <- nchar(word2)
@@ -874,8 +870,7 @@ flodel <- function(word1, word2) {
    }
 }
 
-# this table groups the sublineages with the same parent lineages together and gets the sum of the abundances
-freyja_grouping <- s %>%
+freyja_lineages <- s %>%
   select(sample_id, sample_name, sample_group, ww_group, sample_collect_date,
          isControl, freyja_lineages, freyja_abundances, pct_genome_coverage_over_10x) %>%
   group_by(sample_id) %>%
@@ -890,19 +885,54 @@ freyja_grouping <- s %>%
   ungroup() %>%
   select(-c("freyja_lineages", "freyja_abundances")) %>%
   unique() %>%
-  arrange(sample_id, relative_abundances, str_rank(lineages, numeric = TRUE)) %>%
-  mutate(lineages = gsub("$", ".", lineages),
-         longest_common_substring = sapply(lineages,
-                                           function(x) max(sapply(gsub("$", ".", cdc_lineages$variant),
-                                                                  function(y) flodel(x, y)))),
-         relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", lineages), 1, relative_abundances),
-         isCDClineage = grepl(paste0("^", paste0(gsub("\\.", "\\\\.", cdc_lineages$variant), collapse = "\\.|^"), "\\."), lineages),
-         lineages = gsub("\\.$", "", lineages),
-         CDC_lineages = fct_other(gsub("\\.$", "", longest_common_substring),
-                                  keep = cdc_lineages$variant,
-                                  other_level = "Other lineages"),
-         CDC_lineages = factor(CDC_lineages, levels = c(str_sort(cdc_lineages$variant, numeric = TRUE), "Other lineages"))) %>%
-  droplevels()
+  arrange(sample_id, relative_abundances, str_rank(lineages, numeric = TRUE))
+
+if(report_only_cdc_lineages) {
+  
+  cdc_lineages <- read_csv(cdc_tracker_fp) %>%
+    select(variant) %>%
+    unique()
+  
+  # this dataframe groups the lineages into CDC lineages, otherwise it will group as Other
+  freyja_grouping <- freyja_lineages %>%
+    mutate(lineages = gsub("$", ".", lineages),
+           longest_common_substring = sapply(lineages,
+                                             function(x) max(sapply(gsub("$", ".", cdc_lineages$variant),
+                                                                    function(y) flodel(x, y)))),
+           relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", lineages), 1, relative_abundances),
+           isCDClineage = grepl(paste0("^", paste0(gsub("\\.", "\\\\.", cdc_lineages$variant), collapse = "\\.|^"), "\\."), lineages),
+           lineages = gsub("\\.$", "", lineages),
+           CDC_lineages = fct_other(gsub("\\.$", "", longest_common_substring),
+                                    keep = cdc_lineages$variant,
+                                    other_level = "Other lineages"),
+           CDC_lineages = factor(CDC_lineages, levels = c(str_sort(cdc_lineages$variant, numeric = TRUE), "Other lineages"))) %>%
+    droplevels()
+  
+} else{
+  
+  # this dataframe groups the sublineages with the same parent lineages together and gets the sum of the abundances (if the abundances are all equal)
+  freyja_grouping <- freyja_lineages %>%
+    group_by(sample_id, main_lineage, relative_abundances) %>%
+    #add an extra period to the end to help with matching lineages correctly
+    mutate(lineages = gsub("$", ".", lineages),
+           least_common_substring = attr(adist(lineages, counts = TRUE), "trafos")[, 1],
+           end_match = do.call(rbind, stringi::stri_locate_all_regex(least_common_substring, "^M+"))[, 2],
+           has_lowest_str_length = str_length(lineages) == min(str_length(lineages)),
+           substring_end = ifelse(sum(has_lowest_str_length) == 1 &
+                                  grepl("^M+$", least_common_substring), end_match, NA),
+           substring_end = ifelse(all(is.na(substring_end)), min(end_match), substring_end)) %>%
+    fill(substring_end, .direction = "down") %>%
+    ungroup() %>%
+    mutate(CDC_lineages = stringi::stri_sub(lineages, 1, substring_end),
+           CDC_lineages = gsub("\\.$", "", CDC_lineages),
+           CDC_lineages = factor(CDC_lineages, levels = str_sort(unique(CDC_lineages), numeric = TRUE)),
+           relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", CDC_lineages),
+                                        1, relative_abundances),
+           isCDClineage = TRUE)
+      
+}
+  
+
 
 freyja_matrix <- freyja_grouping %>%
   complete(nesting(sample_id, ww_group), lineages, fill = list(relative_abundances = 0)) %>%
