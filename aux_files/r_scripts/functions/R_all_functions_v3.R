@@ -167,7 +167,7 @@ read_excel_safely <- function(file, sheet, skip_row = 0) {
 ##   Run the following commands through the RStudio terminal (mainly for ssh commands)
 ## ===================================================================================
 
-run_in_terminal <- function(command2run = "") {
+run_in_terminal <- function(command2run = "", command2print = "") {
 
   init_terminal <- rstudioapi::terminalExecute(command = command2run)
 
@@ -177,7 +177,9 @@ run_in_terminal <- function(command2run = "") {
   }
   # throw error for non-zero exit codes
   if(rstudioapi::terminalExitCode(init_terminal) != 0) {
-    stop(simpleError("There was an issue running the ssh command through the terminal!"))
+    stop(simpleError(paste0("\nThere was an issue running the ssh command through the terminal!\n",
+                            "Run the following command through the EC2 instance on AWS or follow the instructions:\n\n",
+                            command2print)))
   }
 
   Sys.sleep(5)
@@ -202,7 +204,8 @@ submit_screen_job <- function(message2display = "Running function to submit scre
                                         "screen -dm -S", screen_session_name, "-L -Logfile", paste0("~/.tmp_screen/", screen_session_name, ".screenlog"), "bash -c",
                                         paste0("\"", command2run, "\";"),
                                         "sleep 5;",
-                                      "fi"), type = "sh")))
+                                      "fi"), type = "sh")),
+                  command2run)
 }
 
 ## =============================================================
