@@ -200,7 +200,13 @@ if(run_uploaded_2_basespace) {
     # Download the SampleSheet from EC2 instance
     run_in_terminal(paste("scp",
                           paste0(ec2_hostname, ":", sequencing_run_fp, "SampleSheet.csv"),
-                          here("metadata", "munge"))
+                          here("metadata", "munge")),
+                    paste(" [On", ec2_hostname, "instance]\n",
+                          "aws s3 cp", paste0(sequencing_run_fp, "SampleSheet.csv"),
+                          paste0("s3://test-environment/input/", as.character(Sys.Date()), "/"), "\n\n",
+                          "[On local computer]\n",
+                          "aws s3 cp", paste0("s3://test-environment/input/", as.character(Sys.Date()), "/SampleSheet.csv"),
+                          here("metadata", "munge/"))
     )
 
     rstudioapi::executeCommand('activateConsole')
