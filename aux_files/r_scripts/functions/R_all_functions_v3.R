@@ -177,6 +177,7 @@ run_in_terminal <- function(command2run = "", command2print = "") {
   }
   # throw error for non-zero exit codes
   if(rstudioapi::terminalExitCode(init_terminal) != 0) {
+    rstudioapi::executeCommand('activateConsole')
     stop(simpleError(paste0("\nThere was an issue running the ssh command through the terminal!\n",
                             "Run the following command through the EC2 instance on AWS or follow the instructions:\n\n",
                             command2print)))

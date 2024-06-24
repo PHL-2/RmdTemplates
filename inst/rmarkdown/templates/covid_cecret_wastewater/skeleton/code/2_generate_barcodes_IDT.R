@@ -590,7 +590,7 @@ for(x in c(cols2merge, "sample_id",
            "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
            "index", "index2", "UDI_Index_ID", "I7_Index_ID", "I5_Index_ID",
            "sequencing_date", "prj_descrip", "instrument_type", "read_length", "index_length",
-           "environmental_site", "sample_collect_date", "zipcode")) {
+           "environmental_site", "sample_collect_date")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     stop(simpleError(paste0("\nMissing column [", x, "] in the metadata sheet template!!!")))
   }
@@ -750,4 +750,4 @@ metadata_sheet %>%
   filter(!is.na(sample_id)) %>%
   select(sample_id, fastq_1, fastq_2) %>%
   write_csv(file = here("metadata", "munge",
-                        tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_concat_fastq_samplesheet.csv", sep = "_"))))
+                        tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, "nf_concat_fastq_samplesheet.csv", sep = "_"))))
