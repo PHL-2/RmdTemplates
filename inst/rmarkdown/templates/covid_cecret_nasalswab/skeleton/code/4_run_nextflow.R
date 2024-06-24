@@ -330,7 +330,7 @@ submit_screen_job(message2display = "Cleaning up EC2 run folder",
                   screen_session_name = "delete-run",
                   command2run = paste0("rm -rf ", ec2_tmp_fp, ";",
                                        "echo Here are your files and directories at home:;",
-                                       "ls -GF")
+                                       "ls ~ -GF")
 )
 
 check_screen_job(message2display = "Checking delete job",
