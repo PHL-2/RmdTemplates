@@ -307,3 +307,47 @@ stock_concentration_calc = function(concentration, rxn_vol, input_vol, extractio
   result = (concentration * rxn_vol / input_vol) * (elution_vol / extraction_vol) * (end_concentration_vol / initial_concentration_vol) / efficiency
   return(result)
 }
+
+## ======================================================
+##  A modified GESD Test taken from the PMCMRplus package
+## ======================================================
+
+modified_gesdTest <- function(x, maxr){
+
+  x <- na.omit(x)
+  n <- length(x)
+  if (n < 25 & n >=15) {
+    warning("Due to sample-size, results are 'reasonable'")
+  } else if (n <15) {
+    warning("Due to sample-size, results are 'not reasonable'")
+  }
+
+  if(maxr > n){
+    stop("Number of potential outliers > sample-size. Reduce 'maxr'")
+  }
+  oldx <- x
+  ix <- rep(NA, maxr)
+  PVAL <- rep(NA, maxr)
+  R <- rep(NA, maxr)
+  ## repeated single outlier Grubb's test
+  for (i in (1:maxr)){
+    out <- PMCMRplus::grubbsTest(x, alternative = "two.sided")
+    o <- out$estimate[1]
+
+    ## Danger!! This does not select
+    ## the correct number, as x changes
+    ix[i] <- which(out$estimate[grepl("^value", names(out$estimate))] == oldx)
+    PVAL[i] <- out$p.value
+    R[i] <- out$statistic
+    x <- x[-o]
+  }
+
+  ans <- list(method = "GESD multiple outlier test",
+              statistic = R,
+              p.value = PVAL,
+              ix = ix,
+              alternative = "two.sided")
+  class(ans) <- "gesdTest"
+  return(ans)
+}
+

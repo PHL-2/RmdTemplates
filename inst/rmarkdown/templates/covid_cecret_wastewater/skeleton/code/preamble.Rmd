@@ -104,7 +104,8 @@ s_meta <- read_delim(mapping_file_fp, delim = ",") %>%
 read_length <- unique(s_meta$read_length)
 index_length <- unique(s_meta$index_length)
 
-unaccounted_sample_types <- sort(unique(s_meta$ww_group)[!unique(s_meta$ww_group) %in% c(ctrl_fct_lvls)])
+unaccounted_sample_types <- sort(unique(s_meta$ww_group)[!grepl(paste0(c(ctrl_fct_lvls, " - Merged$"), collapse = "|"),
+                                                                unique(s_meta$ww_group))])
 
 color_group_lvls <- c(NA, "Reference", "Unassigned reads",
                       ctrl_fct_lvls,
@@ -751,7 +752,6 @@ snpdists <- read_csv(snpdists_fp)
 s <- s_meta %>%
   merge(cecret_results, by = c("sample_id", "barcode_sequence", "index", "index2"), all = TRUE) %>%
   mutate(ww_group = case_when(grepl("^Undetermined$", sample_id) ~ "Unassigned reads",
-                              (grepl("Merged", sample_id) & !isControl) ~ paste0(ww_group, " - Merged"),
                               (pct_genome_coverage_over_10x < 0.6 & !isControl) ~ paste0(ww_group, " - Poor"),
                               TRUE ~ ww_group),
          ww_group = factor(ww_group, levels = color_group_lvls),
@@ -928,11 +928,9 @@ if(report_only_cdc_lineages) {
            CDC_lineages = factor(CDC_lineages, levels = str_sort(unique(CDC_lineages), numeric = TRUE)),
            relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", CDC_lineages),
                                         1, relative_abundances),
-           isCDClineage = TRUE)
-      
+           isCDClineage = TRUE,
+           lineages = gsub("\\.$", "", lineages))
 }
-  
-
 
 freyja_matrix <- freyja_grouping %>%
   complete(nesting(sample_id, ww_group), lineages, fill = list(relative_abundances = 0)) %>%

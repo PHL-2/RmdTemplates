@@ -705,8 +705,8 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 merged_samples_metadata_sheet <- metadata_sheet %>%
   select(-c(sample_id, index, index2,
             starts_with("idt_"), starts_with("plate"), ends_with("_ID", ignore.case = FALSE))) %>%
-  filter(!sample_type %in%
-           c("Water control", "Reagent control", "Environmental control", "Mock DNA positive control")) %>%
+  filter(!sample_type %in% c(sequencing_controls, "Environmental control")) %>%
+  sequencing_controls <- c("Water control", "Reagent control", "Mock DNA positive control")
   group_by(uniq_sample_name) %>%
   mutate(sample_counts = n()) %>%
   ungroup() %>%
@@ -726,7 +726,8 @@ merged_samples_metadata_sheet <- metadata_sheet %>%
          plate_coord = paste0(plate, "_", plate_row, plate_col),
          across(matches("_col$|coord$"), ~ str_replace_all(., "\\d+", function(m) sprintf("%02d", as.numeric(m)))),
          sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
-         sample_name = paste0(uniq_sample_name, "-Merged"))
+         sample_name = paste0(uniq_sample_name, "-Merged"),
+         ww_group = paste(ww_group, "- Merged"))
 
 #does not contain PHI and accession numbers
 metadata_sheet %>%
