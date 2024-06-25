@@ -475,7 +475,8 @@ metadata_sheet <- metadata_sheet %>%
   merge(extra_metadata_merge, by = extra_cols2merge, all.x = TRUE, sort = FALSE) %>%
   mutate(environmental_site = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
                                  grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
-                                 TRUE ~ environmental_site))
+                                 TRUE ~ environmental_site)) %>%
+  arrange(plate, plate_col, plate_row)
 
 ##########################
 # Check the metadata sheet
@@ -706,7 +707,6 @@ merged_samples_metadata_sheet <- metadata_sheet %>%
   select(-c(sample_id, index, index2,
             starts_with("idt_"), starts_with("plate"), ends_with("_ID", ignore.case = FALSE))) %>%
   filter(!sample_type %in% c(sequencing_controls, "Environmental control")) %>%
-  sequencing_controls <- c("Water control", "Reagent control", "Mock DNA positive control")
   group_by(uniq_sample_name) %>%
   mutate(sample_counts = n()) %>%
   ungroup() %>%
