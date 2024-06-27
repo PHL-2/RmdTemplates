@@ -204,9 +204,9 @@ if(run_uploaded_2_basespace) {
                           here("metadata", "munge")),
                     paste(" [On", ec2_hostname, "instance]\n",
                           "aws s3 cp", paste0(sequencing_run_fp, "SampleSheet.csv"),
-                          paste0("s3://test-environment/input/", as.character(Sys.Date()), "/"), "\n\n",
+                          paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
                           "[On local computer]\n",
-                          "aws s3 cp", paste0("s3://test-environment/input/", as.character(Sys.Date()), "/SampleSheet.csv"),
+                          "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/SampleSheet.csv"),
                           here("metadata", "munge/"))
     )
 
