@@ -323,7 +323,7 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
 run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
                       here("data", "processed_cecret", "nextflow.config")),
                 paste(" [On", ec2_hostname, "instance]\n",
-                      "aws s3 cp", paste0(ec2_hostname, ":~/.nextflow/config"),
+                      "aws s3 cp ~/.nextflow/config",
                       paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
                       "[On local computer]\n",
                       "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/config"),
