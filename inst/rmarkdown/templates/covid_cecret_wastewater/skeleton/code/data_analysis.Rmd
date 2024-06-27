@@ -278,6 +278,23 @@ s %>%
 
 ```
 
+```{r coverage and N2, fig.width=10, fig.height=5, eval = has_N2}
+
+s %>%
+  filter(!is.na(`N2_gc/uL`)) %>%
+  droplevels() %>%
+  {
+  ggplot(., aes(x = `N2_gc/uL`, y = pct_genome_coverage_over_10x, fill = ww_group)) +
+    geom_point(shape = 21, size = 3) +
+    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$ww_group), names(ann_geom_values$sample_type_colors))]) +
+    theme_bw() + 
+    scale_y_continuous(labels = percent) +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    labs(y = "Percentage of genome\nwith >= 10X coverage", x = "N2 cp/uL", fill = "Site")
+  }
+
+```
+
 ```{r reads and DNA, fig.width=10, fig.height=5, eval = has_qubit}
 
 s %>%

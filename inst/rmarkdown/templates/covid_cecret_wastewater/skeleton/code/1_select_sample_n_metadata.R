@@ -86,10 +86,10 @@ selection_data <- lapply(select_fp, read_csv) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x))),
          !matches("^\\.\\.\\.")) %>%
-  merge(ddPCR_data, by = c("sample_group", "sample_collect_date"), all.x = TRUE)
+  merge(ddPCR_data, by = c("sample_group", "sample_collect_date"), all.x = TRUE, sort = FALSE)
 
 if(all(is.na(selection_data$ddpcr_analysis_date))) {
-  message("\nSamples selected for sequencing do not have a corresponding ddPCR date!")
+  message("\n\nWarning!!!\nSamples selected for sequencing do not have a corresponding ddPCR date!")
   Sys.sleep(10)
 }
 
@@ -166,9 +166,11 @@ combined_list <- select(selection_data, sample_group, sample_collect_date) %>%
   rbind(older_samples) %>%
   filter(sample_group != "",
          !is.na(sample_collect_date)) %>%
-  mutate(samp_name = paste0("WW-", sample_collect_date, "-", sample_group)) %>%
-  expand(samp_name, rep = paste0("-Rep", 1:create_sample_replicates)) %>%
+  mutate(samp_name = paste0("WW-", sample_collect_date, "-", sample_group),
+         order = 1:nrow(.)) %>%
+  expand(nesting(samp_name, order), rep = paste0("-Rep", 1:create_sample_replicates)) %>%
   mutate(sample_name = paste0(samp_name, rep)) %>%
+  arrange(order) %>%
   select(sample_name) %>%
   #put samples in groups of 8
   mutate(grp = (row_number() - 1) %/% 8)
@@ -197,7 +199,7 @@ plate_view <- combined_list_first_half %>%
   select(-number) %>%
   rbind(data.frame(sample_name = c("BLANK", "PC", "NC-pre-cDNA", "NC-pre-ARTIC", "NC-pre-library"))) %>%
   mutate(sample_order = row_number()) %>%
-  merge(empty_plate, by = "sample_order", all = TRUE) %>%
+  merge(empty_plate, by = "sample_order", all = TRUE, sort = FALSE) %>%
   mutate(sample_name = case_when(sample_order == 96 ~ "NC-corner",
                                  is.na(sample_name) ~ "",
                                  TRUE ~ sample_name))
