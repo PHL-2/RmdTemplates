@@ -93,6 +93,7 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 
 # need to import the data into a single tsv for the first time?
 import_data <- TRUE
+report_only_cdc_lineages <- TRUE
 
 ### =================
 ### End manual inputs

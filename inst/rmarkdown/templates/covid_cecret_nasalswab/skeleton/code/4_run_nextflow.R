@@ -321,6 +321,12 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
 
 # Download Nextflow config file for profile (use terminal because of proxy login issue)
 run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
+                      here("data", "processed_cecret", "nextflow.config")),
+                paste(" [On", ec2_hostname, "instance]\n",
+                      "aws s3 cp ~/.nextflow/config",
+                      paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
+                      "[On local computer]\n",
+                      "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/config"),
                       here("data", "processed_cecret", "nextflow.config"))
 )
 
@@ -330,7 +336,7 @@ submit_screen_job(message2display = "Cleaning up EC2 run folder",
                   screen_session_name = "delete-run",
                   command2run = paste0("rm -rf ", ec2_tmp_fp, ";",
                                        "echo Here are your files and directories at home:;",
-                                       "ls -GF")
+                                       "ls ~ -GF")
 )
 
 check_screen_job(message2display = "Checking delete job",
