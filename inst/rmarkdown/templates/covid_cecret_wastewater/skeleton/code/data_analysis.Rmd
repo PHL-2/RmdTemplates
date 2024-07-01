@@ -68,9 +68,8 @@ s %>%
          Good = sum(pct_genome_coverage_over_10x >= 0.6, na.rm = TRUE),
          Poor = n + sum(grepl("Merged", ww_group)) - Good) %>%
   ungroup() %>%
-  select(sample_group, n, Merged, Good, Poor) %>%
+  select(`Collect date` = sample_collect_date, `Samples/sites` = "sample_group", n, Merged, Good, Poor) %>%
   unique() %>%
-  rename(`Samples/sites` = "sample_group") %>%
   {if(use_kable) kable_style(.) else pander(.)}
 
 ```
@@ -107,6 +106,7 @@ s %>%
                shape = 21,
                size = 2,
                position = position_jitter(width = 0.2)) +
+    facet_grid(~date_facet, scales = "free", space = "free") +
     scale_y_continuous(labels = number_format(accuracy = 1)) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
@@ -171,7 +171,7 @@ s %>%
   {
   ggplot(., aes(x = "", y = percent_of_lane, fill=ww_group)) +
     geom_col(color = "white") +
-    facet_grid(sample_group~., scales = "free", space = "free", switch = "y") +
+    facet_grid(date_facet+sample_group~., scales = "free", space = "free", switch = "y") +
     scale_y_continuous(expand = c(0,0),
     #use the max of the facet as breaks, to show min and max, use ~.x
                        breaks = ~.x[2],
@@ -553,11 +553,12 @@ k2 %>%
 
 k2 %>%
   filter(grepl("Severe acute respiratory syndrome coronavirus 2", k2_taxon)) %>%
-  merge(select(s, sample_id, ww_group, sample_group), by = "sample_id", all = TRUE) %>%
+  merge(select(s, sample_id, ww_group, sample_group, date_facet), by = "sample_id", all = TRUE) %>%
   filter(!is.na(k2_taxon)) %>%
   ggplot(aes(x=sample_group, y = k2_kmers)) +
     geom_boxplot(outlier.alpha = 0) +
     geom_point(aes(fill = ww_group), position = position_jitter(), shape = 21, size = 2) +
+    facet_grid(~date_facet, scales = "free", space = "free") +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     theme(panel.grid = element_blank(),
@@ -578,10 +579,10 @@ Number of samples and SARS-CoV-2 kmer proportions
 
 k2 %>%
   filter(grepl("Severe acute respiratory syndrome coronavirus 2", k2_taxon)) %>%
-  merge(select(s, sample_id, ww_group, sample_group), by = "sample_id", all = TRUE) %>%
+  merge(select(s, sample_id, ww_group, sample_group, date_facet), by = "sample_id", all = TRUE) %>%
   ggplot(aes(x=k2_props, fill = ww_group)) +
     geom_histogram(binwidth=0.1, boundary=FALSE, color = "white") +
-    facet_grid(sample_group~., switch = "y") +
+    facet_grid(date_facet+sample_group~., switch = "y") +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
     scale_x_continuous(labels=percent) +
     scale_y_continuous(breaks = breaks_pretty(3), position = "right") +
@@ -609,37 +610,6 @@ read_type <- s %>%
   pivot_longer(cols = c("total read counts", "mapped"), names_to = "read_type", values_to = "counts") %>%
   mutate(percent_mapped = counts/read_counts) %>%
   mutate(read_type = factor(read_type, levels = c("total read counts", "mapped")))
-  
-read_type_legend <- read_type %>%
-  select(sample_id, ww_group, sample_group) %>%
-  order_on_other_col(sample_group, sample_id, decreasing = FALSE) %>%
-  unique() %>%
-  {
-  ggplot(., aes(y = 1, x = sample_id, fill = ww_group)) +
-    geom_tile(color = "black") +
-    coord_fixed() +
-    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$ww_group),
-                                                                        names(ann_geom_values$sample_type_colors))],
-                      ) +
-    scale_x_discrete(labels = .$sample_group) +
-    theme_bw() +
-    theme(
-      strip.background = element_blank(),
-      panel.grid = element_blank(),
-      panel.border = element_blank(),
-      axis.title = element_blank(),
-      axis.text.y = element_blank(),
-      axis.text.x.bottom = element_text(size = convert_sample_size_2_font_size(nrow(s), max_font = 5),
-                                        angle = -30, hjust = 0, vjust = 0),
-      axis.ticks = element_blank(),
-      axis.line = element_blank(),
-      plot.margin= margin(0, 0, 0, 0, "pt"),
-      legend.position = "bottom",
-      legend.key.size = unit(5, 'mm')
-    ) +
-    labs(y = "", x = "", fill = "") + 
-    guides(fill = guide_legend(ncol = 2))
-  }
 
 read_type_normalized <- read_type %>%
   {
@@ -672,7 +642,10 @@ read_type %>%
     labs(x = "", y = "Number of reads", fill = "")
   } /
   read_type_normalized /
-  read_type_legend
+  sample_group_legend +
+    theme(axis.text.x.bottom = element_text(size = convert_sample_size_2_font_size(nrow(s), max_font = 5),
+                                        angle = -30, hjust = 0, vjust = 0),
+      legend.key.size = unit(5, 'mm'))
 
 ```
 
@@ -686,11 +659,11 @@ s %>%
     geom_boxplot(outlier.alpha = 0) +
     geom_hline(yintercept = 0.6, color = "grey", linetype = "dotted", lwd=0.75) +
     geom_point(aes(fill = ww_group), shape = 21, size = 3, position = position_jitter()) +
+    facet_grid(~date_facet, scales = "free", space = "free") +
     scale_y_continuous(labels=percent) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$ww_group), names(ann_geom_values$sample_type_colors))]) +
       theme_classic() +
       theme(
-        strip.background = element_rect(color = "white", size = 50),
         axis.text.x.bottom = element_text(angle = -30, hjust = 0)
         ) +
       labs(x="", y="Percentage of genome\nwith >= 10X coverage", fill="Samples and Sites")
@@ -705,7 +678,7 @@ s %>%
 ```{r lower coverage results, fig.width=11}
 
 s %>%
-  select(sample_id, ww_group, sample_group, matches("pct_genome_coverage_over")) %>%
+  select(sample_id, ww_group, sample_group, date_facet, matches("pct_genome_coverage_over")) %>%
   pivot_longer(cols = matches("pct_genome_coverage_over"), names_to = "depth", values_to = "pct_coverage") %>%
   filter(!is.na(pct_coverage)) %>%
   mutate(depth = as.numeric(gsub(".*_|.$", "", depth))) %>%
@@ -716,7 +689,7 @@ s %>%
     geom_line(aes(color = ww_group)) +
     geom_point(shape = 21, size = 3) +
     scale_y_continuous(labels=percent) +
-    facet_wrap(~sample_group, nrow = 2) +
+    facet_wrap(~date_facet+sample_group, nrow = 2) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$ww_group), names(ann_geom_values$sample_type_colors))]) +
     scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$ww_group), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() +
@@ -737,7 +710,7 @@ s %>%
 ```{r s gene coverage results, fig.width=11}
 
 s %>%
-  select(sample_id, ww_group, sample_group, matches("pct_s_gene_coverage_over")) %>%
+  select(sample_id, ww_group, sample_group, date_facet, matches("pct_s_gene_coverage_over")) %>%
   pivot_longer(cols = matches("pct_s_gene_coverage_over"), names_to = "depth", values_to = "pct_coverage") %>%
   filter(!is.na(pct_coverage)) %>%
   mutate(depth = as.numeric(gsub(".*_|.$", "", depth))) %>%
@@ -747,7 +720,7 @@ s %>%
     geom_line(aes(color = ww_group)) +
     geom_point(shape = 21, size = 3) +
     scale_y_continuous(labels=percent) +
-    facet_wrap(~sample_group, nrow = 2) +
+    facet_wrap(~date_facet+sample_group, nrow = 2) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$ww_group), names(ann_geom_values$sample_type_colors))]) +
     scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(.$ww_group), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() +
@@ -770,11 +743,13 @@ s %>%
 ```{r amplicon cov, fig.height=11, fig.width=9}
 
 s %>%
-  select(ww_group, sample_group, starts_with("amp_tile")) %>%
+  select(ww_group, sample_group, date_facet, starts_with("amp_tile")) %>%
   pivot_longer(cols = starts_with("amp_tile"), names_to = "amp_pos", values_to = "depth") %>%
   mutate(amp_pos = gsub("_artic_.*", "", amp_pos),
          amp_pos = gsub(".*_", "", amp_pos),
-         amp_pos = factor(amp_pos, levels = str_sort(unique(amp_pos), numeric = TRUE))) %>%
+         amp_pos = factor(amp_pos, levels = str_sort(unique(amp_pos), numeric = TRUE)),
+         date_group_facet = gsub(" | - ", "\n", paste(date_facet, sample_group))) %>%
+  order_on_other_col(date_group_facet, ww_group, decreasing = FALSE) %>%
   filter(!is.na(depth)) %>%
   group_by(sample_group) %>%
   filter(!all(depth == 0)) %>%
@@ -784,8 +759,7 @@ s %>%
   ggplot(., aes(x = amp_pos, y = depth)) +
     geom_boxplot(outlier.alpha = 0) +
     geom_point(aes(fill = ww_group), shape = 21, size = 0.5) +
-    facet_grid(sample_group~., space="free", scales="free",
-               labeller = labeller(.default = function(x) {gsub(" | - ", "\n", x)}, .multi_line = FALSE)) +
+    facet_grid(date_group_facet~., space="free", scales="free") +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$ww_group), names(ann_geom_values$sample_type_colors))]) +
     scale_y_continuous(labels = function(x) format(x, scientific = TRUE), trans="log10") +
     scale_x_discrete(guide = guide_axis(check.overlap = TRUE)) +
@@ -800,7 +774,6 @@ s %>%
       ) +
     labs(y="Depth", x="Amplicons")
   }
-
 ```
 
 \blandscape
@@ -952,7 +925,7 @@ s %>%
   ggplot(., aes(x=Axis.1, y=Axis.2)) +
     geom_point(aes(fill = ww_group), size = 3, shape=21) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
-    facet_wrap(~sample_group) +
+    facet_wrap(~date_facet+sample_group) +
     #stat_ellipse(mapping = aes(x=Axis.1, y=Axis.2, color = sample_group), inherit.aes = FALSE) +
     #scale_color_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() +
@@ -980,17 +953,17 @@ Relative abundances of CDC lineages within each sample group
 ```{r freyja results grouped, fig.height=10, fig.width=8}
 
 freyja_average %>%
-  group_by(sample_group, isMerged, CDC_lineages) %>%
+  group_by(sample_group, sample_collect_date, isMerged, CDC_lineages) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund)) %>%
   ungroup() %>%
   {
   ggplot(., aes(x = isMerged, y = avg_rel_abund, fill = CDC_lineages)) +
     geom_col() +
-    facet_wrap(~sample_group) +
+    facet_wrap(~sample_collect_date+sample_group) +
     scale_fill_manual(values = 
-                        c(colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$CDC_lineages))-2),
-                          "#808080", "#000000")) +
-    scale_y_continuous(labels = percent, expand=c(0,0), limits = c(0, 1)) +
+                        c(colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$CDC_lineages))-3),
+                          "#000000", "#E6BE8A", "#808080")) +
+    scale_y_continuous(labels = percent, expand=c(0,0), limits = c(0, 1.01)) +
     theme_classic() +
     theme(panel.grid = element_blank(),
           panel.border = element_blank(),
@@ -1002,57 +975,60 @@ freyja_average %>%
 
 ```
 
-\blandscape
-
 ### Freyja table: CDC variants
 
-Relative lineage abundances within each sample group. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample group and getting the square root \newline
+Lineage relative abundances within each sample group. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample group and getting the square root \newline
 Only lineages with abundance >1% in at least one sample group are kept
 
 ```{r freyja table, fig.height=11, fig.width=8}
 
 freyja_table_delim <- freyja_average %>%
-  group_by(sample_group, isMerged, CDC_lineages, main_lineage) %>%
-  summarize(avg_rel_abund = sum(avg_rel_abund),
-            total_sd = sum(total_sd)) %>%
-  ungroup() %>%
-  filter(CDC_lineages != "Other lineages",
-         avg_rel_abund >= 0.01) %>%
-  arrange(CDC_lineages) %>%
-  select(CDC_lineages, main_lineage) %>%
-  unique() %>%
-  group_by(main_lineage) %>%
-  summarize(total_lineage = n()) %>%
-  ungroup() %>%
-  mutate(line_position = cumsum(total_lineage)) %>%
-  select(line_position) %>%
-  pull()
-
-freyja_average %>%
-  group_by(sample_group, isMerged, CDC_lineages) %>%
+  group_by(sample_collect_date, sample_group, isMerged, CDC_lineages) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
             total_sd = sum(total_sd)) %>%
   ungroup() %>%
   filter(avg_rel_abund >= 0.01) %>%
-  mutate(print_rel_abund = ifelse(!is.na(total_sd),
+  select(sample_collect_date, sample_group, isMerged, CDC_lineages) %>%
+  unique() %>%
+  arrange(sample_collect_date, sample_group, isMerged) %>%
+  group_by(sample_collect_date, sample_group) %>%
+  summarize(total_samples = n()) %>%
+  ungroup() %>%
+  mutate(line_position = cumsum(total_samples)) %>%
+  select(line_position) %>%
+  pull()
+
+freyja_average %>%
+  group_by(sample_collect_date, mean_cov, sample_group, isMerged, CDC_lineages) %>%
+  summarize(avg_rel_abund = sum(avg_rel_abund),
+            total_sd = sum(total_sd)) %>%
+  ungroup() %>%
+  filter(avg_rel_abund >= 0.01) %>%
+  mutate(relative_abundance = ifelse(!is.na(total_sd),
                                   paste0(round(avg_rel_abund*100, 2), "% +/- ",
                                          round(total_sd*100, 2), "%"),
                                   paste0(round(avg_rel_abund*100, 2), "%")),
-         sample_group = paste(sample_group, isMerged, sep = "\n")) %>%
-  select(-c(total_sd, avg_rel_abund, isMerged)) %>%
+         sample_group_label = paste0(sample_collect_date, " ", sample_group, "\n<", isMerged, ">"),
+         good_cov = mean_cov >= 0.6,
+         mean_cov = paste0(round(mean_cov*100, 2), "%")) %>%
+  arrange(sample_collect_date, sample_group, sample_group_label, CDC_lineages) %>%
+  select(`Sample group` = sample_group_label, `Mean coverage` = "mean_cov",
+         Lineage = "CDC_lineages", `Relative abundance` = "relative_abundance", good_cov) %>%
   unique() %>%
-  pivot_wider(names_from = "sample_group", values_from = "print_rel_abund", values_fill = "") %>%
-  filter(!is.na(CDC_lineages)) %>%
-  arrange(CDC_lineages) %>%
-  rename(Lineage = "CDC_lineages") %>%
   { if(use_kable)
     mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
+      mutate(`Sample group` = cell_spec(`Sample group`, "latex",
+                                        color = case_when((grepl("Merged sample", `Sample group`) &
+                                                             !grepl("^A$|^B$", Lineage) &
+                                                             good_cov) ~ "#4CBB17",
+                                                          TRUE ~ "black"))) %>%
+      select(-good_cov) %>%
       select_all(~gsub(" ", "\n", .)) %>%
       select_all(~gsub("_", "\\\\_", .)) %>%
       kable("latex", longtable = T, digits=2, booktabs=T, escape=F, col.names = linebreak(colnames(.), align = "l")) %>%
       kable_styling(latex_options = c("repeat_header", "HOLD_position"), font_size = 10) %>%
       row_spec(0, bold = T, color="#7C0A02") %>%
-      row_spec(freyja_table_delim, hline_after = T)
+      row_spec(head(freyja_table_delim, -1), hline_after = T)
     else
       pander(.)
   }
@@ -1061,48 +1037,49 @@ freyja_average %>%
 
 \newpage
 
-### Freyja table: non CDC variants
+### Freyja table: Other lineages
 
-Relative lineage abundances within each sample group. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample group and getting the square root \newline
+Lineage relative abundances within each sample group. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample group and getting the square root \newline
 Only lineages with abundance >1% in at least one sample group are kept
 
 ```{r freyja table non CDC, fig.height=11, fig.width=8}
 
 freyja_table_delim <- freyja_average %>%
-  group_by(sample_group, isMerged, CDC_lineages, lineages, main_lineage) %>%
+  group_by(sample_collect_date, sample_group, isMerged, CDC_lineages, lineages) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
             total_sd = sum(total_sd)) %>%
   ungroup() %>%
-  filter(CDC_lineages == "Other lineages",
+  filter(lineages != "Unresolved",
+         CDC_lineages == "Other lineages",
          avg_rel_abund >= 0.01) %>%
-  arrange(lineages) %>%
-  select(lineages, main_lineage) %>%
+  select(sample_collect_date, sample_group, isMerged, lineages) %>%
   unique() %>%
-  group_by(main_lineage) %>%
-  summarize(total_lineage = n()) %>%
+  arrange(sample_collect_date, sample_group, isMerged) %>%
+  group_by(sample_collect_date, sample_group) %>%
+  summarize(total_samples = n()) %>%
   ungroup() %>%
-  mutate(line_position = cumsum(total_lineage)) %>%
+  mutate(line_position = cumsum(total_samples)) %>%
   select(line_position) %>%
   pull()
 
 freyja_average %>%
-  group_by(sample_group, isMerged, CDC_lineages, lineages) %>%
+  group_by(sample_collect_date, mean_cov, sample_group, isMerged, CDC_lineages, lineages) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
             total_sd = sum(total_sd)) %>%
   ungroup() %>%
-  filter(CDC_lineages == "Other lineages",
+  filter(lineages != "Unresolved",
+         CDC_lineages == "Other lineages",
          avg_rel_abund >= 0.01) %>%
-  mutate(print_rel_abund = ifelse(!is.na(total_sd),
+  mutate(relative_abundance = ifelse(!is.na(total_sd),
                                   paste0(round(avg_rel_abund*100, 2), "% +/- ",
                                          round(total_sd*100, 2), "%"),
                                   paste0(round(avg_rel_abund*100, 2), "%")),
-         sample_group = paste(sample_group, isMerged, sep = "\n")) %>%
-  select(-c(total_sd, avg_rel_abund, isMerged, CDC_lineages)) %>%
+         sample_group_label = paste0(sample_collect_date, " ", sample_group, " <", isMerged, ">"),
+         mean_cov = paste0(round(mean_cov*100, 2), "%")) %>%
+  arrange(sample_collect_date, sample_group, sample_group_label, lineages) %>%
+  select(`Sample group` = sample_group_label, `Mean coverage` = "mean_cov",
+         Lineage = "lineages", `Relative abundance` = "relative_abundance") %>%
   unique() %>%
-  pivot_wider(names_from = "sample_group", values_from = "print_rel_abund", values_fill = "") %>%
-  filter(!is.na(lineages)) %>%
-  arrange(lineages) %>%
-  rename(Lineage = "lineages") %>%
   { if(use_kable)
     mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
       select_all(~gsub(" ", "\n", .)) %>%
@@ -1110,14 +1087,12 @@ freyja_average %>%
       kable("latex", longtable = T, digits=2, booktabs=T, escape=F, col.names = linebreak(colnames(.), align = "l")) %>%
       kable_styling(latex_options = c("repeat_header", "HOLD_position"), font_size = 10) %>%
       row_spec(0, bold = T, color="#7C0A02") %>%
-      row_spec(freyja_table_delim[1:length(freyja_table_delim)-1], hline_after = T)
+      row_spec(head(freyja_table_delim, -1), hline_after = T)
     else
       pander(.)
   }
 
 ```
-
-\elandscape
 
 ```{r pc check}
 
@@ -1140,7 +1115,6 @@ if(length(has_pos_ctrl) == 0) {
 
 ## Samples to report
 Red samples will not be reported (controls or no lineage results) \newline
-Orange samples also will not be reported due to low quality (bad or mediocre NextClade QC with <80% 30X coverage) \newline
 The total number of samples with acceptable results for reporting is `r n_samples_report` out of `r sum(!s$isControl, na.rm = TRUE)` non-control samples sequenced. \newline
 Number of samples to send to epidemiologists: `r nrow(all_reported_samples[all_reported_samples$db == "epi", "sample_name"])` \newline
 Number of samples to upload to GISAID database: `r nrow(all_reported_samples[all_reported_samples$db == "gisaid", "sample_name"])` \newline
@@ -1157,29 +1131,29 @@ s %>%
   arrange(-pct_genome_coverage_over_10x) %>%
   mutate(Nextclade_pango = ifelse(is.na(Nextclade_pango), "", Nextclade_pango),
          pct_genome_coverage_over_10x = paste0(round(pct_genome_coverage_over_10x*100, 2), "%")) %>%
-  rename(`sample/site` = "ww_group",
+  rename(`sample/site` = "sample_group",
          `read counts` = "read_counts",
-         lineage = "Nextclade_pango",
-         `10X pct coverage` = "pct_genome_coverage_over_10x") %>%
+         `pango lineage` = "Nextclade_pango",
+         `10X coverage` = "pct_genome_coverage_over_10x") %>%
   { if(use_kable) 
-    mutate(., sample = gsub("_", "-", sample_id)) %>%
-    mutate(sample = cell_spec(sample, "latex",
+    mutate(., SampleID = gsub("_", "-", sample_id)) %>%
+    mutate(SampleID = cell_spec(SampleID, "latex",
                                color = case_when((grepl(paste0(rerun_samples, collapse = "|"), sample_id) & length(rerun_samples) > 0) ~ "yellow",
                                                  ((grepl("control|Unassigned reads", `sample/site`)) | (!(sample_id %in% s_toPlot$sample_id))) ~ "red",
                                                  TRUE ~ "black"))) %>%
-      select(sample,
+      select(SampleID,
              `sample/site`,
              `read counts`,
-             `10X pct coverage`,
-             lineage
+             `10X coverage`,
+             `pango lineage`
              ) %>%
       kable_style()
     else
       select(., sample_id,
              `sample/site`,
              `read counts`,
-             `10X pct coverage`,
-             lineage) %>%
+             `10X coverage`,
+             `pango lineage`) %>%
       pander()
   }
 
@@ -1437,7 +1411,7 @@ freyja_grouping %>%
   filter(relative_abundances == max(relative_abundances)) %>%
   slice(1) %>%
   ungroup() %>%
-  merge(select(s_toPlot, sample_id, pangolin_lineage, Nextclade_pango, ww_group, coverage_qc_status), by = c("sample_id", "ww_group"), all.y = TRUE) %>%
+  merge(select(s, sample_id, pangolin_lineage, Nextclade_pango, ww_group, coverage_qc_status), by = c("sample_id", "ww_group"), all.y = TRUE) %>%
   rename(Pangolin = "pangolin_lineage", Nextclade = "Nextclade_pango", Freyja = "lineages") %>%
   rowwise() %>%
   mutate(pn = grepl(Pangolin, Nextclade) | grepl(Nextclade, Pangolin)) %>%
