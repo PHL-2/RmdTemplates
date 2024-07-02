@@ -21,8 +21,6 @@ cecret_version <- "master"
 # AWS and sequencing date
 #########################
 
-system2("aws", c("sso login"))
-
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
@@ -106,6 +104,7 @@ check_screen_job(message2display = "Checking BCLConvert job",
                  screen_session_name = "demux")
 
 # Checking the demultiplexing results
+system2("aws", c("sso login"))
 aws_s3_fastq_files <- system2("aws", c("s3 ls", bclconvert_output_path,
                                        "--recursive",
                                        "| grep 'R1_001.fastq.gz$'"), stdout = TRUE)
