@@ -1174,7 +1174,7 @@ epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive
 
 reported_samples <- epi_2_upload_fp %>%
   read_csv() %>%
-  select(sample_group) %>%
+  select(sample_name = "sample_group") %>%
   unique() %>%
   mutate(db = "epi")
 
@@ -1272,8 +1272,8 @@ sample_type_num_vector <- 1:length(color_group_lvls)
 ann_geom_values <- list()
 
 # pick sample type colors for ggplot
-sample_type_color_select <- c(15, 19, 16, 13, 2, #colors for sequencing controls
-                              11, 14, 12, #colors for wastewater controls
+sample_type_color_select <- c(15, 19, 16, 18, 2, #colors for sequencing controls
+                              11, 14, 13, #colors for wastewater controls
                               1, 4, 3, #colors for wastewater samples
                               10, 7, 20, 17) #some additional colors
 
