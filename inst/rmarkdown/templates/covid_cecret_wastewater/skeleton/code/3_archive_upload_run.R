@@ -72,8 +72,6 @@ prj_description <- gsub(paste0("^[0-9-]*_.*", sample_type_acronym, "_|_.*"), "",
 
 s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
-system2("aws", c("sso login"))
-
 sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9A-Z-]*$")
 
 if(run_uploaded_2_basespace) {
@@ -204,6 +202,7 @@ if(run_uploaded_2_basespace) {
     write(file = md5_fp)
 
   message("Uploading local checksum and tarball files to AWS S3")
+  system2("aws", c("sso login"))
   s3_cp_md5 <- system2("aws", c("s3 cp", shQuote(md5_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
   s3_cp_run_tarball <- system2("aws", c("s3 cp", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 
@@ -248,6 +247,7 @@ nf_demux_samplesheet %>%
   write_csv(file = nf_demux_samplesheet_fp)
 
 message("Uploading samplesheets to AWS S3")
+system2("aws", c("sso login"))
 s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samplesheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 

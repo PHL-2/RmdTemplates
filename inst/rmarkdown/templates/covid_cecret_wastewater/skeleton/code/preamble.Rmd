@@ -889,7 +889,7 @@ freyja_lineages <- s %>%
 
 if(report_only_cdc_lineages) {
   
-  cdc_lineages <- read_csv(cdc_tracker_fp) %>%
+  lineages_to_keep <- read_csv(cdc_tracker_fp) %>%
     select(variant) %>%
     unique()
   
@@ -897,14 +897,14 @@ if(report_only_cdc_lineages) {
   freyja_grouping <- freyja_lineages %>%
     mutate(lineages = gsub("$", ".", lineages),
            longest_common_substring = sapply(lineages,
-                                             function(x) max(sapply(gsub("$", ".", c("A", "B", cdc_lineages$variant)),
+                                             function(x) max(sapply(gsub("$", ".", c("A", "B", lineages_to_keep$variant)),
                                                                     function(y) flodel(x, y)))),
            relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", lineages), 1, relative_abundances),
            lineages = gsub("\\.$", "", lineages),
            CDC_lineages = fct_other(gsub("\\.$", "", longest_common_substring),
-                                    keep = c("A", "B", cdc_lineages$variant),
+                                    keep = c("A", "B", lineages_to_keep$variant),
                                     other_level = "Other lineages"),
-           CDC_lineages = factor(CDC_lineages, levels = c(str_sort(cdc_lineages$variant, numeric = TRUE), "Other lineages", "A", "B"))) %>%
+           CDC_lineages = factor(CDC_lineages, levels = c(str_sort(lineages_to_keep$variant, numeric = TRUE), "Other lineages", "A", "B"))) %>%
     droplevels()
   
 } else{
@@ -928,6 +928,11 @@ if(report_only_cdc_lineages) {
            relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", CDC_lineages),
                                         1, relative_abundances),
            lineages = gsub("\\.$", "", lineages))
+  
+  lineages_to_keep <- freyja_grouping %>%
+    select(variant = "CDC_lineages") %>%
+    filter(variant != "Unresolved") %>%
+    unique()
 }
 
 freyja_matrix <- freyja_grouping %>%
@@ -969,7 +974,7 @@ epi_report_fp <- here("upload", "epi", paste0(project_name, "_PHL2_sequencing_re
 freyja_grouping %>%
   filter(sample_id %in% s_toPlot$sample_id,
          !isControl,
-         CDC_lineages %in% cdc_lineages$variant) %>%
+         CDC_lineages %in% lineages_to_keep$variant) %>%
   group_by(sample_id, sample_collect_date, sample_group, CDC_lineages) %>%
   summarize(relative_abundances = sum(relative_abundances)) %>%
   ungroup() %>%
