@@ -88,7 +88,7 @@ barcodes <- tryCatch(
       select(idt_plate_coord, I7_Index_ID, I5_Index_ID, UDI_Index_ID, index, index2)
   },
   error = function(e) {
-    stop (simpleError("The nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv file needs to sit in an [aux_files/metadata_references] directory path above this project directory"))
+    stop (simpleError("The nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv file needs to sit in an [aux_files/illumina_references] directory path above this project directory"))
   }
 )
 
