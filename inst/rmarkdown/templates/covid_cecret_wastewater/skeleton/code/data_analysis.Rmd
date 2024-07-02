@@ -171,7 +171,8 @@ s %>%
   {
   ggplot(., aes(x = "", y = percent_of_lane, fill=ww_group)) +
     geom_col(color = "white") +
-    facet_grid(date_facet+sample_group~., scales = "free", space = "free", switch = "y") +
+    facet_grid(date_facet+sample_group~., scales = "free", space = "free", switch = "y",
+               labeller = labeller(.multi_line = FALSE)) +
     scale_y_continuous(expand = c(0,0),
     #use the max of the facet as breaks, to show min and max, use ~.x
                        breaks = ~.x[2],
@@ -582,7 +583,8 @@ k2 %>%
   merge(select(s, sample_id, ww_group, sample_group, date_facet), by = "sample_id", all = TRUE) %>%
   ggplot(aes(x=k2_props, fill = ww_group)) +
     geom_histogram(binwidth=0.1, boundary=FALSE, color = "white") +
-    facet_grid(date_facet+sample_group~., switch = "y") +
+    facet_grid(date_facet+sample_group~., switch = "y",
+               labeller = labeller(.default = start_w_newline, .multi_line = FALSE)) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
     scale_x_continuous(labels=percent) +
     scale_y_continuous(breaks = breaks_pretty(3), position = "right") +
@@ -978,7 +980,8 @@ freyja_average %>%
 ### Freyja table: CDC variants
 
 Lineage relative abundances within each sample group. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample group and getting the square root \newline
-Only lineages with abundance >1% in at least one sample group are kept
+Only lineages with abundance >1% in at least one sample group are kept \newline
+Green text indicates results that can be reported
 
 ```{r freyja table, fig.height=11, fig.width=8}
 
@@ -1037,7 +1040,7 @@ freyja_average %>%
 
 \newpage
 
-### Freyja table: Other lineages
+### Freyja table: Breakdown of variants in 'Other lineages'
 
 Lineage relative abundances within each sample group. Standard deviation is calculated by adding the total variance of a lineage across each sample within the same sample group and getting the square root \newline
 Only lineages with abundance >1% in at least one sample group are kept

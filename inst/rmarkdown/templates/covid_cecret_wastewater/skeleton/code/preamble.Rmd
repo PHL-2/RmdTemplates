@@ -752,7 +752,8 @@ snpdists <- read_csv(snpdists_fp)
 s <- s_meta %>%
   merge(cecret_results, by = c("sample_id", "barcode_sequence", "index", "index2"), all = TRUE) %>%
   mutate(ww_group = case_when(grepl("^Undetermined$", sample_id) ~ "Unassigned reads",
-                              (pct_genome_coverage_over_10x < 0.6 & !(isControl | grepl("- Merged$", ww_group))) ~ paste0(ww_group, " - Poor"),
+                              ((pct_genome_coverage_over_10x < 0.6 | is.na(pct_genome_coverage_over_10x)) &
+                                 !(isControl | grepl("- Merged$", ww_group))) ~ paste0(ww_group, " - Poor"),
                               TRUE ~ ww_group),
          ww_group = factor(ww_group, levels = color_group_lvls),
          sample_group = case_when(grepl("^Undetermined$", sample_id) ~ "Unassigned reads",
