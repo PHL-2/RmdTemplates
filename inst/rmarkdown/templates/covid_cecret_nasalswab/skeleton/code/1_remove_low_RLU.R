@@ -28,13 +28,13 @@ prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 # Load functions
 ################
 
-#this file needs to sit in a [aux_files/functions] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(
   {
     source(file.path(dirname(here()), "aux_files", "r_scripts", "functions", "R_all_functions_v3.R"))
   },
   error = function(e) {
-    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory"))
   }
 )
 
@@ -42,13 +42,13 @@ tryCatch(
 # Load config
 #############
 
-#this file needs to sit in a [aux_files/config] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
   {
     source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 
