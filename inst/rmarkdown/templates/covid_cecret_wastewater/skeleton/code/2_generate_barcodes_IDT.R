@@ -12,23 +12,27 @@ library(stringr)
 # Manual input
 ##############
 
-remove_sample_from_bcl_samplesheet <- c("")
+remove_sample_from_bcl_samplesheet <- c("") #add in sample names to remove from demultiplexing
 
 run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
-
-sequencer_type <- c("MiSeq", "NextSeq1k2k")[sequencer_select]
 
 # temporary directory in ec2 to hold to sequencing run download. This directory will be deleted after running this script
 ec2_tmp_fp <- "~/tmp_bs_dl/"
 
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
+index_length <- "10"
+
+####################
+# Selected variables
+####################
+
+sequencer_type <- c("MiSeq", "NextSeq1k2k")[sequencer_select]
+
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
-
-index_length <- "10"
 
 #file location of the wastewater metadata
 ww_meta_fp <- file.path(dirname(here()), "aux_files", "data_submission", "dcipher", "wastewater_specific_metadata.csv")
@@ -202,12 +206,12 @@ if(run_uploaded_2_basespace) {
     run_in_terminal(paste("scp",
                           paste0(ec2_hostname, ":", sequencing_run_fp, "SampleSheet.csv"),
                           here("metadata", "munge")),
-                    paste(" [On", ec2_hostname, "instance]\n",
-                          "aws s3 cp", paste0(sequencing_run_fp, "SampleSheet.csv"),
-                          paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
-                          "[On local computer]\n",
-                          "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/SampleSheet.csv"),
-                          here("metadata", "munge/"))
+                    command2print = paste(" [On", ec2_hostname, "instance]\n",
+                                    "aws s3 cp", paste0(sequencing_run_fp, "SampleSheet.csv"),
+                                    paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
+                                    "[On local computer]\n",
+                                    "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/SampleSheet.csv"),
+                                    here("metadata", "munge/"))
     )
 
     rstudioapi::executeCommand('activateConsole')
@@ -299,7 +303,7 @@ sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
 
 ddPCR_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.csv", full.names = TRUE, recursive = TRUE)
 
-ddPCR_data <- read_csv(ddPCR_fp)
+ddPCR_data <- read_csv(ddPCR_fp, show_col_types = FALSE)
 
 # if ddPCR_data does not exist, create an empty dataframe
 if(ncol(ddPCR_data) == 0) {
@@ -562,13 +566,13 @@ missing_ddPCR_data <- missing_metadata_non_ctrl_samples %>%
 
 #show warning
 if(nrow(missing_ddPCR_data) > 0){
-  message("\n*****")
+  message("\n\n\n*****")
   message("These non-control samples are in the sample sheet but are missing ddPCR values")
   message("Check to see if the ddPCR has been performed for these samples:")
   message(paste0(pull(missing_ddPCR_data), collapse = ", "))
   message("*****")
 
-  Sys.sleep(5)
+  Sys.sleep(15)
 }
 
 #check lowest date of sample collection

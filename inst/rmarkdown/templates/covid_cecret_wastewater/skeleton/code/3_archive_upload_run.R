@@ -14,6 +14,10 @@ run_uploaded_2_basespace <- TRUE #is the sequencing run on basespace?
 # temporary directory in ec2 to hold to sequencing run download. This directory will be deleted after running this script
 ec2_tmp_fp <- "~/tmp_bs_dl/"
 
+####################
+# Selected variables
+####################
+
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
@@ -23,9 +27,9 @@ if(sequencing_date == "") {
   stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
 }
 
-###################################################
+################
 # Load functions
-###################################################
+################
 
 #this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(

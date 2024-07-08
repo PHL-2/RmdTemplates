@@ -18,9 +18,9 @@ update_freyja_and_cecret_pipeline <- TRUE
 
 cecret_version <- "master"
 
-#########################
-# AWS and sequencing_date
-#########################
+####################
+# Selected variables
+####################
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
