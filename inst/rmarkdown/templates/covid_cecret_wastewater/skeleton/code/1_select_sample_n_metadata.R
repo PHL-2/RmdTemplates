@@ -13,8 +13,8 @@ library(stringr)
 
 create_sample_replicates <- 4 #enter a positive integer for the number of biological replicates created during concentration and extraction
 
-# set this to FALSE to not copy the platemap to the shared drive (such as when rerunning this script with updated extra metadata info)
-copy_platemap <- TRUE
+# set this to TRUE to not copy the platemap to the shared drive
+copy_platemap <- FALSE
 
 sample_type_acronym <- "WW" #use WW for wastewater samples
 
@@ -63,7 +63,7 @@ ddPCR_files <- tail(ddPCR_files[!grepl(failed_regex, ddPCR_files)], 5)
 ddPCR_data <- ddPCR_files %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
-  do(read_delim(.$FileName)) %>%
+  do(read_delim(.$FileName, show_col_types = FALSE)) %>%
   ungroup() %>%
   mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName))) %>%
   group_by(sample_group, sample_collect_date) %>%
