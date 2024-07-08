@@ -28,13 +28,13 @@ prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 # Load functions
 ################
 
-#this file needs to sit in a [aux_files/functions] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "functions", "R_all_functions_v3.R"))
   },
   error = function(e) {
-    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory"))
   }
 )
 
@@ -42,13 +42,13 @@ tryCatch(
 # Load config
 #############
 
-#this file needs to sit in a [aux_files/config] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 
@@ -445,7 +445,7 @@ if(copy_platemap) {
 
   if(file.exists(shared_drive_fp)) {
 
-    plate_map_cp_fp <- file.path(shared_drive_fp, "Sequencing Action plan updated", "1_Plate_Maps", format(Sys.Date(), "%Y"),
+    plate_map_cp_fp <- file.path(shared_drive_fp, "Sequencing Action plan updated", "1_Plate_Maps", "nasal_swabs", format(Sys.Date(), "%Y"),
                                  paste(format(Sys.time(), "%Y-%m-%d"), sample_type_acronym, prj_description, "Plate_Map.csv", sep = "_"))
     file.copy(plate_map_local_fp, plate_map_cp_fp, overwrite = TRUE)
 

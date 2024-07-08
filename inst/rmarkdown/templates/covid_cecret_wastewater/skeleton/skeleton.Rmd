@@ -21,16 +21,17 @@ output:
 
 \tableofcontents
 
-```{r filter out samples, message = TRUE, include=FALSE, eval = FALSE}
+```{r select samples and ddpcr metadata, message = TRUE, include=FALSE, eval = FALSE}
 
-#this script filters the Excel file provided by the epidemiologist by excluding low RLU samples and samples received by the Health Centers
-#the Excel file should be placed in the extra_metadata folder along with the environmental swabs file
-#any samples from previous runs included should be placed in the prev_run folder, using the filtered Excel file
+#this script uses a wastewater sample selection sheet to create a sequencing plate map for the wet lab
+#a metadata sheet with the ddPCR values for the selected samples will also be generated
+#the selection sheet should be placed in the extra_metadata folder
+#any samples from previous runs included should be placed in the prev_run folder
 source("code/1_select_sample_n_metadata.R")
 
 ```
 
-```{r generate SampleSheet and metadata, message = TRUE, include=FALSE, eval = FALSE}
+```{r generate sequencing metadata and sample barcodes, message = TRUE, include=FALSE, eval = FALSE}
 
 #this script generates the SampleSheet.csv file required for demultiplexing the sequencing run
 #the required file to include is the sequencing_metadata_sheet.xlsx filled out by the sequencing wet lab scientists, pertaining to the barcodes assigned to the samples
@@ -38,7 +39,7 @@ source("code/2_generate_barcodes_IDT.R")
 
 ```
 
-```{r upload sequencing run data, message = TRUE, include=FALSE, eval = FALSE}
+```{r archive and upload sequencing run data, message = TRUE, include=FALSE, eval = FALSE}
 
 #this script compresses the sequencing run folder and uploads it to S3, along with auxiliary files
 
@@ -93,6 +94,7 @@ pander::panderOptions("knitr.auto.asis", FALSE)
 
 # need to import the data into a single tsv for the first time?
 import_data <- TRUE
+report_only_cdc_lineages <- TRUE
 
 ### =================
 ### End manual inputs

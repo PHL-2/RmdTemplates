@@ -21,8 +21,6 @@ cecret_version <- "master"
 # AWS and sequencing date
 #########################
 
-system2("aws", c("sso login"))
-
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
@@ -36,13 +34,13 @@ if(sequencing_date == "") {
 # Load functions
 ################
 
-#this file needs to sit in a [aux_files/functions] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "functions", "R_all_functions_v3.R"))
   },
   error = function(e) {
-    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory"))
   }
 )
 
@@ -50,13 +48,13 @@ tryCatch(
 # Load config
 #############
 
-#this file needs to sit in a [aux_files/config] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 
@@ -106,6 +104,7 @@ check_screen_job(message2display = "Checking BCLConvert job",
                  screen_session_name = "demux")
 
 # Checking the demultiplexing results
+system2("aws", c("sso login"))
 aws_s3_fastq_files <- system2("aws", c("s3 ls", bclconvert_output_path,
                                        "--recursive",
                                        "| grep 'R1_001.fastq.gz$'"), stdout = TRUE)
@@ -321,6 +320,12 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
 
 # Download Nextflow config file for profile (use terminal because of proxy login issue)
 run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
+                      here("data", "processed_cecret", "nextflow.config")),
+                paste(" [On", ec2_hostname, "instance]\n",
+                      "aws s3 cp ~/.nextflow/config",
+                      paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
+                      "[On local computer]\n",
+                      "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/config"),
                       here("data", "processed_cecret", "nextflow.config"))
 )
 
@@ -330,7 +335,7 @@ submit_screen_job(message2display = "Cleaning up EC2 run folder",
                   screen_session_name = "delete-run",
                   command2run = paste0("rm -rf ", ec2_tmp_fp, ";",
                                        "echo Here are your files and directories at home:;",
-                                       "ls -GF")
+                                       "ls ~ -GF")
 )
 
 check_screen_job(message2display = "Checking delete job",

@@ -6,7 +6,8 @@
 .DS_Store
 processed_*/
 fastq/
-epi/
+**/epi/*
+!**/epi/*_WW_sequencing_results.csv
 aux_files/data_submission/seqsender/
 aux_files/data_submission/dcipher/
 **/metadata/*

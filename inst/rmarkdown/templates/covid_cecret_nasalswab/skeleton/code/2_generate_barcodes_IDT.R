@@ -33,7 +33,7 @@ index_length <- "10"
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
 
 #file location of the nextera udi indices
-barcode_fp <- file.path(dirname(here()), "aux_files", "metadata_references", "Illumina", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
+barcode_fp <- file.path(dirname(here()), "aux_files", "illumina_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
 if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
   stop(simpleError(paste0("Please use the 'YYYY-MM-DD' format for this RStudio project date. This date should correspond to the desired sequencing run date")))
@@ -46,13 +46,13 @@ if (prj_description == "") {
 # Load functions
 ###################################################
 
-#this file needs to sit in a [aux_files/functions] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "functions", "R_all_functions_v3.R"))
   },
   error = function(e) {
-    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory"))
   }
 )
 
@@ -60,13 +60,13 @@ tryCatch(
 # Load config
 ###################################################
 
-#this file needs to sit in a [aux_files/config] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 
@@ -88,7 +88,7 @@ barcodes <- tryCatch(
       select(idt_plate_coord, I7_Index_ID, I5_Index_ID, UDI_Index_ID, index, index2)
   },
   error = function(e) {
-    stop (simpleError("The nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv file needs to sit in an [aux_files/metadata_references] directory path above this project directory"))
+    stop (simpleError("The nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv file needs to sit in an [aux_files/illumina_references] directory path above this project directory"))
   }
 )
 
@@ -200,7 +200,13 @@ if(run_uploaded_2_basespace) {
     # Download the SampleSheet from EC2 instance
     run_in_terminal(paste("scp",
                           paste0(ec2_hostname, ":", sequencing_run_fp, "SampleSheet.csv"),
-                          here("metadata", "munge"))
+                          here("metadata", "munge")),
+                    paste(" [On", ec2_hostname, "instance]\n",
+                          "aws s3 cp", paste0(sequencing_run_fp, "SampleSheet.csv"),
+                          paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
+                          "[On local computer]\n",
+                          "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/SampleSheet.csv"),
+                          here("metadata", "munge/"))
     )
 
     rstudioapi::executeCommand('activateConsole')
