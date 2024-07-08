@@ -42,35 +42,35 @@ library(ape)
 
 ```{r load variables, functions, and signature from common files}
 
-#this file needs to sit in a [aux_files/config] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 
-#this file needs to sit in a [aux_files/functions] directory path above this project directory
+#this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "functions", "R_all_functions_v3.R"))
   },
   error = function(e) {
-  stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+  stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory"))
   }
 )
 
-#this file needs to sit in a [aux_files/signature] directory path above this project directory
+#this file needs to sit in a [aux_files/pdf_generation/signature] directory path above this project directory
 tryCatch(
   {
-    signature_fp <- list.files(file.path(dirname(here()), "aux_files", "signature"), pattern = ".png|.jpeg|.tif*|.gif", full.names = TRUE)
+    signature_fp <- list.files(file.path(dirname(here()), "aux_files", "pdf_generation", "signature"), pattern = ".png|.jpeg|.tif*|.gif", full.names = TRUE)
     tag <- signature_fp[!grepl("blank.png", signature_fp)]
     blank <- signature_fp[grepl("blank.png", signature_fp)]
   },
   error = function(e) {
-  stop (simpleError("The signature image file needs to sit in a [aux_files/signature] directory path above this project directory"))
+  stop (simpleError("The signature image file needs to sit in a [aux_files/pdf_generation/signature] directory path above this project directory"))
   }
 )
 
@@ -770,8 +770,8 @@ if(any(is.na(s$sample_type))) {
 ```{r upload filepaths}
 
 #path of seqsender config file
-seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "seqsender_config.yaml", full.names = TRUE)
-seqsender_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "seqsender"), pattern = "seqsender_config_test.yaml", full.names = TRUE)
+seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "data_submission", "seqsender"), pattern = "seqsender_config.yaml", full.names = TRUE)
+seqsender_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "data_submission", "seqsender"), pattern = "seqsender_config_test.yaml", full.names = TRUE)
 
 epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
 seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.tsv", sep = "_"))
