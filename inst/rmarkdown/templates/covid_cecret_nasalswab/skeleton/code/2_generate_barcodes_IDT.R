@@ -251,7 +251,11 @@ if(run_uploaded_2_basespace) {
       message("*****")
       Sys.sleep(5)
 
-      file.copy(file.path(run_folder, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
+      sample_sheet_copy <- file.copy(file.path(run_folder, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
+
+      if(length(sample_sheet_copy) == 0) {
+        stop(simpleError(paste("\nCould not find MiSeq SampleSheet.csv in", sequencing_folder_fp)))
+      }
     }
 
   } else if (sequencer_type == "NextSeq1k2k") {
@@ -263,6 +267,10 @@ if(run_uploaded_2_basespace) {
                                                      "ls | grep", paste0("^", run_folder_pattern, "_VH"), "| tr -d '\n'"),
                                                type = "sh")),
                               stdout = TRUE)
+
+    if(length(sequencing_run) == 0) {
+      stop(simpleError(paste("\nCould not find NextSeq run with date", sequencing_date, "on the sequencer")))
+    }
 
     if(!samplesheet_exists) {
 

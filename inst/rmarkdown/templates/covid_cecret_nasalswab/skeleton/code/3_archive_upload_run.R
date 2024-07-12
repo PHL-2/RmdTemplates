@@ -2,6 +2,7 @@ library(here)
 library(dplyr)
 library(tidyr)
 library(stringr)
+system2("aws", c("sso login"))
 
 #This Rscript uploads the sequencing run and related files to S3
 
@@ -265,14 +266,13 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
 
   message("Making md5 file")
   md5_fp <- paste0(run_folder, ".md5")
-  paste0(run_folder, ".tar.gz") %>%
-    paste0(tools::md5sum(.), "  ", .) %>%
-    write(file = md5_fp)
+  md5_value <- paste0(tools::md5sum(paste0(run_folder, ".tar.gz")), "  ", sequencing_run, ".tar.gz")
+  message(md5_value)
+  write(md5_value, file = md5_fp)
 
   message("Uploading local checksum and tarball files to AWS S3")
-  system2("aws", c("sso login"))
-  s3_cp_md5 <- system2("aws", c("s3 cp", shQuote(md5_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
-  s3_cp_run_tarball <- system2("aws", c("s3 cp", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
+  s3_cp_md5 <- system2("aws", c("s3 cp", shQuote(path.expand(md5_fp), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
+  s3_cp_run_tarball <- system2("aws", c("s3 cp", shQuote(path.expand(paste0(run_folder, ".tar.gz")), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 
   # If the aws-cli provides an SSL error on local machine, run the command through the instance
   if(length(s3_cp_md5) == 0 | length(s3_cp_run_tarball) == 0) {
@@ -315,7 +315,6 @@ nf_demux_samplesheet %>%
   write_csv(file = nf_demux_samplesheet_fp)
 
 message("Uploading samplesheets to AWS S3")
-system2("aws", c("sso login"))
 s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samplesheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 

@@ -3,6 +3,7 @@ library(dplyr)
 library(tidyr)
 library(stringr)
 library(readr)
+system2("aws", c("sso login"))
 
 #This Rscript submits the relevant jobs to Nextflow once the sequencing run has been uploaded
 
@@ -105,7 +106,6 @@ check_screen_job(message2display = "Checking BCLConvert job",
                  screen_session_name = "demux")
 
 # Checking the demultiplexing results
-system2("aws", c("sso login"))
 aws_s3_fastq_files <- system2("aws", c("s3 ls", bclconvert_output_path,
                                        "--recursive",
                                        "| grep 'R1_001.fastq.gz$'",

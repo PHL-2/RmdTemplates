@@ -63,7 +63,9 @@ ddPCR_files <- tail(ddPCR_files[!grepl(failed_regex, ddPCR_files)], 5)
 ddPCR_data <- ddPCR_files %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
-  do(read_delim(.$FileName, show_col_types = FALSE)) %>%
+  do(read_delim(.$FileName,
+                show_col_types = FALSE,
+                col_types = cols("sample_collect_date" = col_date()))) %>%
   ungroup() %>%
   mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName))) %>%
   group_by(sample_group, sample_collect_date) %>%
