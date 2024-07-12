@@ -1046,7 +1046,7 @@ if(nrow(data_upload_all) != 0) {
                     "covv_coverage" = "median_coverage",
                     "covv_orig_lab" = "sample_collected_by",
                     "covv_subm_sample_id" = "sample_id"))) %>%
-    mutate(fn = "???") %>%
+    mutate(fn = "") %>%
     cbind(data_submit_metadata %>%
             filter_n_pivot(db, "GISAID", "db_specific_field", "value")) %>%
     write_csv(gisaid_upload_fp)
@@ -1065,10 +1065,10 @@ if(nrow(data_upload_all) != 0) {
             filter_n_pivot(db, "BioSample", "db_specific_field", "value")) %>%
     mutate(description = paste(sample_description, design_description),
           #need to fill these in
-           ww_surv_target_1_known_present = "???", #this should be yes or no, depends on the ddPCR results
-           ww_surv_target_1_conc = "???", #this is the ddPCR transformed unit
-           ww_surv_target_2_known_present = "???", #this should be yes or no, depends on the ddPCR results
-           ww_surv_target_2_conc = "???",
+           ww_surv_target_1_known_present = ifelse(N2_present, "Yes", "No"),
+           ww_surv_target_1_conc = ifelse(has_N2, `N2_gc/L`, ""), #this is the ddPCR transformed unit
+           ww_surv_target_2_known_present = ifelse(N2_present, "Yes", "No"),
+           ww_surv_target_2_conc = ifelse(has_N2, `E_gc/L`, ""),
            gisaid_accession = "") %>%
     select(-c(sample_description, design_description)) %>%
     write_csv(biosample_upload_fp)
@@ -1080,8 +1080,8 @@ if(nrow(data_upload_all) != 0) {
                     "amplicon_PCR_primer_scheme" = "library",
                     "library_preparation_kit" = "library",
                     "raw_sequence_data_processing_method" = "assembly_method"))) %>%
-    mutate(filename = "???",
-           filename2 = "???") %>%
+    mutate(filename = "",
+           filename2 = "") %>%
     cbind(data_submit_metadata %>%
             filter_n_pivot(db, "SRA", "db_specific_field", "value")) %>%
     write_csv(sra_upload_fp)
