@@ -79,6 +79,10 @@ ddPCR_data <- ddPCR_files %>%
 select_fp <- list.files(here("metadata", "extra_metadata"), pattern = "*.csv", full.names = TRUE)
 select_fp <- select_fp[!grepl("_filtered.csv$", select_fp)]
 
+if(length(select_fp) == 0) {
+  stop (simpleError("\n\nThere is no sample selection sheet in extra_metadata!"))
+}
+
 selection_data <- lapply(select_fp, read_csv) %>%
   do.call(rbind, .) %>%
   mutate(sample_collect_date = as.Date(sample_collect_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
