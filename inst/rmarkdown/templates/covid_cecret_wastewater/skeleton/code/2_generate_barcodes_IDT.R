@@ -12,13 +12,15 @@ library(stringr)
 # Manual input
 ##############
 
-remove_sample_from_bcl_samplesheet <- c("") #add in sample names to remove from demultiplexing
-
 run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
 
-# temporary directory in ec2 to hold to sequencing run download. This directory will be deleted after running this script
+have_AWS_EC2_SSH_access <- FALSE
+
+remove_sample_from_bcl_samplesheet <- c("") #add in sample names to remove from demultiplexing
+
+# temporary directory to hold the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl/"
 
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
@@ -189,50 +191,101 @@ if(run_uploaded_2_basespace) {
 
   if(!samplesheet_exists) {
 
-    sequencing_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
+    temporary_seq_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
+    bs_dl_cmd <- paste("bs download runs --id", bs_run_id, "--output", temporary_seq_run_fp)
 
-    # Download the run from BaseSpace onto a running EC2 instance
-    submit_screen_job(message2display = "Downloading sequencing run from BaseSpace",
-                      ec2_login = ec2_hostname,
-                      screen_session_name = "basespace-run-download",
-                      command2run = paste("bs download runs --id", bs_run_id, "--output", sequencing_run_fp)
-    )
+    if(have_AWS_EC2_SSH_access) {
+      # Download the run from BaseSpace onto a running EC2 instance
+      submit_screen_job(message2display = "Downloading sequencing run from BaseSpace",
+                        ec2_login = ec2_hostname,
+                        screen_session_name = "basespace-run-download",
+                        command2run = bs_dl_cmd
+      )
 
-    check_screen_job(message2display = "Checking BaseSpace download job",
-                     ec2_login = ec2_hostname,
-                     screen_session_name = "basespace-run-download")
+      check_screen_job(message2display = "Checking BaseSpace download job",
+                       ec2_login = ec2_hostname,
+                       screen_session_name = "basespace-run-download")
 
-    # Download the SampleSheet from EC2 instance
-    run_in_terminal(paste("scp",
-                          paste0(ec2_hostname, ":", sequencing_run_fp, "SampleSheet.csv"),
-                          here("metadata", "munge")),
-                    command2print = paste(" [On", ec2_hostname, "instance]\n",
-                                    "aws s3 cp", paste0(sequencing_run_fp, "SampleSheet.csv"),
-                                    paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
-                                    "[On local computer]\n",
-                                    "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/SampleSheet.csv"),
-                                    here("metadata", "munge/"))
-    )
+      # Download the SampleSheet from EC2 instance
+      run_in_terminal(paste("scp",
+                            paste0(ec2_hostname, ":", temporary_seq_run_fp, "SampleSheet.csv"),
+                            here("metadata", "munge")),
+                      command2print = paste(" [On", ec2_hostname, "instance]\n",
+                                      "aws s3 cp", paste0(temporary_seq_run_fp, "SampleSheet.csv"),
+                                      paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
+                                      "[On local computer]\n",
+                                      "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/SampleSheet.csv"),
+                                      here("metadata", "munge/"))
+      )
 
-    rstudioapi::executeCommand('activateConsole')
+      rstudioapi::executeCommand('activateConsole')
+    } else {
 
+      dir.create(temporary_seq_run_fp, recursive = TRUE)
+
+      run_in_terminal(bs_dl_cmd)
+
+      rstudioapi::executeCommand('activateConsole')
+
+      file.copy(paste0(temporary_seq_run_fp, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
+    }
   }
-
 } else if (!run_uploaded_2_basespace) {
 
-  #get the local run folder
-  run_folder <- sequencing_folder_fp %>%
-    list.files(full.names = T) %>%
-    data.frame(filenames = .) %>%
-    filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
-    filter(grepl(sequencing_folder_regex, filenames)) %>%
-    filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
-    pull()
+  if(sequencer_type == "MiSeq"){
 
-  sequencing_run <- basename(run_folder)
+    #get the local run folder
+    run_folder <- sequencing_folder_fp %>%
+      list.files(full.names = T) %>%
+      data.frame(filenames = .) %>%
+      filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
+      filter(grepl(sequencing_folder_regex, filenames)) %>%
+      filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
+      pull()
 
-  if(!samplesheet_exists) {
-    file.copy(file.path(run_folder, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
+    sequencing_run <- basename(run_folder)
+
+    if(!samplesheet_exists) {
+
+      message("\n\n\n*****")
+      message("Copying MiSeq SampleSheet.csv")
+      message("*****")
+      Sys.sleep(5)
+
+      sample_sheet_copy <- file.copy(file.path(run_folder, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
+
+      if(length(sample_sheet_copy) == 0) {
+        stop(simpleError(paste("\nCould not find MiSeq SampleSheet.csv in", sequencing_folder_fp)))
+      }
+    }
+
+  } else if (sequencer_type == "NextSeq1k2k") {
+
+    run_folder_pattern <- paste0(gsub("^..|-", "", sequencing_date))
+    nextseq_run_fp <- "/usr/local/illumina/runs/"
+    sequencing_run <- system2("ssh", c("-tt", nextseq_hostname,
+                                       shQuote(paste("cd", paste0(nextseq_run_fp, ";"),
+                                                     "ls | grep", paste0("^", run_folder_pattern, "_VH"), "| tr -d '\n'"),
+                                               type = "sh")),
+                              stdout = TRUE)
+
+    if(length(sequencing_run) == 0) {
+      stop(simpleError(paste("\nCould not find NextSeq run with date", sequencing_date, "on the sequencer")))
+    }
+
+    if(!samplesheet_exists) {
+
+      message("\n\n\n*****")
+      message("Transferring NextSeq run")
+      message("*****")
+      Sys.sleep(5)
+
+      scp_command <- paste("scp",
+                           paste0(nextseq_hostname, ":", nextseq_run_fp, sequencing_run, "/SampleSheet.csv"),
+                           here("metadata", "munge", "SampleSheet.csv"))
+
+      run_in_terminal(scp_command)
+    }
   }
 }
 
