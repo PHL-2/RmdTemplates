@@ -108,7 +108,7 @@ d_pre <- read_csv(copy_path)
 if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
   d_pre <- d_pre %>%
     select(
-      Well, Sample = `Sample description 1`, Spiked = `Sample description 2`, Sample_date = `Sample description 3`, Extra = `Sample description 4`, SampleType, Target, `Conc(copies/uL)` = 7, Droplet_count = `Accepted Droplets`, Positives, Negatives) %>%
+      Well, Sample = `Sample description 1`, Spiked = `Sample description 2`, Sample_date = `Sample description 3`, Extra = `Sample description 4`, SampleType, Target, `Conc(copies/uL)` = `Conc(copies/µL)`, Droplet_count = `Accepted Droplets`, Positives, Negatives) %>%
     #mutate(Sample = gsub(pattern = "dd_", replacement = "dd", x = Sample)) %>%
     separate(Sample, into = c("Type", "Process"), sep = "_", remove = FALSE) %>%
     filter(!is.na(Sample),
@@ -193,8 +193,8 @@ d_var <- d %>%
             sd_conc = sd(`Conc(copies/uL)`),
             mad_conc = mad(`Conc(copies/uL)`),
             num_points = n(),
-            quant25 = quantile(`Conc(copies/uL)`)[2],
-            quant75 = quantile(`Conc(copies/uL)`)[4],
+            quant25 = quantile(`Conc(copies/uL)`, na.rm = T)[2],
+            quant75 = quantile(`Conc(copies/uL)`, na.rm = T)[4],
             gesd = ifelse(Spiked == "Spiked" & num_points > 3, PMCMRplus::gesdTest(`Conc(copies/uL)`, 2)$p.value[2], NA)
   ) %>%
   ungroup() %>%
