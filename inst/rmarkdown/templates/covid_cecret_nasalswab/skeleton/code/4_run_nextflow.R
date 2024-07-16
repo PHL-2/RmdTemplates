@@ -2,6 +2,7 @@ library(here)
 library(dplyr)
 library(tidyr)
 library(stringr)
+system2("aws", c("sso login"))
 
 #This Rscript submits the relevant jobs to Nextflow once the sequencing run has been uploaded
 
@@ -74,7 +75,7 @@ sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq1k2k)_.*", "\\1", sample_sheet_fn
 sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
                              sequencer_type == "NextSeq1k2k" ~ "VH")
 
-intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*$")
+intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*")
 
 sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
 
@@ -104,7 +105,6 @@ check_screen_job(message2display = "Checking BCLConvert job",
                  screen_session_name = "demux")
 
 # Checking the demultiplexing results
-system2("aws", c("sso login"))
 aws_s3_fastq_files <- system2("aws", c("s3 ls", bclconvert_output_path,
                                        "--recursive",
                                        "| grep 'R1_001.fastq.gz$'"), stdout = TRUE)
@@ -130,7 +130,13 @@ fastq_file_sizes <- aws_s3_fastq_files %>%
          sequencing_folder = gsub("/.*", "", sequencing_folder),
          filename = gsub(".*/", "", filename),
          bytes = as.numeric(bytes)) %>%
-  filter(grepl(intended_sequencing_folder_regex, sequencing_folder))
+  filter(grepl(intended_sequencing_folder_regex, sequencing_folder)) %>%
+  #sometimes the Undetermined file from the sequencer gets copied over; remove these samples
+  filter(!grepl("^GenericSampleID", filename)) %>%
+  group_by(filename) %>%
+  mutate(file_num = n()) %>%
+  filter(!(file_num == 2 & grepl("^Undetermined", filename) & bytes == max(bytes))) %>%
+  ungroup()
 
 if(nrow(fastq_file_sizes) == 0) {
   stop(simpleError(paste0("\nThere were no FastQ files found at path ", bclconvert_output_path,
@@ -166,6 +172,7 @@ fastq_path <- paste(bclconvert_output_path, instrument_run_id, sep = "/")
 # fastq_path <- paste(bclconvert_output_path, "fastq-files", sep = "/")
 
 # Download most recent Nextclade pangolin dataset
+# Big if-else statement; run code manually if TRUE
 if(update_pangolin_dataset) {
   submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
                     ec2_login = ec2_hostname,
@@ -187,6 +194,7 @@ if(update_pangolin_dataset) {
 }
 
 # Update the Cecret pipeline; this should be done as often as possible as it also updates the freyja data used for assignment
+# Big if-else statement; run code manually if TRUE
 if (update_freyja_and_cecret_pipeline) {
   submit_screen_job(message2display = "Updating Cecret pipeline",
                     ec2_login = ec2_hostname,
@@ -199,7 +207,7 @@ if (update_freyja_and_cecret_pipeline) {
                    screen_session_name = "update-cecret")
 }
 
-workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sep = "/")
+workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sequencer_type, sep = "/")
 
 # Cecret pipeline
 submit_screen_job(message2display = "Processing data through Cecret pipeline",
@@ -225,11 +233,14 @@ rstudioapi::executeCommand('activateConsole')
 bcl_file_download_command <- c("s3 cp", paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, sep = "/"))
 bcl_file_download_param <- c("--recursive",
                              "--exclude '*'",
-                             "--include '*software_versions.yml'",
-                             "--include '*Demultiplex_Stats.csv'",
-                             "--include '*Quality_Metrics.csv'",
-                             "--include '*Top_Unknown_Barcodes.csv'",
-                             "--include '*fastq.gz_fastqc_data.txt'")
+                             "--include '*/software_versions.yml'",
+                             paste0("--include '*", intended_sequencing_folder_regex, "/",
+                                    c("Demultiplex_Stats.csv",
+                                      "Quality_Metrics.csv",
+                                      "Top_Unknown_Barcodes.csv",
+                                      "*fastq.gz_fastqc_data.txt"),
+                                    collapse = " ",
+                                    "'"))
 
 aws_s3_bcl_download <- system2("aws", c(bcl_file_download_command,
                                         here("data"),
@@ -240,18 +251,21 @@ aws_s3_bcl_download <- system2("aws", c(bcl_file_download_command,
 cecret_file_download_command <- c("s3 cp", workflow_output_fp)
 cecret_file_download_param <- c("--recursive",
                                 "--exclude '*'",
-                                #                                "--include '*.consensus.fa'",
-                                #                                "--include '*_filtered_R[12].fastq.gz'",
-                                "--include '*_demix.tsv'",
-                                "--include '*_kraken2_report.txt'",
-                                "--include '*snp-dists.txt'",
-                                "--include '*_amplicon_depth.csv'",
-                                "--include '*nextclade.tsv'",
-                                "--include '*nextclade.json'",
-                                "--include '*.stats.txt'",
-                                "--include '*.cov.txt'",
-                                "--include '*.depth.txt'",
-                                "--include '*cecret_results.csv'")
+                                paste0("--include '*/",
+                                       c(#"*.consensus.fa",
+                                         #"*_filtered_R[12].fastq.gz",
+                                         "*_demix.tsv",
+                                         "*_kraken2_report.txt",
+                                         "snp-dists.txt",
+                                         "*_amplicon_depth.csv",
+                                         "nextclade.tsv",
+                                         "nextclade.json",
+                                         "*.stats.txt",
+                                         "*.cov.txt",
+                                         "*.depth.txt",
+                                         "cecret_results.csv"),
+                                       collapse = " ",
+                                       "'"))
 
 aws_s3_cecret_download <- system2("aws", c(cecret_file_download_command,
                                            here("data"),
@@ -272,10 +286,10 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
   submit_screen_job(message2display = "Downloading BCLConvert data",
                     ec2_login = ec2_hostname,
                     screen_session_name = "bclconvert-dl",
-                    command2run = paste("mkdir -p", paste0(ec2_tmp_fp, "data;"),
+                    command2run = paste("mkdir -p", paste0(ec2_tmp_fp, sequencing_date, "/data;"),
                                         "aws",
                                         paste0(bcl_file_download_command, collapse = " "),
-                                        paste0(ec2_tmp_fp, "data"),
+                                        paste0(ec2_tmp_fp, sequencing_date, "/data"),
                                         paste0(bcl_file_download_param, collapse = " "))
   )
 
@@ -287,10 +301,10 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
   submit_screen_job(message2display = "Downloading Cecret data",
                     ec2_login = ec2_hostname,
                     screen_session_name = "cecret-dl",
-                    command2run = paste("mkdir -p", paste0(ec2_tmp_fp, "data;"),
+                    command2run = paste("mkdir -p", paste0(ec2_tmp_fp, sequencing_date, "/data;"),
                                         "aws",
                                         paste0(cecret_file_download_command, collapse = " "),
-                                        paste0(ec2_tmp_fp, "data"),
+                                        paste0(ec2_tmp_fp, sequencing_date, "/data"),
                                         paste0(cecret_file_download_param, collapse = " "))
   )
 
@@ -302,10 +316,10 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
   submit_screen_job(message2display = "Downloading Nextclade dataset version",
                     ec2_login = ec2_hostname,
                     screen_session_name = "nextclade-version-dl",
-                    command2run = paste("mkdir -p", paste0(ec2_tmp_fp, "data;"),
+                    command2run = paste("mkdir -p", paste0(ec2_tmp_fp, sequencing_date, "/data;"),
                                         "aws",
                                         paste0(nextclade_dataset_download_command, collapse = " "),
-                                        paste0(ec2_tmp_fp, "data/","processed_cecret/", "nextclade/"))
+                                        paste0(ec2_tmp_fp, sequencing_date, "/data/","processed_cecret/", "nextclade/"))
   )
 
   check_screen_job(message2display = "Checking Nextclade version download job",
@@ -313,12 +327,13 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
                    screen_session_name = "nextclade-version-dl")
 
   # Download data from EC2 instance to local
-  run_in_terminal(paste("scp -r", paste0(ec2_hostname, ":", ec2_tmp_fp, "data"),
+  run_in_terminal(paste("scp -r", paste0(ec2_hostname, ":", ec2_tmp_fp, sequencing_date, "/data"),
                         here())
   )
 }
 
 # Download Nextflow config file for profile (use terminal because of proxy login issue)
+# If SSH is not working, copy a nextflow.config from an older run and paste into data/processed_cecret as nextflow.config
 run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
                       here("data", "processed_cecret", "nextflow.config")),
                 paste(" [On", ec2_hostname, "instance]\n",

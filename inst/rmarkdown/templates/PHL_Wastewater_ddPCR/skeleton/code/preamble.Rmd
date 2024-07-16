@@ -108,7 +108,7 @@ d_pre <- read_csv(copy_path)
 if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
   d_pre <- d_pre %>%
     select(
-      Well, Sample = `Sample description 1`, Spiked = `Sample description 2`, Sample_date = `Sample description 3`, Extra = `Sample description 4`, SampleType, Target, `Conc(copies/uL)` = 7, Droplet_count = `Accepted Droplets`, Positives, Negatives) %>%
+      Well, Sample = `Sample description 1`, Spiked = `Sample description 2`, Sample_date = `Sample description 3`, Extra = `Sample description 4`, SampleType, Target, `Conc(copies/uL)` = `Conc(copies/µL)`, Droplet_count = `Accepted Droplets`, Positives, Negatives) %>%
     #mutate(Sample = gsub(pattern = "dd_", replacement = "dd", x = Sample)) %>%
     separate(Sample, into = c("Type", "Process"), sep = "_", remove = FALSE) %>%
     filter(!is.na(Sample),
@@ -121,7 +121,8 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
           `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
           Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
           Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d")),
-          SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType)
+          SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType),
+          Target_present = Positives >= 3
     )
 } else {
   d_pre <- d_pre %>%
@@ -154,7 +155,8 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
           `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
           Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
           Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d")),
-          SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType)
+          SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType),
+          Target_present = Positives >= 3
     )
 }
 
@@ -191,8 +193,8 @@ d_var <- d %>%
             sd_conc = sd(`Conc(copies/uL)`),
             mad_conc = mad(`Conc(copies/uL)`),
             num_points = n(),
-            quant25 = quantile(`Conc(copies/uL)`)[2],
-            quant75 = quantile(`Conc(copies/uL)`)[4],
+            quant25 = quantile(`Conc(copies/uL)`, na.rm = T)[2],
+            quant75 = quantile(`Conc(copies/uL)`, na.rm = T)[4],
             gesd = ifelse(Spiked == "Spiked" & num_points > 3, PMCMRplus::gesdTest(`Conc(copies/uL)`, 2)$p.value[2], NA)
   ) %>%
   ungroup() %>%
@@ -540,7 +542,9 @@ sequencing_metadata <- d %>%
          !(Well %in% wellsToRemove),
          ) %>%
   group_by(Type, Process, Spiked, Target, Sample_date) %>%
-  summarise(avg_conc = mean(`Conc(copies/uL)`)) %>%
+  summarise(avg_conc = mean(`Conc(copies/uL)`),
+            ddpcr_replicates = n(),
+            target_present = sum(Target_present)/ddpcr_replicates >= 0.5) %>%
   mutate(stock_conc = stock_concentration_calc(concentration = avg_conc, 
                                                rxn_vol = rxn_vol_uL, 
                                                input_vol = input_vol_uL, 
@@ -550,12 +554,14 @@ sequencing_metadata <- d %>%
                                                end_concentration_vol = end_concentration_vol_uL,
                                                initial_concentration_vol = init_concentration_vol_uL)*1000*1000) %>%
   ungroup() %>%
-  pivot_longer(cols = c(avg_conc, stock_conc), names_to = "concentration", values_to = "values") %>%
+  pivot_longer(cols = c(avg_conc, stock_conc, target_present), names_to = "concentration", values_to = "values") %>%
   mutate(Target = case_when(concentration == "avg_conc" ~ paste0(Target, "_gc/uL"),
                             concentration == "stock_conc" ~ paste0(Target, "_gc/L"),
+                            concentration == "target_present" ~ paste0(Target, "_present"),
                             TRUE ~ NA)) %>%
-  select(sample_group = "Type", sample_collect_date = "Sample_date", Target, values) %>%
+  select(sample_group = "Type", ddpcr_replicates, sample_collect_date = "Sample_date", Target, values) %>%
   pivot_wider(names_from = "Target", values_from = "values") %>%
+  mutate(across(ends_with("_present"), ~as.logical(.))) %>%
   merge(ww_site_metadata, by.x = "sample_group", all.x = TRUE)
 
 dir.create(here("sequencing_metadata"), recursive = TRUE)

@@ -198,7 +198,8 @@ write_csv(top_unkwn_indices, unkwn_barcodes_fp)
 
 #throw error if the top unknown index is greater than 0.5% percent of all reads
 if(max(top_unkwn_indices$percent_of_all_reads) > 0.005) {
-  stop(simpleError("Top unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode"))
+  message("\n\nWarning:\nTop unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode!")
+  Sys.sleep(10)
 }
 
 non_ctrl_samples <- s_meta %>%

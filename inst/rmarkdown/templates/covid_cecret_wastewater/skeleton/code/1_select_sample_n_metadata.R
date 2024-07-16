@@ -63,7 +63,9 @@ ddPCR_files <- tail(ddPCR_files[!grepl(failed_regex, ddPCR_files)], 5)
 ddPCR_data <- ddPCR_files %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
-  do(read_delim(.$FileName, show_col_types = FALSE)) %>%
+  do(read_delim(.$FileName,
+                show_col_types = FALSE,
+                col_types = cols("sample_collect_date" = col_date()))) %>%
   ungroup() %>%
   mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName))) %>%
   group_by(sample_group, sample_collect_date) %>%
@@ -78,6 +80,10 @@ ddPCR_data <- ddPCR_files %>%
 
 select_fp <- list.files(here("metadata", "extra_metadata"), pattern = "*.csv", full.names = TRUE)
 select_fp <- select_fp[!grepl("_filtered.csv$", select_fp)]
+
+if(length(select_fp) == 0) {
+  stop (simpleError("\n\nThere is no sample selection sheet in extra_metadata!"))
+}
 
 selection_data <- lapply(select_fp, read_csv) %>%
   do.call(rbind, .) %>%

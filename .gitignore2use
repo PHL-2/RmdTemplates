@@ -6,9 +6,11 @@
 .DS_Store
 processed_*/
 fastq/
-epi/
+**/epi/*
+!**/epi/*_WW_sequencing_results.csv
 aux_files/data_submission/seqsender/
-aux_files/data_submission/dcipher/
+**/signature/*
+!**/signature/blank.png
 **/metadata/*
 !**/metadata/*_COVIDSeq_metadata.csv
 *.fastq.gz

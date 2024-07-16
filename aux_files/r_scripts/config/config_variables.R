@@ -24,6 +24,13 @@ s3_reference_bucket <- "s3://"
 #host name of the ec2 instance in the .ssh/config file
 ec2_hostname <- ""
 
+####################
+# Sequencer settings
+####################
+
+#host name of the NextSeq sequencer in the .ssh/config file
+nextseq_hostname <- ""
+
 ###################
 # Nextflow settings
 ###################

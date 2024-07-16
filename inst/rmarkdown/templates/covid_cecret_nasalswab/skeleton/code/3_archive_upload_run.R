@@ -2,6 +2,8 @@ library(here)
 library(dplyr)
 library(tidyr)
 library(stringr)
+library(readr)
+system2("aws", c("sso login"))
 
 #This Rscript uploads the sequencing run and related files to S3
 
@@ -11,8 +13,14 @@ library(stringr)
 
 run_uploaded_2_basespace <- TRUE #is the sequencing run on basespace?
 
-# temporary directory in ec2 to hold to sequencing run download. This directory will be deleted after running this script
+have_AWS_EC2_SSH_access <- FALSE
+
+# temporary directory holding the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl/"
+
+####################
+# Selected variables
+####################
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
@@ -66,13 +74,64 @@ if(length(sample_sheet_fn) > 1) {
 
 sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq1k2k)_.*", "\\1", sample_sheet_fn)
 
+#these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
+sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
+                             sequencer_type == "NextSeq1k2k" ~ "VH")
+
+sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*$")
+
 sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
 
 prj_description <- gsub(paste0("^[0-9-]*_.*", sample_type_acronym, "_|_.*"), "", sample_sheet_fn)
 
 s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
-sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9A-Z-]*$")
+tar_command_function <- function(input_fp, output_fp = input_fp, bars = 99, use_checkpoint = TRUE) {
+
+  # This command runs gzip separately from the tar command, in order to use the '-n' flag
+  # The '-n' flag removes the time stamp from the header when compressing, which will allow generating the md5 checksum to be more consistent
+  # The flags included in the tar command just tells the program to print a progress bar
+
+  #these are the minimum files from the sequencing run that are required for demultiplexing
+  minimum_bs_files_pattern <- c("'SampleSheet.csv$'",
+                                "'.xml$'",
+                                "'/Data/'",
+                                "'/InterOp/'")
+  grep_command <- paste("grep", paste("-e", minimum_bs_files_pattern, collapse = " "))
+
+  checkpoint_flags <- if(use_checkpoint) {
+    paste("--checkpoint=`find", input_fp, "-type f -exec du -ak --apparent-size {} + |",
+          # this 2nd grep command is only used for finding the file sizes to create the progress bar
+          grep_command, "| cut -f1 | awk '{s+=$1} END {print int(s /", bars, ")}'`",
+          # this flag shows a progress bar
+          "--checkpoint-action='ttyout=\b=>'",
+          # this flag shows the read/write speed
+          #"--checkpoint-action='ttyout=%{Bytes read, Bytes written, Bytes deleted}T, Time elapsed: %ds%*\r'",
+          "--record-size=1K")
+  } else {
+    ""
+  }
+
+  paste("cd", paste0(input_fp, ";"),
+
+        ifelse(use_checkpoint,
+               paste("echo Estimate:", paste0(c("[", rep("=", bars+1), "];"), collapse = ""),
+                     "echo -n 'Progress: [ ';"),
+               ""),
+
+        # pipe find command to grep and then tar
+        "find . -type f |",
+        grep_command,
+        "| tar",
+        checkpoint_flags,
+        "-cT -",
+        "| gzip -n >", paste0(output_fp, ".tar.gz;"),
+
+        ifelse(use_checkpoint,
+               "echo ']\nTar completed!'",
+               "")
+  )
+}
 
 if(run_uploaded_2_basespace) {
 
@@ -85,21 +144,7 @@ if(run_uploaded_2_basespace) {
     slice(-1) %>%
     filter(grepl(paste0("^", sequencing_folder_regex), Name))
 
-  if(nrow(bs_run) > 1) {
-    warning(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
-                                 "Currently, you are pulling the sequencing run from the ", sequencer_type, "\n\n")))
-
-    #these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
-    sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
-                                 sequencer_type == "NextSeq1k2k" ~ "VH")
-
-    intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*$")
-
-    bs_run <- bs_run %>%
-      filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
-
-  }
-  if (nrow(bs_run) == 0) {
+  if (nrow(bs_run) != 1) {
     stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace for this date: ", sequencing_date,
                             "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
                             "\nThe sequencer type could also be wrong: ", sequencer_type,
@@ -114,40 +159,17 @@ if(run_uploaded_2_basespace) {
     select(Name) %>%
     pull()
 
-  sequencing_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
+  temporary_seq_run_fp <- paste0(ec2_tmp_fp, sequencing_run)
 
-  # This command runs gzip separately from the tar command, in order to use the '-n' flag
-  # The '-n' flag removes the time stamp from the header when compressing, which will allow generating the md5 checksum to be more consistent
-  # The flags included in the tar command just tells the program to print a progress bar
-  bars <- 99
-  #these are the minimum files from the sequencing run that are required for demultiplexing
-  minimum_bs_files_pattern <- c("'SampleSheet.csv$'",
-                                "'.xml$'",
-                                "'/Data/'",
-                                "'/InterOp/'")
-  grep_command <- paste("grep", paste("-e", minimum_bs_files_pattern, collapse = " "))
+}
+
+# Run following commands in the cloud if run is on BaseSpace and EC2 access isn't an issue
+if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
 
   submit_screen_job(message2display = "Creating tarball of the sequencing run folder",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-tarball",
-                    command2run = paste("cd", paste0(sequencing_run_fp, ";"),
-                                        "echo Estimate:", paste0(c("[", rep("=", bars+1), "];"), collapse = ""),
-                                        "echo -n 'Progress: [ ';",
-                                        # pipe find command to grep and then tar
-                                        "find . -type f |",
-                                        grep_command,
-                                        "| tar",
-                                        "--checkpoint=`find", sequencing_run_fp, "-type f -exec du -ak --apparent-size {} + |",
-                                        # this 2nd grep command is only used for finding the file sizes to create the progress bar
-                                        grep_command, "| cut -f1 | awk '{s+=$1} END {print int(s /", bars, ")}'`",
-                                        # this flag shows a progress bar
-                                        "--checkpoint-action='ttyout=\b=>'",
-                                        # this flag shows the read/write speed
-                                        #"--checkpoint-action='ttyout=%{Bytes read, Bytes written, Bytes deleted}T, Time elapsed: %ds%*\r'",
-                                        "--record-size=1K",
-                                        "-cT -",
-                                        "| gzip -n >", paste0(ec2_tmp_fp, sequencing_run, ".tar.gz;"),
-                                        "echo ']\nTar completed!'")
+                    command2run = tar_command_function(temporary_seq_run_fp)
   )
 
   check_screen_job(message2display = "Checking tar job",
@@ -171,40 +193,76 @@ if(run_uploaded_2_basespace) {
 
 } else {
 
-  # If the run was not uploaded to BaseSpace, run this part
-  # Get the path of the local run folder
-  run_folder <- sequencing_folder_fp %>%
-    list.files(full.names = T) %>%
-    data.frame(filenames = .) %>%
-    filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
-    filter(grepl(sequencing_folder_regex, filenames)) %>%
-    filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
-    pull()
+  # Run the following commands if BaseSpace is available but not SSH (or if the run is MiSeq)
+  if(sequencer_type == "MiSeq" | run_uploaded_2_basespace) {
 
-  folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
-    as.Date(format = "%Y%m%d")
+    if(run_uploaded_2_basespace) {
+      run_folder <- temporary_seq_run_fp
+    } else {
+      run_folder <- sequencing_folder_fp %>%
+        list.files(full.names = T) %>%
+        data.frame(filenames = .) %>%
+        filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
+        filter(grepl(sequencing_folder_regex, filenames)) %>%
+        filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
+        pull()
 
-  sequencing_run <- gsub(".*/", "", run_folder)
+      folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
+        as.Date(format = "%Y%m%d")
 
-  if(folder_date != gsub("_.*", "", basename(here())) | is.na(folder_date)) {
-    stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+      sequencing_run <- gsub(".*/", "", run_folder)
+
+      if(folder_date != gsub("_.*", "", basename(here())) | is.na(folder_date)) {
+        stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
+      }
+    }
+
+    #tar the run folder
+    run_in_terminal(paste("echo 'Creating tarball of the sequencing run folder';",
+                          tar_command_function(run_folder, use_checkpoint = FALSE)))
+
+    rstudioapi::executeCommand('activateConsole')
+
+  } else if (sequencer_type == "NextSeq1k2k") {
+
+    run_folder_pattern <- paste0(gsub("^..|-", "", sequencing_date))
+    nextseq_run_fp <- "/usr/local/illumina/runs/"
+    sequencing_run <- system2("ssh", c("-tt", nextseq_hostname,
+                                       shQuote(paste("cd", paste0(nextseq_run_fp, ";"),
+                                                     "ls | grep", paste0("^", run_folder_pattern, "_VH"), "| tr -d '\n'"),
+                                               type = "sh")),
+                              stdout = TRUE)
+
+    run_in_terminal(paste("echo 'Creating NextSeq tar file';",
+                          "ssh -tt", nextseq_hostname,
+                          shQuote(paste("sleep 5;",
+                                        tar_command_function(paste0(nextseq_run_fp, sequencing_run),
+                                                             paste0(nextseq_run_fp, sequencing_run, "/", sequencing_run)))))
+    )
+
+    dir.create(ec2_tmp_fp, recursive = TRUE)
+
+    scp_command <- paste("scp -r",
+                         paste0(nextseq_hostname, ":", nextseq_run_fp, sequencing_run, "/", sequencing_run, ".tar.gz"),
+                         ec2_tmp_fp)
+
+    run_in_terminal(scp_command)
+
+    rstudioapi::executeCommand('activateConsole')
+
+    run_folder <- paste0(ec2_tmp_fp, sequencing_run)
+
   }
 
-  #tar the run folder
-  message("Making sequencing run tarball")
-  system2("tar", c("-czf", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"),
-                   "-C", shQuote(run_folder, type = "cmd"), "."))
-
-  message("Making md5 file")
-  md5_fp <- file.path(sequencing_folder_fp, paste0(sequencing_run, ".md5"))
-  paste0(sequencing_run, ".tar.gz") %>%
-    paste0(tools::md5sum(file.path(sequencing_folder_fp, .)), "  ", .) %>%
-    write(file = md5_fp)
+  message("\nMaking md5 file")
+  md5_fp <- paste0(run_folder, ".md5")
+  md5_value <- paste0(tools::md5sum(paste0(run_folder, ".tar.gz")), "  ", sequencing_run, ".tar.gz")
+  message(md5_value)
+  write(md5_value, file = md5_fp)
 
   message("Uploading local checksum and tarball files to AWS S3")
-  system2("aws", c("sso login"))
-  s3_cp_md5 <- system2("aws", c("s3 cp", shQuote(md5_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
-  s3_cp_run_tarball <- system2("aws", c("s3 cp", shQuote(paste0(run_folder, ".tar.gz"), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
+  s3_cp_md5 <- system2("aws", c("s3 cp", shQuote(path.expand(md5_fp), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
+  s3_cp_run_tarball <- system2("aws", c("s3 cp", shQuote(path.expand(paste0(run_folder, ".tar.gz")), type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 
   # If the aws-cli provides an SSL error on local machine, run the command through the instance
   if(length(s3_cp_md5) == 0 | length(s3_cp_run_tarball) == 0) {
@@ -247,7 +305,6 @@ nf_demux_samplesheet %>%
   write_csv(file = nf_demux_samplesheet_fp)
 
 message("Uploading samplesheets to AWS S3")
-system2("aws", c("sso login"))
 s3_cp_samplesheet <- system2("aws", c("s3 cp", shQuote(sample_sheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samplesheet_fp, type = "cmd"), s3_run_bucket_fp), stdout = TRUE)
 
@@ -262,23 +319,25 @@ if(length(s3_cp_samplesheet) == 0 | length(s3_cp_nf_demux_samplesheet) == 0) {
   )
 }
 
-# Upload data
-submit_screen_job(message2display = "Uploading run to S3",
-                  ec2_login = ec2_hostname,
-                  screen_session_name = "upload-run",
-                  command2run = paste("aws s3 cp",
-                                      ec2_tmp_fp,
-                                      s3_run_bucket_fp,
-                                      "--recursive",
-                                      "--exclude '*'",
-                                      paste0("--include '", sample_sheet_fn, "'"),
-                                      paste0("--include '", basename(nf_demux_samplesheet_fp), "'"),
-                                      paste0("--include '", sequencing_run, ".md5'"),
-                                      paste0("--include '", sequencing_run, ".tar.gz'"))
-)
+if(have_AWS_EC2_SSH_access) {
+  # Upload data
+  submit_screen_job(message2display = "Uploading run to S3",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = "upload-run",
+                    command2run = paste("aws s3 cp",
+                                        ec2_tmp_fp,
+                                        s3_run_bucket_fp,
+                                        "--recursive",
+                                        "--exclude '*'",
+                                        paste0("--include '", sample_sheet_fn, "'"),
+                                        paste0("--include '", basename(nf_demux_samplesheet_fp), "'"),
+                                        paste0("--include '", sequencing_run, ".md5'"),
+                                        paste0("--include '", sequencing_run, ".tar.gz'"))
+  )
 
-check_screen_job(message2display = "Checking run upload job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = "upload-run")
+  check_screen_job(message2display = "Checking run upload job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = "upload-run")
 
-rstudioapi::executeCommand('activateConsole')
+  rstudioapi::executeCommand('activateConsole')
+}
