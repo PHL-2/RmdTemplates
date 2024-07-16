@@ -605,7 +605,10 @@ cecret_software_select <- c("ivar", "bwa", "seqyclean", "Cecret version", "pango
 cecret_aggregate <- here("data", "processed_cecret", "cecret_results.csv") %>%
   read_csv() %>%
   select(-c(sample_id, samtools_meandepth_after_trimming, samtools_per_1X_coverage_after_trimming, fasta_line)) %>%
-  rename(sample_id = "sample", vadr_passfail = "vadr_p/f") %>%
+  rename(sample_id = "sample",
+         vadr_passfail = "vadr_p/f",
+         nextclade_qc_overallscore = "nextclade_qc.overallScore",
+         nextclade_qc_overallstatus = "nextclade_qc.overallStatus") %>%
   as.data.frame()
 
 cecret_aggregate %>%
