@@ -210,7 +210,8 @@ write_csv(top_unkwn_indices, unkwn_barcodes_fp)
 
 #throw error if the top unknown index is greater than 0.5% percent of all reads
 if(max(top_unkwn_indices$percent_of_all_reads) > 0.005) {
-  stop(simpleError("Top unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode"))
+  message("\n\nWarning:\nTop unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode!")
+  Sys.sleep(10)
 }
 
 non_ctrl_samples <- s_meta %>%
@@ -1065,9 +1066,13 @@ if(nrow(data_upload_all) != 0) {
             filter_n_pivot(db, "BioSample", "db_specific_field", "value")) %>%
     mutate(description = paste(sample_description, design_description),
           #need to fill these in
-           ww_surv_target_1_known_present = ifelse(N2_present, "Yes", "No"),
+           ww_surv_target_1_known_present = ifelse(has_N2,
+                                                   ifelse(N2_present, "Yes", "No"),
+                                                   ""),
            ww_surv_target_1_conc = ifelse(has_N2, `N2_gc/L`, ""), #this is the ddPCR transformed unit
-           ww_surv_target_2_known_present = ifelse(N2_present, "Yes", "No"),
+           ww_surv_target_2_known_present = ifelse(has_N2,
+                                                   ifelse(N2_present, "Yes", "No"),
+                                                   ""),
            ww_surv_target_2_conc = ifelse(has_N2, `E_gc/L`, ""),
            gisaid_accession = "") %>%
     select(-c(sample_description, design_description)) %>%

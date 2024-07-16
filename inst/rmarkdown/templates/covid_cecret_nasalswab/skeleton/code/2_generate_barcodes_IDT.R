@@ -254,7 +254,7 @@ if(run_uploaded_2_basespace) {
       sample_sheet_copy <- file.copy(file.path(run_folder, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
 
       if(length(sample_sheet_copy) == 0) {
-        stop(simpleError(paste("\nCould not find MiSeq SampleSheet.csv in", sequencing_folder_fp)))
+        stop(simpleError(paste("\nCould not find SampleSheet.csv from MiSeq run", sequencing_date, "in", sequencing_folder_fp)))
       }
     }
 
@@ -275,7 +275,7 @@ if(run_uploaded_2_basespace) {
     if(!samplesheet_exists) {
 
       message("\n\n\n*****")
-      message("Transferring NextSeq run")
+      message("Transferring NextSeq SampleSheet.csv")
       message("*****")
       Sys.sleep(5)
 
@@ -284,6 +284,7 @@ if(run_uploaded_2_basespace) {
                            here("metadata", "munge", "SampleSheet.csv"))
 
       run_in_terminal(scp_command)
+      rstudioapi::executeCommand('activateConsole')
     }
   }
 }

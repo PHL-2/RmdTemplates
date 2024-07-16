@@ -2,6 +2,7 @@ library(here)
 library(dplyr)
 library(tidyr)
 library(stringr)
+library(readr)
 system2("aws", c("sso login"))
 
 #This Rscript uploads the sequencing run and related files to S3
@@ -73,13 +74,17 @@ if(length(sample_sheet_fn) > 1) {
 
 sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq1k2k)_.*", "\\1", sample_sheet_fn)
 
+#these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
+sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
+                             sequencer_type == "NextSeq1k2k" ~ "VH")
+
+sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*$")
+
 sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
 
 prj_description <- gsub(paste0("^[0-9-]*_.*", sample_type_acronym, "_|_.*"), "", sample_sheet_fn)
 
 s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
-
-sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9A-Z-]*$")
 
 tar_command_function <- function(input_fp, output_fp = input_fp, bars = 99, use_checkpoint = TRUE) {
 
@@ -139,22 +144,7 @@ if(run_uploaded_2_basespace) {
     slice(-1) %>%
     filter(grepl(paste0("^", sequencing_folder_regex), Name))
 
-  if(nrow(bs_run) > 1) {
-    warning(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
-                                 "Currently, you are pulling the sequencing run from the ", sequencer_type, "\n\n")))
-
-    #these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
-    sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
-                                 sequencer_type == "NextSeq1k2k" ~ "VH")
-
-    intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*$")
-
-    bs_run <- bs_run %>%
-      filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
-
-  }
-
-  if (nrow(bs_run) == 0) {
+  if (nrow(bs_run) != 1) {
     stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace for this date: ", sequencing_date,
                             "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
                             "\nThe sequencer type could also be wrong: ", sequencer_type,
@@ -247,13 +237,13 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
                           "ssh -tt", nextseq_hostname,
                           shQuote(paste("sleep 5;",
                                         tar_command_function(paste0(nextseq_run_fp, sequencing_run),
-                                                             paste0("~/Downloads/runs/", sequencing_run)))))
+                                                             paste0(nextseq_run_fp, sequencing_run, "/", sequencing_run)))))
     )
 
     dir.create(ec2_tmp_fp, recursive = TRUE)
 
     scp_command <- paste("scp -r",
-                         paste0(nextseq_hostname, ":~/Downloads/runs/", sequencing_run, ".tar.gz"),
+                         paste0(nextseq_hostname, ":", nextseq_run_fp, sequencing_run, "/", sequencing_run, ".tar.gz"),
                          ec2_tmp_fp)
 
     run_in_terminal(scp_command)
@@ -264,7 +254,7 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
 
   }
 
-  message("Making md5 file")
+  message("\nMaking md5 file")
   md5_fp <- paste0(run_folder, ".md5")
   md5_value <- paste0(tools::md5sum(paste0(run_folder, ".tar.gz")), "  ", sequencing_run, ".tar.gz")
   message(md5_value)
