@@ -87,6 +87,8 @@ nf_demux_samplesheet_path <- paste(s3_run_bucket, sequencing_date,
 
 bclconvert_output_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sep = "/")
 
+workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sequencer_type, sep = "/")
+
 # Demultiplexing
 submit_screen_job(message2display = "Demultiplexing with BCLConvert",
                   ec2_login = ec2_hostname,
@@ -333,8 +335,6 @@ if(update_freyja_and_cecret_pipeline) {
                    ec2_login = ec2_hostname,
                    screen_session_name = "update-cecret")
 }
-
-workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sequencer_type, sep = "/")
 
 # Cecret pipeline
 submit_screen_job(message2display = "Processing data through Cecret pipeline",
