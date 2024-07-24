@@ -179,36 +179,19 @@ combined_list <- select(selection_data, sample_group, sample_collect_date) %>%
   arrange(order) %>%
   select(sample_name) %>%
   #put samples in groups of 8
-  mutate(grp = (row_number() - 1) %/% 8)
-
-combined_list_first_half <- data.frame(sample_name = "NC-pre-extract", grp = 0) %>%
-  rbind(combined_list) %>%
-  filter(grp < 7)
-
-combined_list_second_half <- data.frame(sample_name = "NC-pre-extract", grp = 7) %>%
-  rbind(combined_list) %>%
-  filter(grp >= 7)
-
-if(nrow(combined_list_second_half) == 1) {
-  combined_list_second_half <- data.frame(sample_name = "", grp = "")
-}
-
-plate_view <- combined_list_first_half %>%
-  rbind(combined_list_second_half) %>%
+  mutate(grp = (row_number() - 1) %/% 8) %>%
+  add_row(., sample_name = paste0("NC-pre-extract", 1:8), .before = ceiling(median(.$grp))*8+1) %>%
   filter(sample_name != "") %>%
-  group_by(grp) %>%
-  group_modify(~ add_row(.x, sample_name = "NC-pre-extract")) %>%
-  ungroup() %>%
-  select(-grp) %>%
-  mutate(number = cumsum(duplicated(sample_name)) + 1) %>%
-  mutate(sample_name = ifelse(sample_name == "NC-pre-extract", paste0(sample_name, number), sample_name)) %>%
-  select(-number) %>%
-  rbind(data.frame(sample_name = c("BLANK", "PC", "NC-pre-cDNA", "NC-pre-ARTIC", "NC-pre-library"))) %>%
+  select(-grp)
+
+plate_view <- combined_list %>%
+  rbind(data.frame(sample_name = c("NC-pre-extract9", "BLANK", "PC", "NC-pre-cDNA", "NC-pre-ARTIC", "NC-pre-library"))) %>%
   mutate(sample_order = row_number()) %>%
   merge(empty_plate, by = "sample_order", all = TRUE, sort = FALSE) %>%
   mutate(sample_name = case_when(sample_order == 96 ~ "NC-corner",
                                  is.na(sample_name) ~ "",
-                                 TRUE ~ sample_name))
+                                 TRUE ~ sample_name)) %>%
+  arrange(sample_order)
 
 real_plate_view <- plate_view %>%
   select(sample_name, plate_row, plate_col) %>%

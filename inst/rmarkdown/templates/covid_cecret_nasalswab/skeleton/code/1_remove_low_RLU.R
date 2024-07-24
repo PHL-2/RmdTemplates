@@ -430,7 +430,8 @@ plate_view <- combined_list_first_half %>%
   merge(empty_plate, by = "sample_order", all = TRUE) %>%
   mutate(sample_name = case_when(sample_order == 96 ~ "NC-corner",
                                  is.na(sample_name) ~ "",
-                                 TRUE ~ sample_name))
+                                 TRUE ~ sample_name)) %>%
+  arrange(sample_order)
 
 real_plate_view <- plate_view %>%
   select(sample_name, plate_row, plate_col) %>%
