@@ -375,7 +375,7 @@ if(ncol(ddPCR_data) == 0) {
            !matches("^\\.\\.\\.")) %>%
     rename(any_of(c(sample_group = "sample_id"))) %>%
     mutate(sample_group = as.character(sample_group),
-           sample_collect_date = as.Date(sample_collect_date)) %>%
+           sample_collect_date = as.Date(sample_collect_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
     as.data.frame()
 
 }

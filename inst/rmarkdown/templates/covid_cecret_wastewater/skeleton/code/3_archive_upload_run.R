@@ -144,7 +144,7 @@ if(run_uploaded_2_basespace) {
     slice(-1) %>%
     filter(grepl(paste0("^", sequencing_folder_regex), Name))
 
-  if (nrow(bs_run) != 0) {
+  if (nrow(bs_run) != 1) {
     stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace for this date: ", sequencing_date,
                             "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
                             "\nThe sequencer type could also be wrong: ", sequencer_type,
