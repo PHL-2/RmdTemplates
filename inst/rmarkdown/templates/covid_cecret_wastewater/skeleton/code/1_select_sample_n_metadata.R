@@ -168,12 +168,16 @@ if(length(older_samples_fp) > 0) {
 # Combine samples
 #################
 
+sample_group_order <- c("ZeptoSC2", "SouthWest", "NorthEast", "SouthEast", "oldWW")
+
 combined_list <- select(selection_data, sample_group, sample_collect_date) %>%
   rbind(older_samples) %>%
   filter(sample_group != "",
          !is.na(sample_collect_date)) %>%
-  mutate(samp_name = paste0("WW-", sample_collect_date, "-", sample_group),
-         order = 1:nrow(.)) %>%
+  mutate(sample_group = factor(sample_group, levels = sample_group_order),
+         samp_name = paste0("WW-", sample_collect_date, "-", sample_group)) %>%
+  arrange(sample_collect_date, sample_group) %>%
+  mutate(order = 1:nrow(.)) %>%
   expand(nesting(samp_name, order), rep = paste0("-Rep", 1:create_sample_replicates)) %>%
   mutate(sample_name = paste0(samp_name, rep)) %>%
   arrange(order) %>%
