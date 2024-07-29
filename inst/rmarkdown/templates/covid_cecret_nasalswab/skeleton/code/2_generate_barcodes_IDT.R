@@ -16,7 +16,7 @@ run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to B
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
 
-have_AWS_EC2_SSH_access <- FALSE
+have_AWS_EC2_SSH_access <- TRUE
 
 remove_sample_from_samplesheets <- c("")
 

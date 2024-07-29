@@ -13,7 +13,7 @@ system2("aws", c("sso login"))
 
 run_uploaded_2_basespace <- TRUE #is the sequencing run on basespace?
 
-have_AWS_EC2_SSH_access <- FALSE
+have_AWS_EC2_SSH_access <- TRUE
 
 # temporary directory holding the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl/"
