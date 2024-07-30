@@ -130,10 +130,10 @@ library(here)
 #this file needs to sit in a [aux_files/config] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 

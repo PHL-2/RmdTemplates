@@ -296,7 +296,7 @@ instrument_type <- data.frame(values = unlist(run_sample_sheet$Header)) %>%
   mutate(col_names = gsub(",.*", "", values)) %>%
   mutate(col_names = gsub(" ", "_", col_names)) %>%
   mutate(values = gsub(".*,", "", values)) %>%
-  filter(grepl("instrument_type|InstrumentPlatform", col_names)) %>%
+  filter(grepl("instrument_type|InstrumentPlatform", col_names, ignore.case = TRUE)) %>%
   select(values) %>%
   pull()
 
