@@ -11,8 +11,9 @@ system2("aws", c("sso login"))
 # Manual input
 ##############
 
-run_uploaded_2_basespace <- TRUE #is the sequencing run on basespace?
-
+if(!exists("run_uploaded_2_basespace")){
+  run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
+}
 have_AWS_EC2_SSH_access <- FALSE
 
 # temporary directory holding the sequencing run download
