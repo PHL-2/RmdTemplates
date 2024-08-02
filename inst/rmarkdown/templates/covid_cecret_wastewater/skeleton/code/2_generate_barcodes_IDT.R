@@ -18,7 +18,7 @@ if(!exists("run_uploaded_2_basespace")){
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
 
-have_AWS_EC2_SSH_access <- FALSE
+have_AWS_EC2_SSH_access <- TRUE
 
 remove_sample_from_bcl_samplesheet <- c("") #add in sample names to remove from demultiplexing
 
@@ -299,7 +299,7 @@ instrument_type <- data.frame(values = unlist(run_sample_sheet$Header)) %>%
   mutate(col_names = gsub(",.*", "", values)) %>%
   mutate(col_names = gsub(" ", "_", col_names)) %>%
   mutate(values = gsub(".*,", "", values)) %>%
-  filter(grepl("instrument_type|InstrumentPlatform", col_names)) %>%
+  filter(grepl("instrument_type|InstrumentPlatform", col_names, ignore.case = TRUE)) %>%
   select(values) %>%
   pull()
 

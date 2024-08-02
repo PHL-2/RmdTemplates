@@ -177,34 +177,28 @@ library(readr)
 library(tidyverse)
 library(reticulate)
 
-#initialize the seqsender conda environment if it hasn't been already
-if(!grepl("seqsender", Sys.which("python"))) {
-  use_condaenv("seqsender", required = TRUE)
-  import("os")
-}
-
 #load variables
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 #load functions
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "functions", "R_all_functions_v3.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "functions", "R_all_functions_v3.R"))
   },
   error = function(e) {
-  stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/functions] directory path above this project directory"))
+  stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory"))
   }
 )
 
 project_name <- basename(here())
 seqsender_py <- file.path(seqsender_fp, "seqsender.py")
-aux_seqsender_fp <- file.path(dirname(here()), "aux_files", "seqsender")
+aux_seqsender_fp <- file.path(dirname(here()), "aux_files", "data_submission", "seqsender")
 seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.tsv", sep = "_"))
 fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
 

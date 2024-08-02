@@ -783,7 +783,7 @@ fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")
 
 ```
 
-```{r save fastq and fasta for upload, eval = FALSE}
+```{r save fastq and fasta for upload}
 
 #get only the good quality samples to upload
 s_upload <- s_toPlot %>%
@@ -1006,29 +1006,29 @@ if(have_phi) {
 }
 
 #check the fastq files to upload; should be 1 set here
-# fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
-#   data.frame(FileName = .) %>%
-#   mutate(sample_id = gsub(".*upload/fastq/|_S[0-9]*|_filtered_R[12].fastq.gz$", "", FileName)) %>%
-#   mutate(file = gsub(".*/", "", FileName)) %>%
-#   select(-FileName)
-# 
-# fastq2_compare <- fastq_2_upload %>%
-#   filter(grepl("_filtered_R1.fastq.gz", file))
-# 
-# if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
-#   stop (simpleError("Missing some fastq files!"))
-# }
+fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
+  data.frame(FileName = .) %>%
+  mutate(sample_id = gsub(".*upload/fastq/|_S[0-9]*|_filtered_R[12].fastq.gz$", "", FileName)) %>%
+  mutate(file = gsub(".*/", "", FileName)) %>%
+  select(-FileName)
+
+fastq2_compare <- fastq_2_upload %>%
+  filter(grepl("_filtered_R1.fastq.gz", file))
+
+if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
+  stop (simpleError("Missing some fastq files!"))
+}
 
 #check the fasta files to upload; should be 1 set here
-# fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
-#   filter(grepl("^>", X1)) %>%
-#   mutate(sample_id = gsub("^>|_S[0-9]*$", "", X1)) %>%
-#   mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
-#   select(-X1)
+fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
+  filter(grepl("^>", X1)) %>%
+  mutate(sample_id = gsub("^>|_S[0-9]*$", "", X1)) %>%
+  mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
+  select(-X1)
 
-check_all <- all_sample_ids_from_seqsender# %>%
-  # rbind(fastq2_compare) %>%
-  # rbind(fasta_samples)
+check_all <- all_sample_ids_from_seqsender %>%
+  rbind(fastq2_compare) %>%
+  rbind(fasta_samples)
 
 if (have_phi) {
   check_all <- check_all %>%
