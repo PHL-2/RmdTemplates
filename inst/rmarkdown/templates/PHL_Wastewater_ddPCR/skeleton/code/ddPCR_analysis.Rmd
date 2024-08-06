@@ -181,6 +181,7 @@ if (variance_test) {
 
 if (signal_check) {
       print(paste("Detected wells with no signal:", paste(wellsToRemove2, collapse =", "), collapse = " "))
+  signalNominal <- FALSE
 } else {
   signalNominal <- TRUE
   print("Signal nominal")

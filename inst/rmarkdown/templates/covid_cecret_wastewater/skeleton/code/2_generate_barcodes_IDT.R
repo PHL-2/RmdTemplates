@@ -12,7 +12,9 @@ library(stringr)
 # Manual input
 ##############
 
-run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
+if(!exists("run_uploaded_2_basespace")){
+  run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
+}
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
 
