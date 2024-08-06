@@ -197,9 +197,8 @@ top_unkwn_indices <- read_delim(top_unkwn_fp) %>%
 write_csv(top_unkwn_indices, unkwn_barcodes_fp)
 
 #throw error if the top unknown index is greater than 0.5% percent of all reads
-if(max(top_unkwn_indices$percent_of_all_reads) > 0.005) {
-  message("\n\nWarning:\nTop unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode!")
-  Sys.sleep(10)
+if(max(top_unkwn_indices$percent_of_all_reads) > 0.005 & unique(s_meta$instrument_type) == "MiSeq") {
+  stop(simpleError("Top unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode"))
 }
 
 non_ctrl_samples <- s_meta %>%
@@ -895,33 +894,21 @@ rerun_samples <- s %>%
   select(sample_id) %>%
   pull()
 
+total_file_sets_2_count <- 3
+
 #number of samples to submit
 #check the seqsender file to upload to ncbi
 seqsender_2_upload_fp <- list.files(here("upload", "seqsender"), pattern = ".tsv", recursive = TRUE, full.names = TRUE)
 
 all_sample_ids_from_seqsender <- seqsender_2_upload_fp %>%
   read_tsv()%>%
-  select(sample_id, genbank_name, sra_name, gisaid_name) %>%
-  mutate(gisaid_name = gsub(".*PA-", "", gisaid_name)) %>%
-  #changing the year at the end of the gisaid name back to the sequencing year
-  mutate(gisaid_name = gsub("/.*$", paste0("/", str_sub(project_name, 1, 4)), gisaid_name)) %>%
-  mutate(gisaid_name = gsub(format(sequencing_date, "%m%d/%Y"), format(sequencing_date, "%Y%m%d"), gisaid_name)) %>%
-  pivot_longer(cols = c("genbank_name", "sra_name", "gisaid_name"), names_to = "file", values_to = "upload_id") %>%
-  mutate(upload_id = gsub(".*/USA/|/.*", "", upload_id)) %>%
-  mutate(all_sample_same = upload_id == sample_id)
-
-if (!all(all_sample_ids_from_seqsender$all_sample_same)) {
-  stop (simpleError("Some of the database names don't match the sample_id names! The GenBank name may also be missing because it didn't pass vadr check. Try submitting the GenBank files anyway through seqsender to see if it passes"))
-}
-
-all_sample_ids_from_seqsender %<>% select(file, upload_id) %>%
-  rename(sample_id = "upload_id")
-
-run_check_all_chunk <- any(grepl("Nasal swab", sample_type_lvls))
-
-```
-
-```{r check all files generated, eval = run_check_all_chunk}
+  select(genbank_name, sra_name, gisaid_name) %>%
+  mutate(gisaid_name = gsub(".*PA-", "", gisaid_name),
+         #changing the year at the end of the gisaid name back to the sequencing year
+         gisaid_name = gsub("/.*$", paste0("/", str_sub(project_name, 1, 4)), gisaid_name),
+         gisaid_name = gsub(format(sequencing_date, "%m%d/%Y"), format(sequencing_date, "%Y%m%d"), gisaid_name)) %>%
+  pivot_longer(cols = c("genbank_name", "sra_name", "gisaid_name"), names_to = "file", values_to = "sample_id") %>%
+  mutate(sample_id = gsub(".*/USA/|/.*", "", sample_id))
 
 #check the csv file for the epi's
 if(have_phi) {
@@ -935,52 +922,26 @@ if(have_phi) {
     mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
     mutate(file = "epi") %>%
     select(file, sample_id)
-
-}
-
-#check the fastq files to upload; should be 1 set here
-# fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
-#   data.frame(FileName = .) %>%
-#   mutate(sample_id = gsub(".*upload/fastq/|_S[0-9]*|_filtered_R[12].fastq.gz$", "", FileName)) %>%
-#   mutate(file = gsub(".*/", "", FileName)) %>%
-#   select(-FileName)
-# 
-# fastq2_compare <- fastq_2_upload %>%
-#   filter(grepl("_filtered_R1.fastq.gz", file))
-# 
-# if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
-#   stop (simpleError("Missing some fastq files!"))
-# }
-
-#check the fasta files to upload; should be 1 set here
-# fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
-#   filter(grepl("^>", X1)) %>%
-#   mutate(sample_id = gsub("^>|_S[0-9]*$", "", X1)) %>%
-#   mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
-#   select(-X1)
-
-check_all <- all_sample_ids_from_seqsender #%>%
-  # rbind(fastq2_compare) %>%
-  # rbind(fasta_samples)
-
-if (have_phi) {
-  check_all <- check_all %>%
+  
+  all_sample_ids_from_seqsender <- all_sample_ids_from_seqsender %>%
     rbind(epi_report)
   
   total_file_sets_2_count <- 4
-  
-} else {
-  total_file_sets_2_count <- 3
-  
+
 }
 
-check_all %<>%
+all_sample_ids_from_seqsender %<>%
   group_by(sample_id) %>%
   mutate(count_all_samples = n()) %>%
-  ungroup()
+  ungroup() %>%
+  filter(!is.na(sample_id))
 
-if (!all(check_all$count_all_samples == total_file_sets_2_count)) {
-  stop (simpleError("Some files are missing samples to upload!"))
+if (!all(all_sample_ids_from_seqsender$count_all_samples == total_file_sets_2_count)) {
+  View(all_sample_ids_from_seqsender)
+  stop(simpleError(paste0("\nSome of the files generated for data submission is missing!",
+                          "\nCheck to see if the file names or sample id names are misformatted",
+                          "\nIf this error is occuring because the GenBank file is missing (NA), the file probably didn't pass the VADR check",
+                          "\nIf that's the case, comment out this message and continue with the code")))
 }
 
 ```

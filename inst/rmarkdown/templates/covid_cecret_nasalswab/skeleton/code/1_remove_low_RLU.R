@@ -58,28 +58,30 @@ tryCatch(
 ###################################################
 
 # Look for this harvest report in extra_metadata folder
-RLU_file_name <- "COVID_harvest_report.csv"
-RLU_fp <- list.files(here("metadata", "extra_metadata"), pattern = paste0(RLU_file_name, "$"), full.names = TRUE)
+harvest_fn <- "COVID_harvest_report.csv"
+harvest_fp <- list.files(here("metadata", "extra_metadata"), pattern = paste0(harvest_fn, "$"), full.names = TRUE)
 
 # If the harvest file does not exist, grab it from the shared drive
 # the harvest report is automatically generated each Monday and deposited onto the shared drive
-if(length(RLU_fp) == 0) {
+if(length(harvest_fp) == 0) {
 
   #path of harvest report
-  shared_RLU_fp <- list.files(file.path(shared_drive_fp, "Sequencing_harvest_reports"), pattern = paste0("^", RLU_file_name, "$"), full.names = TRUE)
+  shared_harvest_fp <- list.files(file.path(shared_drive_fp, "Sequencing_harvest_reports"), pattern = paste0("^", harvest_fn, "$"), full.names = TRUE)
 
   #add date to harvest report filename
-  date_RLU_file_name <- paste0(format(Sys.time(), "%Y%m%d"), "_", RLU_file_name)
-  RLU_fp <- here("metadata", "extra_metadata", date_RLU_file_name)
+  date_harvest_fn <- paste0(format(Sys.time(), "%Y%m%d"), "_", harvest_fn)
+  harvest_fp <- here("metadata", "extra_metadata", date_harvest_fn)
 
-  file.copy(shared_RLU_fp, RLU_fp)
+  file.copy(shared_harvest_fp, harvest_fp)
 
   #rename harvest report so the program can make a new report each week
-  file.rename(shared_RLU_fp, file.path(dirname(shared_RLU_fp), date_RLU_file_name))
+  file.rename(shared_harvest_fp, file.path(dirname(shared_harvest_fp), date_harvest_fn))
 
 }
 
-RLU_data <- read_csv(RLU_fp) %>%
+harvest_data <- read_csv(harvest_fp)
+
+RLU_data <- harvest_data %>%
   filter(Test == "SARSCoV2-1") %>%
   rename(SPECIMEN_NUMBER = "Sample ID", SPECIMEN_DATE = "Draw Date", RLU = "Num Res", BIRTH_DATE = "DOB") %>%
   select(SPECIMEN_NUMBER, SPECIMEN_DATE, BIRTH_DATE, RLU) %>%
@@ -91,7 +93,7 @@ RLU_data <- read_csv(RLU_fp) %>%
 # Get HC1 samples
 #################
 
-HC1_samples <- read_csv(RLU_fp) %>%
+HC1_samples <- harvest_data %>%
   filter(Test == "POCT 4 Plex Sars-CoV-2") %>%
   select(`Sample ID`) %>%
   pull()
@@ -100,7 +102,7 @@ HC1_samples <- read_csv(RLU_fp) %>%
 # Get GeneXpert samples
 ###################################################
 
-GX_samples <- read_csv(RLU_fp) %>%
+GX_samples <- harvest_data %>%
   filter(Test == "GeneXpert 4Plex Sars-CoV-2") %>%
   select(`Sample ID`) %>%
   pull()
@@ -109,7 +111,7 @@ GX_samples <- read_csv(RLU_fp) %>%
 # Get Respiratory Panel samples
 ###################################################
 
-Resp_samples <- read_csv(RLU_fp) %>%
+Resp_samples <- harvest_data %>%
   filter(Test == "Severe Acute Respiratory Syndrome Coronavirus 2 (SARS-CoV-2)") %>%
   select(`Sample ID`) %>%
   pull()
@@ -118,7 +120,7 @@ Resp_samples <- read_csv(RLU_fp) %>%
 # Get samples from Medical Examiner Office
 ###################################################
 
-MEO_samples <- read_csv(RLU_fp) %>%
+MEO_samples <- harvest_data %>%
   filter(Test == "MEO POC Test Result") %>%
   select(`Sample ID`) %>%
   pull()
