@@ -591,6 +591,7 @@ cecret_software_select <- c("ivar", "bwa", "seqyclean", "Cecret version", "pango
 #pangolin data is included with this summary file
 cecret_aggregate <- here("data", "processed_cecret", "cecret_results.csv") %>%
   read_csv() %>%
+  mutate(sample_number = as.numeric(gsub("^.*_S", "", sample_id))) %>%
   select(-c(sample_id, samtools_meandepth_after_trimming, samtools_per_1X_coverage_after_trimming, fasta_line)) %>%
   rename(sample_id = "sample",
          vadr_passfail = "vadr_p/f",
@@ -779,74 +780,6 @@ seqsender_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "
 
 epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
 seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.tsv", sep = "_"))
-fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
-
-```
-
-```{r save fastq and fasta for upload}
-
-#get only the good quality samples to upload
-s_upload <- s_toPlot %>%
-  filter4report() %>%
-  select(sample_id) %>%
-  pull()
-
-if(length(s_upload) > 0) {
-
-  #make folder for fastq files
-  dir.create(here("upload", "fastq"), recursive = TRUE)
-  
-  #fastq files for SRA submission
-  #these "filtered" fastq files are reads that aligned to the reference genome but they have not been primer trimmed
-  fastq_fps <- list.files(here("data", "processed_cecret", "filter"), pattern = "*_filtered_R[12].fastq.gz", recursive = TRUE, full.names = TRUE)
-  
-  fastq2upload <- fastq_fps[grepl(paste0(s_upload, collapse = "|"), fastq_fps)]
-  
-  #move files to upload folder
-  for(fastq_name_fp in fastq2upload) {
-    file.copy(fastq_name_fp, to = here("upload", "fastq", gsub(".*/", "", fastq_name_fp)))
-  }
-  
-  #make folder for fasta files
-  dir.create(here("upload", "fasta"), recursive = TRUE)
-  
-  #find all fasta files
-  fasta_fps <- list.files(here("data", "processed_cecret", "consensus"), pattern = ".consensus.fa", recursive = TRUE, full.names = TRUE)
-  
-  #vadr is the software that can test for success or fail of GenBank submission
-  #test to see if the FASTA file for vadr failed samples
-  #If using this filter, the Seqsender metadata will still contain the failed samples; can non-matching metadata and fasta file be submitted to GenBank?
-  fasta_upload_vadr_filter <- s_toPlot %>%
-    filter(sample_id %in% s_upload) %>%
-    filter(vadr_passfail == "PASS") %>%
-    select(sample_id) %>%
-    pull()
-  
-  fasta2upload <- fasta_fps[grepl(paste0(fasta_upload_vadr_filter, collapse = "|"), fasta_fps)]
-
-  fasta2upload %>%
-    data_frame(FileName = .) %>%
-    group_by(FileName) %>%
-    do(read.delim(.$FileName, header = FALSE)) %>%
-    ungroup() %>%
-    #rename the header of the fasta file
-    mutate(V1 = gsub("Consensus_|.consensus.*", "", V1)) %>%
-    mutate(is_header = grepl("^>", V1)) %>%
-    group_by(FileName, is_header) %>%
-    mutate(concat_fasta = paste0(V1, collapse = "")) %>%
-    ungroup() %>%
-    # the following lines can be used to check that the fasta file is concatenated correctly
-    #rowwise() %>%
-    #mutate(find_string_position = unlist(gregexpr(V1, concat_fasta))[1]) %>%
-    #mutate(len = nchar(concat_fasta)) %>%
-    select(concat_fasta) %>%
-    unique() %>%
-    #have to manually remove terminal N's for GenBank submission
-    mutate(concat_fasta = gsub("^N*N|N*N$", "", concat_fasta)) %>%
-    #this na argument needs to be blank, otherwise it will put strings beginning with the first two letters in quotes
-    write_delim(file = fasta_fp, delim = "", col_names = FALSE, na = "")
-  
-}
 
 ```
 
@@ -875,7 +808,7 @@ epi_report %>%
 
 ```{r export data to upload to NCBI}
 
-ec2_upload_fp <- paste0("~/seqsender_upload/", sequencing_date, "/")
+ec2_upload_fp <- paste(seqsender_upload_tmp_fp, "NS", project_name, "processed_cecret", "filter", sep = "/")
 
 dir.create(here("upload", "seqsender"), recursive = TRUE)
 
@@ -926,8 +859,8 @@ seqsender <- s_toPlot %>%
   mutate(orig_lab_address = case_when(orig_lab == "Philadelphia Department of Public Health" ~ "1930 South Broad Street Suite 37, Philadelphia, PA 19145 USA",
                                       orig_lab == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122 USA",
                                       TRUE ~ "Unknown")) %>%
-  mutate(sra_file_path_1 = paste0(ec2_upload_fp, sample_id, "_filtered_R1.fastq.gz"),
-         sra_file_path_2 = paste0(ec2_upload_fp, sample_id, "_filtered_R2.fastq.gz")) %>%
+  mutate(sra_file_path_1 = paste0(ec2_upload_fp, "/", sample_id, "_S", sample_number, "_filtered_R1.fastq.gz"),
+         sra_file_path_2 = paste0(ec2_upload_fp, "/", sample_id, "_S", sample_number, "_filtered_R2.fastq.gz")) %>%
   mutate(design_description = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC ", artic_primer_scheme,
                                      " primer scheme. Sequencing was performed using the Illumina MiSeq instrument with 2x", read_length,
                                      " bp chemistry. Libraries were prepared using Illumina COVIDSeq Test kit.")) %>%
@@ -1006,29 +939,29 @@ if(have_phi) {
 }
 
 #check the fastq files to upload; should be 1 set here
-fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
-  data.frame(FileName = .) %>%
-  mutate(sample_id = gsub(".*upload/fastq/|_S[0-9]*|_filtered_R[12].fastq.gz$", "", FileName)) %>%
-  mutate(file = gsub(".*/", "", FileName)) %>%
-  select(-FileName)
-
-fastq2_compare <- fastq_2_upload %>%
-  filter(grepl("_filtered_R1.fastq.gz", file))
-
-if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
-  stop (simpleError("Missing some fastq files!"))
-}
+# fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
+#   data.frame(FileName = .) %>%
+#   mutate(sample_id = gsub(".*upload/fastq/|_S[0-9]*|_filtered_R[12].fastq.gz$", "", FileName)) %>%
+#   mutate(file = gsub(".*/", "", FileName)) %>%
+#   select(-FileName)
+# 
+# fastq2_compare <- fastq_2_upload %>%
+#   filter(grepl("_filtered_R1.fastq.gz", file))
+# 
+# if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
+#   stop (simpleError("Missing some fastq files!"))
+# }
 
 #check the fasta files to upload; should be 1 set here
-fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
-  filter(grepl("^>", X1)) %>%
-  mutate(sample_id = gsub("^>|_S[0-9]*$", "", X1)) %>%
-  mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
-  select(-X1)
+# fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
+#   filter(grepl("^>", X1)) %>%
+#   mutate(sample_id = gsub("^>|_S[0-9]*$", "", X1)) %>%
+#   mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
+#   select(-X1)
 
-check_all <- all_sample_ids_from_seqsender %>%
-  rbind(fastq2_compare) %>%
-  rbind(fasta_samples)
+check_all <- all_sample_ids_from_seqsender #%>%
+  # rbind(fastq2_compare) %>%
+  # rbind(fasta_samples)
 
 if (have_phi) {
   check_all <- check_all %>%

@@ -21,8 +21,18 @@ s3_nextflow_work_bucket <- "s3://"
 # s3 bucket holding reference data files
 s3_reference_bucket <- "s3://"
 
+##################
+# AWS EC2 settings
+##################
+
 #host name of the ec2 instance in the .ssh/config file
 ec2_hostname <- ""
+
+# full path of where the seqsender repo was cloned on EC2 instance that holds the seqsender.py file
+seqsender_fp <- "path/to/seqsender"
+
+# full path of where to keep the fasta and fastq files for upload
+seqsender_upload_tmp_fp <- "path/to/upload/folder"
 
 ####################
 # Sequencer settings
@@ -60,9 +70,6 @@ shared_drive_fp <- "path/to/shared/drive"
 # full path of the directory holding the WW ddPCR run info
 ddPCR_run_fp <- "path/to/local/ddpcr/folder"
 
-# full path of where the seqsender repo was cloned
-seqsender_fp <- "path/to/seqsender"
-
 # MacOS shell command
 sh_exe_fp <- "sh"
 
@@ -87,7 +94,7 @@ if(Sys.info()["sysname"] == "Windows")
 }
 
 #find s3 path variables and remove any trailing slashes
-ls(pattern = "^s3_") %>%
+ls(pattern = "^s3_|_fp$") %>%
   mapply(assign,
          .,
          sapply(., function(x) gsub("/$", "", eval(parse(text = x)))),

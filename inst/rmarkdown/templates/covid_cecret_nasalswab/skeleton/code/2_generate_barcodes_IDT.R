@@ -21,7 +21,7 @@ have_AWS_EC2_SSH_access <- TRUE
 remove_sample_from_samplesheets <- c("")
 
 # temporary directory to hold the sequencing run download
-ec2_tmp_fp <- "~/tmp_bs_dl/"
+ec2_tmp_fp <- "~/tmp_bs_dl"
 
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
@@ -190,7 +190,7 @@ if(run_uploaded_2_basespace) {
 
   if(!samplesheet_exists) {
 
-    temporary_seq_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
+    temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", sequencing_run, "/")
     bs_dl_cmd <- paste("bs download runs --id", bs_run_id, "--output", temporary_seq_run_fp)
 
     if(have_AWS_EC2_SSH_access) {
@@ -384,7 +384,7 @@ if(ncol(PHL_data) == 2) {
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     #make these columns character vectors
-    mutate(across(c(sample_name, case_id, breakthrough_case, priority, gender), as.character))
+    mutate_at(vars(any_of(c(phi_info, "gender"))), as.character)
 
 }
 
@@ -434,7 +434,7 @@ if(ncol(TU_data) == 2) {
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     #make these columns character vectors
-    mutate(across(c(sample_name, case_id, breakthrough_case, priority, gender), as.character))
+    mutate_at(vars(any_of(c(phi_info, "gender"))), as.character)
 }
 
 if(nrow(TU_data) > 0) {
@@ -489,7 +489,7 @@ other_data <- data.frame(sample_name = NA,
                          RLU = NA_real_,
                          gender = NA,
                          age = NA_integer_,
-                         zip_char = NA_integer_
+                         zip_char = NA_character_
 )
 
 for(sheet_name in other_sheets) {

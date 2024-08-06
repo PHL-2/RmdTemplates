@@ -137,14 +137,17 @@ tryCatch(
   }
 )
 
-#run this script if exists
-tryCatch(
-  {
-    source(file.path(dirname(here()), "cp2admin.R"))
-  }, error = function(e)
-  {
+project_name <- basename(here())
 
-  }
-)
+copy_to <- file.path(shared_drive_fp, "Sequencing_results", "COVIDSeq", "wastewater")
+dir.create(file.path(copy_to, project_name), recursive = TRUE)
+
+pdf_fp <- here("output", list.files(here("output"), pattern = ".pdf"))
+for(i in pdf_fp){
+  file.copy(i, file.path(copy_to, project_name), overwrite = TRUE)
+}
+
+file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = TRUE, overwrite = TRUE)
+
 
 ```

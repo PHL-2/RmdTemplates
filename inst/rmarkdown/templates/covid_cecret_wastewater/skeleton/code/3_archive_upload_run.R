@@ -16,7 +16,7 @@ run_uploaded_2_basespace <- TRUE #is the sequencing run on basespace?
 have_AWS_EC2_SSH_access <- TRUE
 
 # temporary directory holding the sequencing run download
-ec2_tmp_fp <- "~/tmp_bs_dl/"
+ec2_tmp_fp <- "~/tmp_bs_dl"
 
 ####################
 # Selected variables
@@ -159,7 +159,7 @@ if(run_uploaded_2_basespace) {
     select(Name) %>%
     pull()
 
-  temporary_seq_run_fp <- paste0(ec2_tmp_fp, sequencing_run)
+  temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", sequencing_run)
 
 }
 
@@ -181,8 +181,8 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-checksum",
                     command2run = paste0("cd ", ec2_tmp_fp, "; ",
-                                         "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, sequencing_run, ".md5; ",
-                                         "cat ", ec2_tmp_fp, sequencing_run, ".md5")
+                                         "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, "/", sequencing_run, ".md5; ",
+                                         "cat ", ec2_tmp_fp, "/", sequencing_run, ".md5")
   )
 
   check_screen_job(message2display = "Checking md5 job",
@@ -250,7 +250,7 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
 
     rstudioapi::executeCommand('activateConsole')
 
-    run_folder <- paste0(ec2_tmp_fp, sequencing_run)
+    run_folder <- paste0(ec2_tmp_fp, "/", sequencing_run)
 
   }
 

@@ -21,7 +21,7 @@ have_AWS_EC2_SSH_access <- TRUE
 remove_sample_from_bcl_samplesheet <- c("") #add in sample names to remove from demultiplexing
 
 # temporary directory to hold the sequencing run download
-ec2_tmp_fp <- "~/tmp_bs_dl/"
+ec2_tmp_fp <- "~/tmp_bs_dl"
 
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
@@ -191,7 +191,7 @@ if(run_uploaded_2_basespace) {
 
   if(!samplesheet_exists) {
 
-    temporary_seq_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
+    temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", sequencing_run, "/")
     bs_dl_cmd <- paste("bs download runs --id", bs_run_id, "--output", temporary_seq_run_fp)
 
     if(have_AWS_EC2_SSH_access) {
