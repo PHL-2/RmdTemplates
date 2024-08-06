@@ -27,7 +27,6 @@ run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to B
 
 ```
 
-
 ```{r select samples and ddpcr metadata, message = TRUE, include=FALSE, eval = FALSE}
 
 #this script uses a wastewater sample selection sheet to create a sequencing plate map for the wet lab
