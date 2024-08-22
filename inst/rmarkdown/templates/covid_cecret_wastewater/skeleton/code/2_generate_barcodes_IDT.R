@@ -114,6 +114,15 @@ run_q30 <- NA
 run_pf <- NA
 run_error <- NA
 
+if(samplesheet_exists) {
+  warning(simpleWarning(
+    paste0("There is already an existing SampleSheet.csv in the metadata/munge directory",
+           "\nBaseSpace run will not be re-downloaded")))
+}
+if(samplesheet_exists) {
+  Sys.sleep(10)
+}
+
 if(run_uploaded_2_basespace) {
 
   # Get the run id from BaseSpace
