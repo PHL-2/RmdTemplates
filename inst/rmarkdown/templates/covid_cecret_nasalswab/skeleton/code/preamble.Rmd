@@ -816,7 +816,7 @@ dir.create(here("upload", "seqsender"), recursive = TRUE)
 # Export the data for seqsender upload to sra, genbank, and gisaid
 seqsender <- s_toPlot %>%
   filter4report() %>%
-  filter(sample_type == "Testing sample type") %>%
+  filter(sample_type == "Nasal swab") %>%
   rename(sequence_name = "sample_id",
          #GISAID fields
          `gs-covv_specimen` = "sample_type",
