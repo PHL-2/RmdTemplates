@@ -332,12 +332,12 @@ if(test_upload) {
   test_flag <- "--test"
   gs_client_id <- "TEST-EA76875B00C3"
   local_gs_log <- here("gisaid", paste0(project_name, "_gisaid_test.log"))
-  BioProject <- bioprja_test
+  BioProject <- bio_prj_id_test
 } else {
   test_flag <- ""
   gs_client_id <- gisaid_client_id
   local_gs_log <- here("gisaid", paste0(project_name, "_gisaid.log"))
-  BioProject <- bioprja_real
+  BioProject <- bio_prj_id_ns
 }
 
 organism_flag <- "--organism COV"

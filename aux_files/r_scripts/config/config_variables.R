@@ -54,8 +54,9 @@ gisaid_username <- ""
 # NCBI Seqsender info
 #####################
 
-bioprja_test <- "PRJNA00000"
-bioprja_real <- "PRJNA00000"
+bio_prj_id_test <- "PRJNA000000"
+bio_prj_id_ns <- "PRJNA000000"
+bio_prj_id_ww <- "PRJNA000000"
 
 ################
 # Local settings

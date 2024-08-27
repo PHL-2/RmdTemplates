@@ -853,7 +853,7 @@ seqsender <- s_toPlot %>%
          `bs-isolate` = `bs-sample_name`,
          `bs-isolation_source` = `gs-covv_specimen`,
          `bs-host_age` = `gs-covv_patient_age`,
-         `bs-host_sex` = `gs-covv_gender`,
+         `bs-host_sex` = ifelse(`gs-covv_gender` == "Unknown", "Not provided", `gs-covv_gender`),
          `bs-gisaid_virus_name` = `gs-sample_name`,
          #SRA fields
          `sra-sample_name` = paste0("SARS-CoV-2/Human/USA/", sequence_name),
