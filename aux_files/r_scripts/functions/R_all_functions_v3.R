@@ -305,6 +305,7 @@ generate_common_metadata_fields <- function(meta_fp,
                                  !!db_col == "BioSample" ~ "bs",
                                  !!db_col == "SRA" ~ "sra",
                                  !!db_col == "GenBank" ~ "gb",
+                                 !!db_col == "NWSS" ~ "nwss",
                                  TRUE ~ NA),
            appended_col_name = paste0(db_prefix, "-", !!field_col)) %>%
     select(appended_col_name, !!value_col) %>%

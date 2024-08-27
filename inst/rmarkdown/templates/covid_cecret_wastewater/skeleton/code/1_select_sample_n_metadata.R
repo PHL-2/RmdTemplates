@@ -170,12 +170,11 @@ if(length(older_samples_fp) > 0) {
 
 sample_group_order <- c("ZeptoSC2", "SouthWest", "NorthEast", "SouthEast", "oldWW")
 
-combined_list <- select(selection_data, sample_group, sample_collect_date) %>%
+combined_list <- select(selection_data, sample_group, sample_collect_date, samp_name = "sample_name") %>%
   rbind(older_samples) %>%
   filter(sample_group != "",
          !is.na(sample_collect_date)) %>%
-  mutate(sample_group = factor(sample_group, levels = sample_group_order),
-         samp_name = paste0("WW-", sample_collect_date, "-", sample_group)) %>%
+  mutate(sample_group = factor(sample_group, levels = sample_group_order)) %>%
   arrange(sample_collect_date, sample_group) %>%
   mutate(order = 1:nrow(.)) %>%
   expand(nesting(samp_name, order), rep = paste0("-Rep", 1:create_sample_replicates)) %>%
