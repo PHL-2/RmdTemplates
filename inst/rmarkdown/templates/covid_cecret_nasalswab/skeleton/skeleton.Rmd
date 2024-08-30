@@ -501,7 +501,7 @@ if(!test_upload) {
 #rewrite the seqsender file with the gisaid accession numbers and remove the old prepared files
 seqsender %>%
   select(-c(`bs-gisaid_accession`, `src-note`)) %>%
-  merge(gisaid_accessions, by = "bs-gisaid_virus_name", all.x = TRUE) %>%
+  left_join(gisaid_accessions, by = "bs-gisaid_virus_name") %>%
   write_csv(appended_seqsender_meta_fp)
 
 reupload_seqsender_file <- system2("scp", c(appended_seqsender_meta_fp, paste0(ec2_hostname, ":", ec2_seqsender_meta_fp)))

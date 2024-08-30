@@ -301,12 +301,9 @@ generate_common_metadata_fields <- function(meta_fp,
 
   df <- read_csv(meta_fp) %>%
     separate_rows(c(!!db_col, !!field_col), sep = separator) %>%
-    mutate(db_prefix = case_when(!!db_col == "GISAID" ~ "gs",
-                                 !!db_col == "BioSample" ~ "bs",
-                                 !!db_col == "SRA" ~ "sra",
-                                 !!db_col == "GenBank" ~ "gb",
-                                 !!db_col == "NWSS" ~ "nwss",
-                                 TRUE ~ NA),
+    mutate(db_prefix = stri_replace_all_regex(!!db_col,
+                                              pattern = c("^GISAID", "^BioSample", "^SRA", "^GenBank", "^NWSS"),
+                                              replacement = c("gs", "bs", "sra", "gb", "nwss"), vectorize_all = FALSE),
            appended_col_name = paste0(db_prefix, "-", !!field_col)) %>%
     select(appended_col_name, !!value_col) %>%
     pivot_wider(names_from = appended_col_name, values_from = !!value_col)

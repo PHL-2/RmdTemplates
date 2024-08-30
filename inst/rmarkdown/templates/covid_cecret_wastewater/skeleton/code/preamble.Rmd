@@ -1021,7 +1021,7 @@ data_upload_all <- s %>%
   filter(sample_group %in% s_toPlot$sample_group,
          !isControl,
          ww_group != "Wastewater sample - Merged") %>%
-  rename(`bs-ww_surv_system_sample_id` = sample_name)
+  rename(`bs-ww_surv_system_sample_id` = uniq_sample_name)
 
 if(nrow(data_upload_all) != 0) {
 

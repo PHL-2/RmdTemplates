@@ -503,7 +503,7 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^[A-Z0-9][0-9]*$" = "Nasal swab",
                        "^WW-" = "Wastewater")
 
-extra_cols2merge <- c("sample_group", "sample_collect_date")
+extra_cols2merge <- c("uniq_sample_name", "sample_group", "sample_collect_date")
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,

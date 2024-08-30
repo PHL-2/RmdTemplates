@@ -562,11 +562,11 @@ sequencing_metadata <- d %>%
                             TRUE ~ NA),
          sample_collect_date = Sample_date - days_between_collection,
          suffix = ifelse(grepl("oldWW|ZeptoSC2", Type), Type, gsub("[a-z]", "", Type)),
-         sample_name = paste("WW",
+         uniq_sample_name = paste("WW",
                              format(sample_collect_date, format = "%y%m%d"),
                              format(run_date, format = "%y%m%d"),
                              suffix, sep = "-")) %>%
-  select(sample_name, sample_group = "Type", sample_collect_date, sample_received_date = "Sample_date", Target, values, ddpcr_replicates, ) %>%
+  select(uniq_sample_name, sample_group = "Type", sample_collect_date, sample_received_date = "Sample_date", Target, values, ddpcr_replicates, ) %>%
   pivot_wider(names_from = "Target", values_from = "values") %>%
   mutate(across(ends_with("_present"), ~as.logical(.))) %>%
   merge(ww_site_metadata, by.x = "sample_group", all.x = TRUE)

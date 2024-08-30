@@ -37,6 +37,7 @@ library(stringdist)
 library(scales)
 library(vegan)
 library(ape)
+library(stringi)
 
 ```
 
@@ -822,9 +823,7 @@ seqsender <- s_toPlot %>%
          `gs-covv_specimen` = "sample_type",
          `gs-covv_coverage` = "median_coverage",
          `gs-covv_orig_lab` = "sample_collected_by",
-         #BioSample fields
-         `bs-host` = "host_scientific_name",
-         `bs-host_disease` = "host_disease") %>%
+) %>%
   mutate(collection_date = case_when(!(is.na(sample_collection_date) |
                                          as.character(sample_collection_date) == "Unknown") ~ as.character(sample_collection_date),
                                      !is.na(PHL_sample_received_date) ~ as.character(PHL_sample_received_date),
@@ -838,7 +837,7 @@ seqsender <- s_toPlot %>%
          `gs-covv_patient_age` = ifelse(is.na(host_age_bin)|`gs-covv_orig_lab` == "Temple University", "Unknown", host_age_bin),
          `gs-covv_seq_technology` = case_when(instrument_type == "MiSeq" ~ "Illumina MiSeq",
                                               instrument_type == "NextSeq1k2k" ~ "Illumina NextSeq 2000",
-                                              TRUE ~ NA),
+                                              TRUE ~ NA_character_),
          `gs-covv_assembly_method` = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
          `gs-covv_orig_lab_addr` = case_when(`gs-covv_orig_lab` == "Philadelphia Department of Public Health" ~ "1930 South Broad Street, Philadelphia, PA 19145, USA",
                                              `gs-covv_orig_lab` == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122, USA",
@@ -846,39 +845,44 @@ seqsender <- s_toPlot %>%
          `gs-covv_subm_sample_id` = sequence_name,
          #BioSample fields
          #make BioSample name blank if it didn't pass vadr
-         `bs-sample_name` = ifelse(vadr_passfail == "PASS",
+         `bs1-sample_name` = ifelse(vadr_passfail == "PASS",
                                    paste0("SARS-CoV-2/Human/USA/", sequence_name, "/", collection_year),
                                    ""),
-         `bs-collected_by` = `gs-covv_orig_lab`,
-         `bs-isolate` = `bs-sample_name`,
-         `bs-isolation_source` = `gs-covv_specimen`,
-         `bs-host_age` = `gs-covv_patient_age`,
-         `bs-host_sex` = ifelse(`gs-covv_gender` == "Unknown", "Not provided", `gs-covv_gender`),
-         `bs-gisaid_virus_name` = `gs-sample_name`,
+         `bs2-isolate` = `bs1-sample_name`,
+         `bs3-isolation_source` = `gs-covv_specimen`,
+         `bs4-host` = host_scientific_name,
+         `bs5-host_sex` = ifelse(`gs-covv_gender` == "Unknown", "Not provided", `gs-covv_gender`),
+         `bs6-host_age` = `gs-covv_patient_age`,
+         `bs7-host_disease` = host_disease,
+         `bs9-collected_by` = `gs-covv_orig_lab`,
+         `bs13-gisaid_virus_name` = `gs-sample_name`,
          #SRA fields
-         `sra-sample_name` = paste0("SARS-CoV-2/Human/USA/", sequence_name),
-         `sra-file_1` = paste0(sequence_name, "_S", sample_number, "_filtered_R1.fastq.gz"),
-         `sra-file_2` = paste0(sequence_name, "_S", sample_number, "_filtered_R2.fastq.gz"),
-         `sra-library_name` = paste0("ARTIC Network Protocol ", artic_primer_scheme),
-         `sra-instrument_model` = gsub("^Illumina NextSeq", "NextSeq", `gs-covv_seq_technology`),
-         `sra-design_description` = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC Network Protocol ", artic_primer_scheme,
+         `sra1-sample_name` = paste0("SARS-CoV-2/Human/USA/", sequence_name),
+         `sra14-file_1` = paste0(sequence_name, "_S", sample_number, "_filtered_R1.fastq.gz"),
+         `sra15-file_2` = paste0(sequence_name, "_S", sample_number, "_filtered_R2.fastq.gz"),
+         `sra2-library_name` = paste0("ARTIC Network Protocol ", artic_primer_scheme),
+         `sra3-instrument_model` = gsub("^Illumina NextSeq", "NextSeq", `gs-covv_seq_technology`),
+         `sra11-design_description` = paste0("Viral sequencing was performed following a tiling amplicon strategy using the ARTIC Network Protocol ", artic_primer_scheme,
                                            " primer scheme. Sequencing was performed using the ", `gs-covv_seq_technology`,
                                            " instrument with 2x", read_length,
                                            " bp chemistry. Libraries were prepared using the Illumina COVIDSeq Assay."),
          #GenBank fields
          `gb-sample_name` = sequence_name,
-         `gb-src-isolate` = `bs-sample_name`,
-         `gb-src-host` = `bs-host`,
+         `gb-src-isolate` = `bs1-sample_name`,
+         `gb-src-host` = `bs4-host`,
          `gb-src-isolation_source` = `gs-covv_specimen`,
          `gb-cmt-Coverage` = paste0(`gs-covv_coverage`, "X"),
          `gb-cmt-Assembly Method` = `gs-covv_assembly_method`,
-         `gb-cmt-Sequencing Technology` = `sra-instrument_model`) %>%
+         `gb-cmt-Sequencing Technology` = `sra3-instrument_model`) %>%
   cbind(data2submit_metadata) %>%
   select(sequence_name, organism, collection_date,
          matches("^gs-", ignore.case = FALSE),
-         matches("^bs-", ignore.case = FALSE),
-         matches("^sra-", ignore.case = FALSE),
+         #order the column names by the numbers 1 to 100
+         starts_with(paste0("bs", 1:100, "-"), ignore.case = FALSE),
+         starts_with(paste0("sra", 1:100, "-"), ignore.case = FALSE),
          matches("^gb-", ignore.case = FALSE)) %>%
+  rename_at(vars(starts_with("bs")), ~ gsub("bs[0-9]+-", "bs-", .)) %>%
+  rename_at(vars(starts_with("sra")), ~ gsub("sra[0-9]+-", "sra-", .)) %>%
   rename_at(vars(starts_with("gb-src-")), ~ gsub("gb-src-", "src-", .)) %>%
   rename_at(vars(starts_with("gb-cmt-")), ~ gsub("gb-cmt-", "cmt-", .))
   
@@ -1272,14 +1276,14 @@ freyja_grouping <- s %>%
   #add an extra period to the end to help with matching lineages correctly
   mutate(lineages = gsub("$", ".", lineages),
          least_common_substring = attr(adist(lineages, counts = TRUE), "trafos")[, 1],
-         end_match = do.call(rbind, stringi::stri_locate_all_regex(least_common_substring, "^M+"))[, 2],
+         end_match = do.call(rbind, stri_locate_all_regex(least_common_substring, "^M+"))[, 2],
          has_lowest_str_length = str_length(lineages) == min(str_length(lineages)),
          substring_end = ifelse(sum(has_lowest_str_length) == 1 &
                                 grepl("^M+$", least_common_substring), end_match, NA),
          substring_end = ifelse(all(is.na(substring_end)), min(end_match), substring_end)) %>%
   fill(substring_end, .direction = "down") %>%
   ungroup() %>%
-  mutate(combined_lineage = stringi::stri_sub(lineages, 1, substring_end)) %>%
+  mutate(combined_lineage = stri_sub(lineages, 1, substring_end)) %>%
   mutate(combined_lineage = gsub("\\.$", "", combined_lineage)) %>%
   mutate(combined_lineage = factor(combined_lineage, levels = str_sort(unique(combined_lineage), numeric = TRUE))) %>%
   mutate(relative_abundances = ifelse(is.na(relative_abundances) & grepl("Unresolved", combined_lineage),
