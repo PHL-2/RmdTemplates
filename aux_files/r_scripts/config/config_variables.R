@@ -28,12 +28,6 @@ s3_reference_bucket <- "s3://"
 #host name of the ec2 instance in the .ssh/config file
 ec2_hostname <- ""
 
-# full path of where the seqsender repo was cloned on EC2 instance that holds the seqsender.py file
-seqsender_fp <- "path/to/seqsender"
-
-# full path of where to keep the fasta and fastq files for upload
-seqsender_upload_tmp_fp <- "path/to/upload/folder"
-
 ####################
 # Sequencer settings
 ####################
@@ -55,6 +49,14 @@ cecret_profile <- ""
 
 gisaid_client_id <- ""
 gisaid_username <- ""
+
+#####################
+# NCBI Seqsender info
+#####################
+
+bio_prj_id_test <- "PRJNA000000"
+bio_prj_id_ns <- "PRJNA000000"
+bio_prj_id_ww <- "PRJNA000000"
 
 ################
 # Local settings

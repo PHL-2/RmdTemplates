@@ -114,6 +114,15 @@ run_q30 <- NA
 run_pf <- NA
 run_error <- NA
 
+if(samplesheet_exists) {
+  warning(simpleWarning(
+    paste0("There is already an existing SampleSheet.csv in the metadata/munge directory",
+           "\nBaseSpace run will not be re-downloaded")))
+}
+if(samplesheet_exists) {
+  Sys.sleep(10)
+}
+
 if(run_uploaded_2_basespace) {
 
   # Get the run id from BaseSpace
@@ -425,11 +434,15 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   arrange(plate, plate_col, plate_row) %>%
   rename(any_of(c(sample_collect_date = "sample_collection_date"))) %>%
   #find sample group from sample_name
-  mutate(sample_group = gsub("^WW-([0-9]{4})-([0-9]{2})-([0-9]{2})-|^WW-|-Rep.*$", "", sample_name),
+  mutate(sample_group = gsub("^WW-([0-9]{6})-([0-9]{6})-|^WW-|-Rep.*$", "", sample_name),
+         sample_group = case_when(sample_group == "NE" ~ "NorthEast",
+                                  sample_group == "SE" ~ "SouthEast",
+                                  sample_group == "SW" ~ "SouthWest",
+                                  (sample_group == "character(0)" | sample_group == "") ~ NA_character_,
+                                  TRUE ~ sample_group),
          # sample_group = as.character(lapply(sample_name,
          #                                    function(x) unlist(lapply(c(sample_group_controls, sample_group_sites),
          #                                                              function(y) y[grepl(y, x)])))),
-         sample_group = ifelse((sample_group == "character(0)" | sample_group == ""), NA_character_, sample_group),
          sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
          uniq_sample_name = gsub("-Rep[0-9]*", "", sample_name),
          sequencing_date = sequencing_date,
@@ -490,7 +503,7 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^[A-Z0-9][0-9]*$" = "Nasal swab",
                        "^WW-" = "Wastewater")
 
-extra_cols2merge <- c("sample_group", "sample_collect_date")
+extra_cols2merge <- c("uniq_sample_name", "sample_group", "sample_collect_date")
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
@@ -501,7 +514,7 @@ metadata_sheet <- metadata_sheet %>%
                                          TRUE ~ "Philadelphia Water Department"),
          sample_collect_date = case_when(!(is.na(sample_collect_date) | as.character(sample_collect_date) == "") ~ as.character(sample_collect_date),
                                          #if sample collect date column is not available, grab the date from the sample_name
-                                         grepl("^WW-([0-9]{4})-([0-9]{2})-([0-9]{2})-", sample_name) ~ as.character(gsub("^(WW)-([0-9]{4}-[0-9]{2}-[0-9]{2})-(.*)", "\\2", sample_name)),
+                                         grepl("^WW-([0-9]{6})-([0-9]{6})-", sample_name) ~ as.character(gsub("^(WW)-([0-9]{6})-([0-9]{6})-(.*)", "\\2", sample_name)),
                                          #if it's a wastewater sample without a date or does not start with WW, throw an error
                                          sample_type == "Wastewater" ~ NA,
                                          #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet

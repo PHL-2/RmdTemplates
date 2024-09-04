@@ -78,6 +78,9 @@ ddPCR_data <- ddPCR_files %>%
 # Load the selection sheet
 ##########################
 
+project_name <- basename(here())
+sequencing_date <- as.Date(gsub("_.*", "", project_name))
+
 select_fp <- list.files(here("metadata", "extra_metadata"), pattern = "*.csv", full.names = TRUE)
 select_fp <- select_fp[!grepl("_filtered.csv$", select_fp)]
 
@@ -92,7 +95,10 @@ selection_data <- lapply(select_fp, read_csv) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x))),
          !matches("^\\.\\.\\.")) %>%
-  merge(ddPCR_data, by = c("sample_group", "sample_collect_date"), all.x = TRUE, sort = FALSE)
+  merge(ddPCR_data, by = c("sample_group", "sample_collect_date"), all.x = TRUE, sort = FALSE) %>%
+  mutate(uniq_sample_name = ifelse((is.na(uniq_sample_name) | uniq_sample_name == ""),
+                              paste("WW", format(sample_collect_date, "%y%m%d"), format(sequencing_date, "%y%m%d"), sample_group, sep = "-"),
+                              uniq_sample_name))
 
 if(all(is.na(selection_data$ddpcr_analysis_date))) {
   message("\n\nWarning!!!\nSamples selected for sequencing do not have a corresponding ddPCR date!")
@@ -142,10 +148,12 @@ empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) re
 #     do(read_excel(.$FileName, col_names = TRUE)) %>%
 #     ungroup() %>%
 #     select(-FileName) %>%
-#     rename(sample_name = 1, environmental_site = 2) %>%
-#     select(sample_name, environmental_site)
+#     rename(any_of(c(uniq_sample_name = "sample_name",
+#                     uniq_sample_name = 1,
+#                     environmental_site = 2))) %>%
+#     select(uniq_sample_name, environmental_site)
 # } else {
-#   enviro_samples <- data.frame(sample_name = paste0("ENV", 1:enviro_number), environmental_site = paste0("ENV", 1:enviro_number))
+#   enviro_samples <- data.frame(uniq_sample_name = paste0("ENV", 1:enviro_number), environmental_site = paste0("ENV", 1:enviro_number))
 #   message("\nEnvironmental swab file was not found")
 #   Sys.sleep(5)
 # }
@@ -156,12 +164,12 @@ if(length(older_samples_fp) > 0) {
 
   older_ddPCR_samples <- older_samples_fp %>%
     lapply(read_csv) %>%
-    select(sample_group, sample_collect_date) %>%
+    select(sample_group, sample_collect_date, uniq_sample_name) %>%
     filter(sample_group != "",
            !is.na(sample_group))
 
 } else {
-  older_samples <- data.frame(sample_group = "", sample_collect_date = "")
+  older_samples <- data.frame(sample_group = "", sample_collect_date = "", uniq_sample_name = "")
 }
 
 #################
@@ -170,16 +178,15 @@ if(length(older_samples_fp) > 0) {
 
 sample_group_order <- c("ZeptoSC2", "SouthWest", "NorthEast", "SouthEast", "oldWW")
 
-combined_list <- select(selection_data, sample_group, sample_collect_date) %>%
+combined_list <- select(selection_data, sample_group, sample_collect_date, uniq_sample_name) %>%
   rbind(older_samples) %>%
   filter(sample_group != "",
          !is.na(sample_collect_date)) %>%
-  mutate(sample_group = factor(sample_group, levels = sample_group_order),
-         samp_name = paste0("WW-", sample_collect_date, "-", sample_group)) %>%
+  mutate(sample_group = factor(sample_group, levels = sample_group_order)) %>%
   arrange(sample_collect_date, sample_group) %>%
   mutate(order = 1:nrow(.)) %>%
-  expand(nesting(samp_name, order), rep = paste0("-Rep", 1:create_sample_replicates)) %>%
-  mutate(sample_name = paste0(samp_name, rep)) %>%
+  expand(nesting(uniq_sample_name, order), rep = paste0("-Rep", 1:create_sample_replicates)) %>%
+  mutate(sample_name = paste0(uniq_sample_name, rep)) %>%
   arrange(order) %>%
   select(sample_name) %>%
   #put samples in groups of 8

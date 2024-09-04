@@ -26,6 +26,9 @@ tryCatch(
 
 source(here("config.R"))
 
+project_name <- basename(here())
+run_date <- as.Date(gsub("_.*", "", project_name))
+
 ```
 
 ```{r file paths}
@@ -52,7 +55,6 @@ ww_nwss_meta_fp = list.files(path = file.path(dirname(here()), "aux_files"),
 
 ```{r inital concentrations for efficiency calculations}
 
-
 init_mhvcontrol_conc <- mhv_to_control_uL * MHV_concentration_copiesuL / (control_vol_mL * 1000)
 
 init_sc2_conc <- SC2_concentration_copiesuL * sc2_to_control_uL / (control_vol_mL * 1000)
@@ -68,9 +70,6 @@ dInit_controls<- data.frame(Type = c("MHV", "E", "N2"),
 ```
 
 ```{r finding most recent data, eval = useExportFolder}
-
-project_name <- basename(here())
-run_date <- as.Date(gsub("_.*", "", project_name))
 
 #get the newly added run folder
 run_dat_fp <- dat_fp %>%
@@ -519,17 +518,19 @@ ww_SC2_conc_result <- d %>%
 
 ww_site_metadata <- read_csv(ww_site_meta_fp)
 
-ww_nwss_metadata <- read_csv(ww_nwss_meta_fp) %>%
-  separate_rows(c(db, db_specific_field), sep=", ") %>%
-  filter_n_pivot(db, "NWSS", "db_specific_field", "value")
+ww_nwss_metadata <- generate_common_metadata_fields(ww_nwss_meta_fp)
 
 wwMeta <- cbind(ww_site_metadata, ww_nwss_metadata)
 
 towrite <- ww_SC2_conc_result_summarised %>%
   ungroup() %>%
-  select(-stock_conc_GCuL) %>%
-  select(pcr_gene_target = Target, pcr_target_avg_conc = stock_conc_GC1L, sample_id = Type, sample_collect_date = Sample_date) %>%
-  left_join(wwMeta, by = c("sample_id" = "sample_group"))
+  select(pcr_gene_target = Target, pcr_target_avg_conc = stock_conc_GC1L, sample_group = Type, sample_received_date = Sample_date) %>%
+  mutate(sample_collect_date = sample_received_date - days_between_collection,
+         sample_id = paste("WW",
+                           format(sample_collect_date, format = "%y%m%d"),
+                           format(run_date, format = "%y%m%d"),
+                           gsub("[a-z]", "", sample_group), sep = "-")) %>%
+  left_join(wwMeta, by = "sample_group")
 
 write_csv(towrite, "summary_tab.csv")
 
@@ -559,8 +560,14 @@ sequencing_metadata <- d %>%
   mutate(Target = case_when(concentration == "avg_conc" ~ paste0(Target, "_gc/uL"),
                             concentration == "stock_conc" ~ paste0(Target, "_gc/L"),
                             concentration == "target_present" ~ paste0(Target, "_present"),
-                            TRUE ~ NA)) %>%
-  select(sample_group = "Type", ddpcr_replicates, sample_collect_date = "Sample_date", Target, values) %>%
+                            TRUE ~ NA),
+         sample_collect_date = Sample_date - days_between_collection,
+         suffix = ifelse(grepl("oldWW|ZeptoSC2", Type), Type, gsub("[a-z]", "", Type)),
+         uniq_sample_name = paste("WW",
+                             format(sample_collect_date, format = "%y%m%d"),
+                             format(run_date, format = "%y%m%d"),
+                             suffix, sep = "-")) %>%
+  select(uniq_sample_name, sample_group = "Type", sample_collect_date, sample_received_date = "Sample_date", Target, values, ddpcr_replicates, ) %>%
   pivot_wider(names_from = "Target", values_from = "values") %>%
   mutate(across(ends_with("_present"), ~as.logical(.))) %>%
   merge(ww_site_metadata, by.x = "sample_group", all.x = TRUE)
