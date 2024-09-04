@@ -1003,7 +1003,7 @@ sra_upload_fp <- here("upload", "dcipher", paste0(project_name, "_PHL2_sra_uploa
 fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
 
 #read in data submission metadata
-data_submit_metadata_fp <- file.path(dirname(here()), "aux_files", "data_submission", "dcipher", "wastewater_data_submission_metadata.csv")
+data_submit_metadata_fp <- file.path(dirname(here()), "aux_files", "data_submission", "ww", "wastewater_data_submission_metadata.csv")
 
 data_submit_metadata <- read_csv(data_submit_metadata_fp) %>%
   separate_rows(c(db, db_specific_field), sep=", ")
