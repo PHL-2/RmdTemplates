@@ -417,14 +417,16 @@ download_consensus <- system2("scp", c(paste0(ec2_hostname, ":", consensus_fasta
 
 ssh_command_check(c(create_concat_consensus, download_consensus))
 
-warning(simpleWarning(
-  paste("\n Before continuing, upload", basename(consensus_fasta_fp), "in", here("upload", "fasta/"),
-        "to https://clades.nextstrain.org/\n",
-        "(Cancel running of this script)\n",
-        "Check that the FASTA sequences are acceptable (no novel early stop codons, novel truncated spike proteins, or novel frameshifts)\n",
-        "If any sequences are low quality, delete the sample FASTA file from processed_cecret/ivar_consensus\n",
-        "Rerun this script starting with create_concat_consensus to recreate the new merged FASTA file for submission")))
-Sys.sleep(20)
+if(test_upload) {
+  message("\n*****")
+  message("Before doing a real submission, upload ", basename(consensus_fasta_fp), " from folder ")
+  message(here("upload", "fasta/"))
+  message("to https://clades.nextstrain.org/\n")
+  message("Check that the FASTA sequences are acceptable (no novel early stop codons, novel truncated spike proteins, or novel frameshifts)")
+  message("If samples are low quality, remove them from the submission by adding their SampleIDs to the variable 'failed_sample_fasta' defined above")
+  message("*****")
+  Sys.sleep(20)
+}
 
 upload_seqsender_files <- system2("scp", c(appended_seqsender_meta_fp, seqsender_config_fp,
                                            paste0(ec2_hostname, ":", ec2_upload_tmp_fp, "/seqsender")))
