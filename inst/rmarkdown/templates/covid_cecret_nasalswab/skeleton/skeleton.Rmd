@@ -348,7 +348,8 @@ ec2_gs_log <- paste0(ec2_upload_tmp_fp, "/submission_files/GISAID/", basename(lo
 # Read in seqsender csv
 #######################
 seqsender <- read_csv(seqsender_meta_fp) %>%
-  filter(!sequence_name %in% failed_sample_fasta) %>%
+  filter(!sequence_name %in% failed_sample_fasta,
+         !is.na(`bs-sample_name`)) %>%
   mutate(authors = authors,
          bioproject = BioProject)
 
