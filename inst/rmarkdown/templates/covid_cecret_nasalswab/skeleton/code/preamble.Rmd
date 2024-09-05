@@ -856,6 +856,7 @@ seqsender <- s_toPlot %>%
          `bs7-host_disease` = host_disease,
          `bs9-collected_by` = `gs-covv_orig_lab`,
          `bs13-gisaid_virus_name` = `gs-sample_name`,
+         `bs15-lineage/clade name` = Nextclade_pango,
          #SRA fields
          `sra1-sample_name` = paste0("SARS-CoV-2/Human/USA/", sequence_name),
          `sra14-file_1` = paste0(sequence_name, "_S", sample_number, "_filtered_R1.fastq.gz"),
@@ -869,11 +870,11 @@ seqsender <- s_toPlot %>%
          #GenBank fields
          `gb-sample_name` = sequence_name,
          `gb-src-isolate` = `bs1-sample_name`,
-         `gb-src-host` = `bs4-host`,
          `gb-src-isolation_source` = `gs-covv_specimen`,
-         `gb-cmt-Coverage` = paste0(`gs-covv_coverage`, "X"),
+         `gb-src-host` = `bs4-host`,
+         `gb-cmt-Sequencing Technology` = `sra3-instrument_model`,
          `gb-cmt-Assembly Method` = `gs-covv_assembly_method`,
-         `gb-cmt-Sequencing Technology` = `sra3-instrument_model`) %>%
+         `gb-cmt-Coverage` = paste0(`gs-covv_coverage`, "X")) %>%
   cbind(data2submit_metadata) %>%
   select(sequence_name, organism, collection_date,
          matches("^gs-", ignore.case = FALSE),

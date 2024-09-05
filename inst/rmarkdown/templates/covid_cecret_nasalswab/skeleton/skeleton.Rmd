@@ -502,6 +502,7 @@ if(!test_upload) {
 seqsender %>%
   select(-c(`bs-gisaid_accession`, `src-note`)) %>%
   left_join(gisaid_accessions, by = "bs-gisaid_virus_name") %>%
+  mutate(`src-note` = paste0(`src-note`, "; Lineage: ", `bs-lineage/clade name`)) %>%
   write_csv(appended_seqsender_meta_fp)
 
 reupload_seqsender_file <- system2("scp", c(appended_seqsender_meta_fp, paste0(ec2_hostname, ":", ec2_seqsender_meta_fp)))
