@@ -12,16 +12,18 @@ library(stringr)
 # Manual input
 ##############
 
-run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
+if(!exists("run_uploaded_2_basespace")){
+  run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
+}
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
 
-have_AWS_EC2_SSH_access <- FALSE
+have_AWS_EC2_SSH_access <- TRUE
 
 remove_sample_from_bcl_samplesheet <- c("") #add in sample names to remove from demultiplexing
 
 # temporary directory to hold the sequencing run download
-ec2_tmp_fp <- "~/tmp_bs_dl/"
+ec2_tmp_fp <- "~/tmp_bs_dl"
 
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
@@ -35,9 +37,6 @@ sequencer_type <- c("MiSeq", "NextSeq1k2k")[sequencer_select]
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
-
-#file location of the wastewater metadata
-ww_meta_fp <- file.path(dirname(here()), "aux_files", "data_submission", "dcipher", "wastewater_specific_metadata.csv")
 
 #file location of the nextera udi indices
 barcode_fp <- file.path(dirname(here()), "aux_files", "illumina_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
@@ -99,13 +98,12 @@ barcodes <- tryCatch(
   }
 )
 
-#######################
-# Load run sample sheet
-#######################
+###############
+# Get run stats
+###############
 
-samplesheet_exists <- file.exists(here("metadata", "munge", "SampleSheet.csv"))
-
-sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_([M]{1}|[VH]{2})[0-9]*_[0-9]*_[0-9A-Z-]*$")
+yymmdd <- gsub("^..|-", "", sequencing_date)
+seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
 
 run_cd <- NA
 run_q30 <- NA
@@ -114,6 +112,8 @@ run_error <- NA
 
 if(run_uploaded_2_basespace) {
 
+  unknown_sequencer_regex <- paste0(yymmdd, "_([M]{1}|[VH]{2})", seq_folder_pattern, "$")
+
   # Get the run id from BaseSpace
   bs_run <- cli_submit("bs", "list", c("runs", "-f csv")) %>%
     str_split(",") %>%
@@ -121,7 +121,7 @@ if(run_uploaded_2_basespace) {
     as.data.frame() %>%
     `colnames<-`(.[1, ]) %>%
     slice(-1) %>%
-    filter(grepl(paste0("^", sequencing_folder_regex), Name))
+    filter(grepl(paste0("^", unknown_sequencer_regex), Name))
 
   if(nrow(bs_run) > 1) {
     warning(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
@@ -131,7 +131,7 @@ if(run_uploaded_2_basespace) {
     sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
                                  sequencer_type == "NextSeq1k2k" ~ "VH")
 
-    intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*$")
+    intended_sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
 
     bs_run <- bs_run %>%
       filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
@@ -152,11 +152,11 @@ if(run_uploaded_2_basespace) {
     select(Name) %>%
     pull()
 
-  run_stats <- cli_submit("bs", "run", c("seqstats", "--id", bs_run_id))
+  run_stats <- cli_submit("bs", "run", c("seqstats", "--id", bs_run_id)) %>%
+    list(run_stats = .) %>%
+    as.data.frame()
 
   run_cd <- run_stats %>%
-    list(run_stats = .) %>%
-    as.data.frame() %>%
     filter(grepl("SequencingStatsCompact.ClusterDensity", run_stats)) %>%
     # cluster density seems to be reported in the millions. If there is no scientific notation, divide by 1000
     mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
@@ -166,32 +166,47 @@ if(run_uploaded_2_basespace) {
     pull()
 
   run_q30 <- run_stats %>%
-    list(run_stats = .) %>%
-    as.data.frame() %>%
     filter(grepl("SequencingStatsCompact.PercentGtQ30 ", run_stats)) %>%
     mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
            run_stats = as.numeric(run_stats)/100) %>%
     pull()
 
   run_pf <- run_stats %>%
-    list(run_stats = .) %>%
-    as.data.frame() %>%
     filter(grepl("SequencingStatsCompact.PercentPf", run_stats)) %>%
     mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
            run_stats = as.numeric(run_stats)) %>%
     pull()
 
   run_error <- run_stats %>%
-    list(run_stats = .) %>%
-    as.data.frame() %>%
     filter(grepl("SequencingStatsCompact.ErrorRate ", run_stats)) %>%
     mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
            run_stats = as.numeric(run_stats)/100) %>%
     pull()
 
-  if(!samplesheet_exists) {
+}
 
-    temporary_seq_run_fp <- paste0(ec2_tmp_fp, sequencing_run, "/")
+#######################
+# Load run sample sheet
+#######################
+
+run_samplesheet_fp <- list.files(here("metadata", "munge"), pattern = "SampleSheet", full.names = TRUE)[1]
+samplesheet_exists <- file.exists(run_samplesheet_fp)
+
+if(samplesheet_exists) {
+
+  message("\n*****")
+  message("There is already an existing SampleSheet.csv or SampleSheet_v2.csv in the metadata/munge directory")
+  message("BaseSpace run will not be re-downloaded")
+  message("*****")
+  Sys.sleep(10)
+
+} else {
+
+  run_samplesheet_fp <- here("metadata", "munge", "SampleSheet.csv")
+
+  if(run_uploaded_2_basespace) {
+
+    temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", sequencing_run, "/")
     bs_dl_cmd <- paste("bs download runs --id", bs_run_id, "--output", temporary_seq_run_fp)
 
     if(have_AWS_EC2_SSH_access) {
@@ -209,95 +224,65 @@ if(run_uploaded_2_basespace) {
       # Download the SampleSheet from EC2 instance
       run_in_terminal(paste("scp",
                             paste0(ec2_hostname, ":", temporary_seq_run_fp, "SampleSheet.csv"),
-                            here("metadata", "munge")),
+                            run_samplesheet_fp),
                       command2print = paste(" [On", ec2_hostname, "instance]\n",
-                                      "aws s3 cp", paste0(temporary_seq_run_fp, "SampleSheet.csv"),
-                                      paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
-                                      "[On local computer]\n",
-                                      "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/SampleSheet.csv"),
-                                      here("metadata", "munge/"))
+                                            "aws s3 cp", paste0(temporary_seq_run_fp, "SampleSheet.csv"),
+                                            paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
+                                            "[On local computer]\n",
+                                            "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/SampleSheet.csv"),
+                                            run_samplesheet_fp)
       )
-
-      rstudioapi::executeCommand('activateConsole')
     } else {
 
       dir.create(temporary_seq_run_fp, recursive = TRUE)
-
       run_in_terminal(bs_dl_cmd)
-
-      rstudioapi::executeCommand('activateConsole')
-
-      file.copy(paste0(temporary_seq_run_fp, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
+      file.copy(paste0(temporary_seq_run_fp, "SampleSheet.csv"), run_samplesheet_fp)
     }
+
+  } else if (!run_uploaded_2_basespace) {
+
+    if(sequencer_type == "MiSeq"){
+
+      intended_miseq_folder_regex <- paste0(yymmdd, "_M", seq_folder_pattern)
+
+      host_samplesheet_fp <- paste0(miseq_hostname, ":", intended_miseq_folder_regex, "/SampleSheet.csv")
+
+    } else if (sequencer_type == "NextSeq1k2k") {
+
+      intended_nextseq_folder_regex <- paste0(yymmdd, "_VH", seq_folder_pattern)
+      nextseq_run_fp <- "/usr/local/illumina/runs/"
+
+      sequencing_run <- system2("ssh", c("-tt", nextseq_hostname,
+                                         shQuote(paste("cd", paste0(nextseq_run_fp, ";"),
+                                                       "ls | grep", intended_nextseq_folder_regex, "| tr -d '\n'"),
+                                                 type = "sh")),
+                                stdout = TRUE)
+
+      host_samplesheet_fp <- paste0(nextseq_hostname, ":", nextseq_run_fp, sequencing_run, "/SampleSheet.csv")
+    }
+
+    message("\n\n\n*****")
+    message("Transferring SampleSheet.csv locally")
+    message("*****")
+    Sys.sleep(5)
+
+    scp_command <- paste("scp",
+                         host_samplesheet_fp,
+                         paste(run_samplesheet_fp, ";"),
+                         "sleep 2")
+
+    run_in_terminal(scp_command)
   }
-} else if (!run_uploaded_2_basespace) {
-
-  if(sequencer_type == "MiSeq"){
-
-    #get the local run folder
-    run_folder <- sequencing_folder_fp %>%
-      list.files(full.names = T) %>%
-      data.frame(filenames = .) %>%
-      filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
-      filter(grepl(sequencing_folder_regex, filenames)) %>%
-      filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
-      pull()
-
-    sequencing_run <- basename(run_folder)
-
-    if(!samplesheet_exists) {
-
-      message("\n\n\n*****")
-      message("Copying MiSeq SampleSheet.csv")
-      message("*****")
-      Sys.sleep(5)
-
-      sample_sheet_copy <- file.copy(file.path(run_folder, "SampleSheet.csv"), here("metadata", "munge", "SampleSheet.csv"))
-
-      if(length(sample_sheet_copy) == 0) {
-        stop(simpleError(paste("\nCould not find SampleSheet.csv from MiSeq run", sequencing_date, "in", sequencing_folder_fp)))
-      }
-    }
-
-  } else if (sequencer_type == "NextSeq1k2k") {
-
-    run_folder_pattern <- paste0(gsub("^..|-", "", sequencing_date))
-    nextseq_run_fp <- "/usr/local/illumina/runs/"
-    sequencing_run <- system2("ssh", c("-tt", nextseq_hostname,
-                                       shQuote(paste("cd", paste0(nextseq_run_fp, ";"),
-                                                     "ls | grep", paste0("^", run_folder_pattern, "_VH"), "| tr -d '\n'"),
-                                               type = "sh")),
-                              stdout = TRUE)
-
-    if(length(sequencing_run) == 0) {
-      stop(simpleError(paste("\nCould not find NextSeq run with date", sequencing_date, "on the sequencer")))
-    }
-
-    if(!samplesheet_exists) {
-
-      message("\n\n\n*****")
-      message("Transferring NextSeq SampleSheet.csv")
-      message("*****")
-      Sys.sleep(5)
-
-      scp_command <- paste("scp",
-                           paste0(nextseq_hostname, ":", nextseq_run_fp, sequencing_run, "/SampleSheet.csv"),
-                           here("metadata", "munge", "SampleSheet.csv"))
-
-      run_in_terminal(scp_command)
-      rstudioapi::executeCommand('activateConsole')
-    }
-  }
+  rstudioapi::executeCommand("activateConsole")
 }
 
-run_samplesheet_fp <- here("metadata", "munge", "SampleSheet.csv")
 run_sample_sheet <- load_sample_sheet(run_samplesheet_fp)
 
 instrument_type <- data.frame(values = unlist(run_sample_sheet$Header)) %>%
   mutate(col_names = gsub(",.*", "", values)) %>%
   mutate(col_names = gsub(" ", "_", col_names)) %>%
   mutate(values = gsub(".*,", "", values)) %>%
-  filter(grepl("instrument_type|InstrumentPlatform", col_names)) %>%
+  filter(grepl("instrument_type|InstrumentPlatform|InstrumentType", col_names, ignore.case = TRUE)) %>%
   select(values) %>%
   pull()
 
@@ -309,7 +294,7 @@ read_length <- data.frame(values = unlist(run_sample_sheet$Reads)) %>%
 
 if(instrument_type != sequencer_type) {
   message("\n*****")
-  message("The downloaded SampleSheet.csv for this run on ", sequencing_date, " has the instrument set as the ", instrument_type)
+  message("The SampleSheet.csv for this ", sequencing_date, " run has the instrument set as ", instrument_type)
   message("The rest of this script will continue and processing this project as a ", instrument_type, " run")
   message("If this was not the correct sequencer used for this project, double check the sequencing date or select the appropriate sequencer_type in this Rscript")
   message("*****")
@@ -375,7 +360,7 @@ if(ncol(ddPCR_data) == 0) {
            !matches("^\\.\\.\\.")) %>%
     rename(any_of(c(sample_group = "sample_id"))) %>%
     mutate(sample_group = as.character(sample_group),
-           sample_collect_date = as.Date(sample_collect_date)) %>%
+           sample_collect_date = as.Date(sample_collect_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
     as.data.frame()
 
 }
@@ -423,11 +408,15 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   arrange(plate, plate_col, plate_row) %>%
   rename(any_of(c(sample_collect_date = "sample_collection_date"))) %>%
   #find sample group from sample_name
-  mutate(sample_group = gsub("^WW-([0-9]{4})-([0-9]{2})-([0-9]{2})-|^WW-|-Rep.*$", "", sample_name),
+  mutate(sample_group = gsub("^WW-([0-9]{6})-([0-9]{6})-|^WW-|-Rep.*$", "", sample_name),
+         sample_group = case_when(sample_group == "NE" ~ "NorthEast",
+                                  sample_group == "SE" ~ "SouthEast",
+                                  sample_group == "SW" ~ "SouthWest",
+                                  (sample_group == "character(0)" | sample_group == "") ~ NA_character_,
+                                  TRUE ~ sample_group),
          # sample_group = as.character(lapply(sample_name,
          #                                    function(x) unlist(lapply(c(sample_group_controls, sample_group_sites),
          #                                                              function(y) y[grepl(y, x)])))),
-         sample_group = ifelse((sample_group == "character(0)" | sample_group == ""), NA_character_, sample_group),
          sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
          uniq_sample_name = gsub("-Rep[0-9]*", "", sample_name),
          sequencing_date = sequencing_date,
@@ -488,7 +477,7 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^[A-Z0-9][0-9]*$" = "Nasal swab",
                        "^WW-" = "Wastewater")
 
-extra_cols2merge <- c("sample_group", "sample_collect_date")
+extra_cols2merge <- c("uniq_sample_name", "sample_group", "sample_collect_date")
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
@@ -499,7 +488,7 @@ metadata_sheet <- metadata_sheet %>%
                                          TRUE ~ "Philadelphia Water Department"),
          sample_collect_date = case_when(!(is.na(sample_collect_date) | as.character(sample_collect_date) == "") ~ as.character(sample_collect_date),
                                          #if sample collect date column is not available, grab the date from the sample_name
-                                         grepl("^WW-([0-9]{4})-([0-9]{2})-([0-9]{2})-", sample_name) ~ as.character(gsub("^(WW)-([0-9]{4}-[0-9]{2}-[0-9]{2})-(.*)", "\\2", sample_name)),
+                                         grepl("^WW-([0-9]{6})-([0-9]{6})-", sample_name) ~ as.character(gsub("^(WW)-([0-9]{6})-([0-9]{6})-(.*)", "\\2", sample_name)),
                                          #if it's a wastewater sample without a date or does not start with WW, throw an error
                                          sample_type == "Wastewater" ~ NA,
                                          #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet

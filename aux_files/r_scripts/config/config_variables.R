@@ -21,6 +21,10 @@ s3_nextflow_work_bucket <- "s3://"
 # s3 bucket holding reference data files
 s3_reference_bucket <- "s3://"
 
+##################
+# AWS EC2 settings
+##################
+
 #host name of the ec2 instance in the .ssh/config file
 ec2_hostname <- ""
 
@@ -28,8 +32,9 @@ ec2_hostname <- ""
 # Sequencer settings
 ####################
 
-#host name of the NextSeq sequencer in the .ssh/config file
+#host name to the local sequencer connection in the .ssh/config file
 nextseq_hostname <- ""
+miseq_hostname <- ""
 
 ###################
 # Nextflow settings
@@ -46,6 +51,14 @@ cecret_profile <- ""
 gisaid_client_id <- ""
 gisaid_username <- ""
 
+#####################
+# NCBI Seqsender info
+#####################
+
+bio_prj_id_test <- "PRJNA000000"
+bio_prj_id_ns <- "PRJNA000000"
+bio_prj_id_ww <- "PRJNA000000"
+
 ################
 # Local settings
 ################
@@ -59,9 +72,6 @@ shared_drive_fp <- "path/to/shared/drive"
 
 # full path of the directory holding the WW ddPCR run info
 ddPCR_run_fp <- "path/to/local/ddpcr/folder"
-
-# full path of where the seqsender repo was cloned
-seqsender_fp <- "path/to/seqsender"
 
 # MacOS shell command
 sh_exe_fp <- "sh"
@@ -87,7 +97,7 @@ if(Sys.info()["sysname"] == "Windows")
 }
 
 #find s3 path variables and remove any trailing slashes
-ls(pattern = "^s3_") %>%
+ls(pattern = "^s3_|_fp$") %>%
   mapply(assign,
          .,
          sapply(., function(x) gsub("/$", "", eval(parse(text = x)))),
