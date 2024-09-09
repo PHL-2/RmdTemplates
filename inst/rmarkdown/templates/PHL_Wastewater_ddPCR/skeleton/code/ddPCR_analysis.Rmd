@@ -54,7 +54,7 @@ library(pander)
 
 if (droplet_test) {
   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
-  print(paste("Wells with <10000 droplets removed:", paste(droplet_test_wells, collapse = ", "), collapose = " "))
+  print(paste("Wells with <10000 droplets removed:", paste(droplet_test_wells, collapse = ", "), collapose = ""))
   }
 
 # if (sum(d_pre$Droplet_count<10000) > 0) {
@@ -66,10 +66,10 @@ if (variance_test | signal_check) {
     print("Detected high variation in non-summarized wells; no wells removed")
   } else {
     if (variance_test) {
-      print(paste("Detected wells with high variance:", paste(wellsToRemove1, collapse =", "), collapse = " "))
+      print(paste("Detected wells with high variance:", paste(wellsToRemove1, collapse =", "), collapse = ""))
     } 
     if(signal_check) {
-      print(paste("Detected wells with no signal:", paste(wellsToRemove2, collapse =", "), collapse = " "))
+      print(paste("Detected wells with no signal:", paste(wellsToRemove2, collapse =", "), collapse = ""))
     }
     print(paste("Wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
   }
@@ -154,7 +154,7 @@ if (variance_test) {
     print("Detected high variation in non-summarized wells; no wells removed")
   } else {
       varNominal <- FALSE
-      print(paste("Detected wells with high variance:", paste(wellsToRemove1, collapse =", "), collapse = " "))
+      print(paste("Detected wells with high variance:", paste(wellsToRemove1, collapse =", "), collapse = ""))
   }
 
   var_pander <- d_sd %>%
@@ -180,7 +180,8 @@ if (variance_test) {
 ```{r}
 
 if (signal_check) {
-      print(paste("Detected wells with no signal:", paste(wellsToRemove2, collapse =", "), collapse = " "))
+    print(paste("Detected wells with no signal:", paste(wellsToRemove2, collapse =", "), collapse = " "))
+  signalNominal <- FALSE
 } else {
   signalNominal <- TRUE
   print("Signal nominal")

@@ -21,6 +21,12 @@ output:
 
 \tableofcontents
 
+```{r flag for run on basespace, include=FALSE, eval = FALSE}
+
+run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
+
+```
+
 ```{r select samples and ddpcr metadata, message = TRUE, include=FALSE, eval = FALSE}
 
 #this script uses a wastewater sample selection sheet to create a sequencing plate map for the wet lab
@@ -130,21 +136,24 @@ library(here)
 #this file needs to sit in a [aux_files/config] directory path above this project directory
 tryCatch(
   {
-    source(file.path(dirname(here()), "aux_files", "config", "config_variables.R"))
+    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
   },
   error = function(e) {
-  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/config] directory path above this project directory"))
+  stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
   }
 )
 
-#run this script if exists
-tryCatch(
-  {
-    source(file.path(dirname(here()), "cp2admin.R"))
-  }, error = function(e)
-  {
+project_name <- basename(here())
 
-  }
-)
+copy_to <- file.path(shared_drive_fp, "Sequencing_results", "COVIDSeq", "wastewater")
+dir.create(file.path(copy_to, project_name), recursive = TRUE)
+
+pdf_fp <- here("output", list.files(here("output"), pattern = ".pdf"))
+for(i in pdf_fp){
+  file.copy(i, file.path(copy_to, project_name), overwrite = TRUE)
+}
+
+file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = TRUE, overwrite = TRUE)
+
 
 ```
