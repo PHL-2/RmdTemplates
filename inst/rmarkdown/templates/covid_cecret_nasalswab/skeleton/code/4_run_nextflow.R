@@ -10,7 +10,7 @@ system2("aws", c("sso login"))
 # Manual inputs
 ###############
 
-ec2_tmp_fp <- "~/tmp_bs_dl/"
+ec2_tmp_fp <- "~/tmp_bs_dl"
 
 update_pangolin_dataset <- TRUE
 
@@ -85,6 +85,10 @@ nf_demux_samplesheet_path <- paste(s3_run_bucket, sequencing_date,
                                    tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_demux_samplesheet.csv", sep = "_")), sep = "/")
 
 bclconvert_output_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sep = "/")
+
+workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sequencer_type, sep = "/")
+
+data_output_fp <- paste0(ec2_tmp_fp, "/", sequencing_date, "/data")
 
 # Demultiplexing
 submit_screen_job(message2display = "Demultiplexing with BCLConvert",
@@ -207,8 +211,6 @@ if (update_freyja_and_cecret_pipeline) {
                    screen_session_name = "update-cecret")
 }
 
-workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sequencer_type, sep = "/")
-
 # Cecret pipeline
 submit_screen_job(message2display = "Processing data through Cecret pipeline",
                   ec2_login = ec2_hostname,
@@ -252,9 +254,7 @@ cecret_file_download_command <- c("s3 cp", workflow_output_fp)
 cecret_file_download_param <- c("--recursive",
                                 "--exclude '*'",
                                 paste0("--include '*/",
-                                       c(#"*.consensus.fa",
-                                         #"*_filtered_R[12].fastq.gz",
-                                         "*_demix.tsv",
+                                       c("*_demix.tsv",
                                          "*_kraken2_report.txt",
                                          "snp-dists.txt",
                                          "*_amplicon_depth.csv",
@@ -286,10 +286,10 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
   submit_screen_job(message2display = "Downloading BCLConvert data",
                     ec2_login = ec2_hostname,
                     screen_session_name = "bclconvert-dl",
-                    command2run = paste("mkdir -p", paste0(ec2_tmp_fp, sequencing_date, "/data;"),
+                    command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
                                         "aws",
                                         paste0(bcl_file_download_command, collapse = " "),
-                                        paste0(ec2_tmp_fp, sequencing_date, "/data"),
+                                        data_output_fp,
                                         paste0(bcl_file_download_param, collapse = " "))
   )
 
@@ -301,10 +301,10 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
   submit_screen_job(message2display = "Downloading Cecret data",
                     ec2_login = ec2_hostname,
                     screen_session_name = "cecret-dl",
-                    command2run = paste("mkdir -p", paste0(ec2_tmp_fp, sequencing_date, "/data;"),
+                    command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
                                         "aws",
                                         paste0(cecret_file_download_command, collapse = " "),
-                                        paste0(ec2_tmp_fp, sequencing_date, "/data"),
+                                        data_output_fp,
                                         paste0(cecret_file_download_param, collapse = " "))
   )
 
@@ -316,10 +316,10 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
   submit_screen_job(message2display = "Downloading Nextclade dataset version",
                     ec2_login = ec2_hostname,
                     screen_session_name = "nextclade-version-dl",
-                    command2run = paste("mkdir -p", paste0(ec2_tmp_fp, sequencing_date, "/data;"),
+                    command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
                                         "aws",
                                         paste0(nextclade_dataset_download_command, collapse = " "),
-                                        paste0(ec2_tmp_fp, sequencing_date, "/data/","processed_cecret/", "nextclade/"))
+                                        paste0(data_output_fp, "/processed_cecret", "/nextclade/"))
   )
 
   check_screen_job(message2display = "Checking Nextclade version download job",
@@ -327,7 +327,7 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
                    screen_session_name = "nextclade-version-dl")
 
   # Download data from EC2 instance to local
-  run_in_terminal(paste("scp -r", paste0(ec2_hostname, ":", ec2_tmp_fp, sequencing_date, "/data"),
+  run_in_terminal(paste("scp -r", paste0(ec2_hostname, ":", data_output_fp),
                         here())
   )
 }

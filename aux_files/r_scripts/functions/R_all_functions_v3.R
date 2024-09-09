@@ -285,18 +285,28 @@ reverse_complement <- function(index) {
   chartr(old = "atcgATCG", new = "tagcTAGC", reversed_index)
 }
 
-## =================================================================
-##  Filter the dataframe and pivot wider with specified column names
-## =================================================================
+## ========================================
+##  Pivot wider with specified column names
+## ========================================
 
-filter_n_pivot <- function(df, db_field, db_name, col_name, col_value) {
+generate_common_metadata_fields <- function(meta_fp,
+                                            separator = ", ",
+                                            db_col = db,
+                                            field_col = db_specific_field,
+                                            value_col = value) {
 
-  db_field <- enquo(db_field)
+  db_col <- enquo(db_col)
+  field_col <- enquo(field_col)
+  value_col <- enquo(value_col)
 
-  df %>%
-    filter(!!db_field == db_name) %>%
-    select(col_name, col_value) %>%
-    pivot_wider(names_from = col_name, values_from = col_value)
+  df <- read_csv(meta_fp) %>%
+    separate_rows(c(!!db_col, !!field_col), sep = separator) %>%
+    mutate(db_prefix = stri_replace_all_regex(!!db_col,
+                                              pattern = c("^GISAID", "^BioSample", "^SRA", "^GenBank", "^NWSS"),
+                                              replacement = c("gs", "bs", "sra", "gb", "nwss"), vectorize_all = FALSE),
+           appended_col_name = paste0(db_prefix, "-", !!field_col)) %>%
+    select(appended_col_name, !!value_col) %>%
+    pivot_wider(names_from = appended_col_name, values_from = !!value_col)
 }
 
 ## ======================================================================================

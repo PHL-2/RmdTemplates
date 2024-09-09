@@ -1162,6 +1162,7 @@ has_pos_ctrl <- s %>%
   filter(grepl("Mock DNA", sample_type)) %>%
   mutate(is_pos = Nextclade_pango == "B") %>%
   select(is_pos) %>%
+  unique() %>%
   pull()
 
 if(length(has_pos_ctrl) == 0) {

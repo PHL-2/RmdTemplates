@@ -44,7 +44,7 @@ end_concentration_vol_uL = 400
 extraction_vol_uL = 400
 
 ## Extraction: elution volume (uL)
-elution_vol_uL = 100
+elution_vol_uL = 50
 
 #### ddPCR ####
 

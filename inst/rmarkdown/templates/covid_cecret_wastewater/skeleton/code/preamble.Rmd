@@ -209,9 +209,8 @@ top_unkwn_indices <- read_delim(top_unkwn_fp) %>%
 write_csv(top_unkwn_indices, unkwn_barcodes_fp)
 
 #throw error if the top unknown index is greater than 0.5% percent of all reads
-if(max(top_unkwn_indices$percent_of_all_reads) > 0.005) {
-  message("\n\nWarning:\nTop unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode!")
-  Sys.sleep(10)
+if(max(top_unkwn_indices$percent_of_all_reads) > 0.005 & unique(s_meta$instrument_type) == "MiSeq") {
+  stop(simpleError("Top unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode"))
 }
 
 non_ctrl_samples <- s_meta %>%
@@ -604,8 +603,12 @@ cecret_software_select <- c("ivar", "bwa", "seqyclean", "Cecret version", "pango
 #pangolin data is included with this summary file
 cecret_aggregate <- here("data", "processed_cecret", "cecret_results.csv") %>%
   read_csv() %>%
+  mutate(sample_number = as.numeric(gsub("^.*_S", "", sample_id))) %>%
   select(-c(sample_id, samtools_meandepth_after_trimming, samtools_per_1X_coverage_after_trimming, fasta_line)) %>%
-  rename(sample_id = "sample", vadr_passfail = "vadr_p/f") %>%
+  rename(sample_id = "sample",
+         vadr_passfail = "vadr_p/f",
+         nextclade_qc_overallscore = "nextclade_qc.overallScore",
+         nextclade_qc_overallstatus = "nextclade_qc.overallStatus") %>%
   as.data.frame()
 
 cecret_aggregate %>%
@@ -1000,7 +1003,7 @@ sra_upload_fp <- here("upload", "dcipher", paste0(project_name, "_PHL2_sra_uploa
 fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta"))
 
 #read in data submission metadata
-data_submit_metadata_fp <- file.path(dirname(here()), "aux_files", "data_submission", "dcipher", "wastewater_data_submission_metadata.csv")
+data_submit_metadata_fp <- file.path(dirname(here()), "aux_files", "data_submission", "ww", "wastewater_data_submission_metadata.csv")
 
 data_submit_metadata <- read_csv(data_submit_metadata_fp) %>%
   separate_rows(c(db, db_specific_field), sep=", ")
@@ -1017,7 +1020,8 @@ dir.create(here("upload", "dcipher"), recursive = TRUE)
 data_upload_all <- s %>%
   filter(sample_group %in% s_toPlot$sample_group,
          !isControl,
-         ww_group != "Wastewater sample - Merged")
+         ww_group != "Wastewater sample - Merged") %>%
+  rename(`bs-ww_surv_system_sample_id` = uniq_sample_name)
 
 if(nrow(data_upload_all) != 0) {
 
@@ -1026,7 +1030,7 @@ if(nrow(data_upload_all) != 0) {
            #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/collection year. This name may conflict with samples collected/sequenced in different years
            covv_virus_name = paste0("hCoV-19/env/USA/PA-", gsub(str_sub(sequencing_date, 1, 4), "", sample_id), "/", sample_collection_year),
            biosample_name = paste0("SARS-CoV-2/Wastewater/USA/", sample_id, "/", sample_collection_year),
-           specimen_processing_id = sample_name,
+           specimen_processing_id = `bs-ww_surv_system_sample_id`,
            #fields that depend on the workflow
            instrument = paste0("Illumina ", instrument_type),
            library = paste0("ARTIC Network Protocol ", artic_primer_scheme),
@@ -1061,21 +1065,25 @@ if(nrow(data_upload_all) != 0) {
                     "collected_by" = "sample_collected_by",
                     "ww_population" = "population_served",
                     "specimen_processing_id",
-                    "design_description"))) %>%
+                    "design_description",
+                    "N2_present",
+                    "ww_surv_target_1_conc" = "N2_gc/L",
+                    "E_present",
+                    "ww_surv_target_2_conc" = "E_gc/L"))) %>%
     cbind(data_submit_metadata %>%
-            filter_n_pivot(db, "BioSample", "db_specific_field", "value")) %>%
+           filter_n_pivot(db, "BioSample", "db_specific_field", "value")) %>%
     mutate(description = paste(sample_description, design_description),
-          #need to fill these in
-           ww_surv_target_1_known_present = ifelse(has_N2,
-                                                   ifelse(N2_present, "Yes", "No"),
-                                                   ""),
-           ww_surv_target_1_conc = ifelse(has_N2, `N2_gc/L`, ""), #this is the ddPCR transformed unit
-           ww_surv_target_2_known_present = ifelse(has_N2,
-                                                   ifelse(N2_present, "Yes", "No"),
-                                                   ""),
-           ww_surv_target_2_conc = ifelse(has_N2, `E_gc/L`, ""),
+           ww_surv_target_1_conc = ifelse(is.na(ww_surv_target_1_conc), "", ww_surv_target_1_conc), #this is the ddPCR transformed unit
+           ww_surv_target_2_conc = ifelse(is.na(ww_surv_target_2_conc), "", ww_surv_target_2_conc),
            gisaid_accession = "") %>%
-    select(-c(sample_description, design_description)) %>%
+    rowwise() %>%
+    mutate(ww_surv_target_1_known_present = ifelse(has_N2,
+                                                  ifelse(N2_present & !is.na(N2_present), "Yes", "No"),
+                                                  ""),
+           ww_surv_target_2_known_present = ifelse(has_N2,
+                                                  ifelse(E_present & !is.na(E_present), "Yes", "No"),
+                                                  "")) %>%
+    select(-c(sample_description, design_description, N2_present, E_present)) %>%
     write_csv(biosample_upload_fp)
   
   data_upload_all %>%
@@ -1092,10 +1100,6 @@ if(nrow(data_upload_all) != 0) {
     write_csv(sra_upload_fp)
 
 }
-
-#additional items to add
-#is lod_sewage the same as ww_flow? Seems like flow data is separate
-#ww_surv_system_sample_id (may need to get this id from the NWSS submmission process)
 
 ```
 
