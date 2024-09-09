@@ -4,6 +4,7 @@
 library(tidyverse)
 library(pander)
 library(here)
+library(stringi)
 
 ```
 
