@@ -277,7 +277,10 @@ if (variance_test | signal_check) {
   
   all_var_check <- any(wellsToRemove %in% all_var)
 
+} else {
+  wellsToRemove <-  ""
 }
+
 
 
 
