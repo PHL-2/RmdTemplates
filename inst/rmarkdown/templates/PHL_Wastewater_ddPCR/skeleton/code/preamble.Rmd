@@ -4,6 +4,7 @@
 library(tidyverse)
 library(pander)
 library(here)
+library(stringi)
 
 ```
 
@@ -282,6 +283,7 @@ if (variance_test | signal_check) {
 
 
 
+
 ```
 
 
@@ -520,7 +522,9 @@ ww_SC2_conc_result <- d %>%
 
 ww_site_metadata <- read_csv(ww_site_meta_fp)
 
-ww_nwss_metadata <- generate_common_metadata_fields(ww_nwss_meta_fp)
+ww_nwss_metadata <- generate_common_metadata_fields(ww_nwss_meta_fp) %>%
+  select(starts_with("nwss-")) %>%
+  rename_at(vars(starts_with("nwss-")), ~ gsub("nwss-", "", .))
 
 wwMeta <- cbind(ww_site_metadata, ww_nwss_metadata)
 

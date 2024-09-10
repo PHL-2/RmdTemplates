@@ -14,6 +14,7 @@ system2("aws", c("sso login"))
 if(!exists("run_uploaded_2_basespace")){
   run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 }
+
 have_AWS_EC2_SSH_access <- TRUE
 
 # temporary directory holding the sequencing run download
@@ -64,13 +65,16 @@ tryCatch(
 # Tar the sequencing folder and upload to S3
 ############################################
 
+yymmdd <- gsub("^..|-", "", sequencing_date)
+seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
+
 bclconvert_sample_sheet_pattern <- "SampleSheet_v2.csv"
 
 # If this sample sheet is missing, get it from AWS S3 bucket
 sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = bclconvert_sample_sheet_pattern)
 
 if(length(sample_sheet_fn) > 1) {
-  stop(simpleError("There are more than 2 sample sheets detected!! Please delete the incorrect one"))
+  stop(simpleError("There are more than 2 SampleSheet_v2.csv files detected!! Please delete the incorrect one"))
 }
 
 sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq1k2k)_.*", "\\1", sample_sheet_fn)
@@ -79,7 +83,7 @@ sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq1k2k)_.*", "\\1", sample_sheet_fn
 sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
                              sequencer_type == "NextSeq1k2k" ~ "VH")
 
-sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*$")
+sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
 
 sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
 
@@ -181,8 +185,8 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
   submit_screen_job(message2display = "Generating md5 checksum",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-checksum",
-                    command2run = paste0("cd ", ec2_tmp_fp, "; ",
-                                         "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, "/", sequencing_run, ".md5; ",
+                    command2run = paste0("cd ", ec2_tmp_fp, ";",
+                                         "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, "/", sequencing_run, ".md5;",
                                          "cat ", ec2_tmp_fp, "/", sequencing_run, ".md5")
   )
 
@@ -190,47 +194,46 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
                    ec2_login = ec2_hostname,
                    screen_session_name = "sequencing-checksum")
 
-  rstudioapi::executeCommand('activateConsole')
-
 } else {
+
+  dir.create(ec2_tmp_fp, recursive = TRUE)
 
   # Run the following commands if BaseSpace is available but not SSH (or if the run is MiSeq)
   if(sequencer_type == "MiSeq" | run_uploaded_2_basespace) {
 
     if(run_uploaded_2_basespace) {
+
       run_folder <- temporary_seq_run_fp
+
     } else {
-      run_folder <- sequencing_folder_fp %>%
-        list.files(full.names = T) %>%
-        data.frame(filenames = .) %>%
-        filter(grepl(format(as.Date(sequencing_date), "%y%m%d"), filenames)) %>%
-        filter(grepl(sequencing_folder_regex, filenames)) %>%
-        filter(!grepl("\\.tar\\.gz$|\\.md5$", filenames)) %>%
+
+      intended_miseq_folder_regex <- paste0(yymmdd, "_M", seq_folder_pattern)
+
+      scp_command <- paste("scp -r",
+                           paste0(miseq_hostname, ":", intended_miseq_folder_regex, "/"),
+                           ec2_tmp_fp)
+
+      run_in_terminal(scp_command)
+
+      sequencing_run <- data.frame(run_folders = list.files(ec2_tmp_fp)) %>%
+        filter(grepl(paste0(intended_miseq_folder_regex, "$"), run_folders)) %>%
         pull()
 
-      folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
-        as.Date(format = "%Y%m%d")
-
-      sequencing_run <- gsub(".*/", "", run_folder)
-
-      if(folder_date != gsub("_.*", "", basename(here())) | is.na(folder_date)) {
-        stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
-      }
+      run_folder <- paste0(ec2_tmp_fp, "/", sequencing_run)
     }
 
     #tar the run folder
     run_in_terminal(paste("echo 'Creating tarball of the sequencing run folder';",
                           tar_command_function(run_folder, use_checkpoint = FALSE)))
 
-    rstudioapi::executeCommand('activateConsole')
-
   } else if (sequencer_type == "NextSeq1k2k") {
 
-    run_folder_pattern <- paste0(gsub("^..|-", "", sequencing_date))
+    intended_nextseq_folder_regex <- paste0(yymmdd, "_VH", seq_folder_pattern)
     nextseq_run_fp <- "/usr/local/illumina/runs/"
+
     sequencing_run <- system2("ssh", c("-tt", nextseq_hostname,
                                        shQuote(paste("cd", paste0(nextseq_run_fp, ";"),
-                                                     "ls | grep", paste0("^", run_folder_pattern, "_VH"), "| tr -d '\n'"),
+                                                     "ls | grep", intended_nextseq_folder_regex, "| tr -d '\n'"),
                                                type = "sh")),
                               stdout = TRUE)
 
@@ -241,18 +244,22 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
                                                              paste0(nextseq_run_fp, sequencing_run, "/", sequencing_run)))))
     )
 
-    dir.create(ec2_tmp_fp, recursive = TRUE)
-
     scp_command <- paste("scp -r",
                          paste0(nextseq_hostname, ":", nextseq_run_fp, sequencing_run, "/", sequencing_run, ".tar.gz"),
                          ec2_tmp_fp)
 
     run_in_terminal(scp_command)
 
-    rstudioapi::executeCommand('activateConsole')
-
     run_folder <- paste0(ec2_tmp_fp, "/", sequencing_run)
 
+  }
+  rstudioapi::executeCommand("activateConsole")
+
+  folder_date <- paste0("20", gsub(".*/|_.*", "", run_folder)) %>%
+    as.Date(format = "%Y%m%d")
+
+  if(folder_date != gsub("_.*", "", basename(here())) | is.na(folder_date)) {
+    stop(simpleError("The run date on the sequencing folder does not match the date of this RStudio project!"))
   }
 
   message("\nMaking md5 file")
@@ -283,10 +290,9 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
     run_in_terminal(paste("scp", paste0(run_folder, ".tar.gz"),
                           paste0(ec2_hostname, ":", ec2_tmp_fp))
     )
-
-    rstudioapi::executeCommand('activateConsole')
   }
 }
+rstudioapi::executeCommand("activateConsole")
 
 sample_sheet_fp <- here("metadata", "munge", sample_sheet_fn)
 
@@ -340,5 +346,5 @@ if(have_AWS_EC2_SSH_access) {
                    ec2_login = ec2_hostname,
                    screen_session_name = "upload-run")
 
-  rstudioapi::executeCommand('activateConsole')
+  rstudioapi::executeCommand("activateConsole")
 }

@@ -32,8 +32,9 @@ ec2_hostname <- ""
 # Sequencer settings
 ####################
 
-#host name of the NextSeq sequencer in the .ssh/config file
+#host name to the local sequencer connection in the .ssh/config file
 nextseq_hostname <- ""
+miseq_hostname <- ""
 
 ###################
 # Nextflow settings
