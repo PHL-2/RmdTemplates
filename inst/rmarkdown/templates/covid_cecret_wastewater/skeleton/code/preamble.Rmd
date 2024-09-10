@@ -768,7 +768,8 @@ s <- s_meta %>%
          date_facet = ifelse(grepl("Unassigned reads|control", ww_group), "Control", as.character(sample_collect_date)),
          date_facet = factor(date_facet, levels = c("Control", sort(unique(date_facet[!grepl("Control", date_facet)]))))) %>%
   arrange(sample_id) %>%
-  droplevels()
+  droplevels() %>%
+  filter(!is.na(sample_group))
 
 #only get merged samples that have passing results and controls
 s_toPlot <- s %>%
@@ -838,6 +839,8 @@ tryCatch(
 #          count_variant = as.integer(count_variant),
 #          across(ends_with("creation_date"), ~ as.Date(.))) %>%
 #   select(variant)
+
+dl_cdc_names <- read_csv(cdc_tracker_fp)
 
 cdc_lineages <- dl_cdc_names %>%
   unique() %>%
@@ -1020,8 +1023,7 @@ dir.create(here("upload", "dcipher"), recursive = TRUE)
 data_upload_all <- s %>%
   filter(sample_group %in% s_toPlot$sample_group,
          !isControl,
-         ww_group != "Wastewater sample - Merged") %>%
-  rename(`bs-ww_surv_system_sample_id` = uniq_sample_name)
+         ww_group != "Wastewater sample - Merged")
 
 if(nrow(data_upload_all) != 0) {
 
@@ -1030,7 +1032,7 @@ if(nrow(data_upload_all) != 0) {
            #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/collection year. This name may conflict with samples collected/sequenced in different years
            covv_virus_name = paste0("hCoV-19/env/USA/PA-", gsub(str_sub(sequencing_date, 1, 4), "", sample_id), "/", sample_collection_year),
            biosample_name = paste0("SARS-CoV-2/Wastewater/USA/", sample_id, "/", sample_collection_year),
-           specimen_processing_id = `bs-ww_surv_system_sample_id`,
+           specimen_processing_id = sample_name,
            #fields that depend on the workflow
            instrument = paste0("Illumina ", instrument_type),
            library = paste0("ARTIC Network Protocol ", artic_primer_scheme),
@@ -1100,6 +1102,10 @@ if(nrow(data_upload_all) != 0) {
     write_csv(sra_upload_fp)
 
 }
+
+#additional items to add
+#is lod_sewage the same as ww_flow? Seems like flow data is separate
+#ww_surv_system_sample_id (may need to get this id from the NWSS submmission process)
 
 ```
 
@@ -1509,13 +1515,23 @@ coverage_loop <- s %>%
   unique() %>%
   pull()
 
-for(sites in coverage_loop) {
+date_loop <- s %>%
+  filter(sample_id != "Undetermined") %>%
+  filter(!is.na(median_coverage)) %>% 
+  select(sample_collect_date) %>%
+  unique() %>%
+  pull()
   
+  
+for(sites in coverage_loop) {
+  for (dates in as.character(date_loop)) {
   filtered_samp_name <- s %>%
     mutate(loop_group = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_group) ~ "Sequencing-control",
-                                  TRUE ~ sample_group)) %>%
+                                  TRUE ~ sample_group),
+           date_char = as.character(sample_collect_date)) %>%
     filter(sample_id != "Undetermined") %>%
     filter(loop_group %in% sites) %>%
+    filter(date_char %in% dates) %>%
     mutate(sample_name = case_when(isControl ~ sample_group,
                                    TRUE ~ gsub("^Test-|^WW-", "", sample_name))) %>%
     mutate(coverage_qc_status = case_when(is.na(coverage_qc_status) & !isControl ~ "Poor",
@@ -1529,7 +1545,18 @@ for(sites in coverage_loop) {
     droplevels() %>%
     select(sample_id, sample_name, parent_variant, coverage_qc_status)
   
+  if (nrow(filtered_samp_name) == 0) {
+    next
+  }
+  
   sample_name_label <- setNames(as.character(filtered_samp_name$sample_name), filtered_samp_name$sample_id)
+  
+    empty_files <- slide_window_coverage %>%
+      filter(sample_id %in% filtered_samp_name$sample_id)
+    
+    if (nrow(empty_files) == 0) {
+      next
+    }
 
   slide_window_coverage %>%
     filter(sample_id %in% filtered_samp_name$sample_id) %>%
@@ -1559,9 +1586,9 @@ for(sites in coverage_loop) {
       guides(linetype = guide_legend(order = 1), fill = guide_legend(order = 2)) +
     annotation_legend + plot_layout(ncol = 1, heights = c(50, 1))
     } %>%
-    ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sample_sliding_coverage_100_bp_site_", sites, ".png")), plot = ., width = 11, height = 8)
+    ggsave(filename = here("data", "figures", paste0(sequencing_date, "_sample_sliding_coverage_100_bp_site_", dates, "_", sites, ".png")), plot = ., width = 11, height = 8)
+  }
 }
-
 ```
 
 ```{r empty plate to plot}
@@ -1571,5 +1598,3 @@ empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) re
 
 ```
 
-```{r}
-```

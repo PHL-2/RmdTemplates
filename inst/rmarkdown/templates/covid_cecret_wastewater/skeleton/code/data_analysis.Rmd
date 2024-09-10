@@ -62,7 +62,7 @@ Freyja (https://github.com/andersen-lab/freyja) \newline
 s %>%
   filter(sample_group != "Unassigned reads") %>%
   droplevels() %>%
-  group_by(sample_group) %>%
+  group_by(sample_group, sample_collect_date) %>%
   mutate(n = n() - sum(grepl("Merged", ww_group)),
          Merged = ifelse(!isControl, as.character(sum(grepl("Merged", ww_group))), ""),
          Good = sum(pct_genome_coverage_over_10x >= 0.6, na.rm = TRUE),
