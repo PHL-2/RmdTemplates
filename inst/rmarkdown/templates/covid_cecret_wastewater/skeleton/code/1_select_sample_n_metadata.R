@@ -97,7 +97,7 @@ selection_data <- lapply(select_fp, read_csv) %>%
          !matches("^\\.\\.\\.")) %>%
   merge(ddPCR_data, by = c("sample_group", "sample_collect_date"), all.x = TRUE, sort = FALSE) %>%
   mutate(uniq_sample_name = ifelse((is.na(uniq_sample_name) | uniq_sample_name == ""),
-                              paste("WW", format(sample_collect_date, "%y%m%d"), format(sequencing_date, "%y%m%d"), sample_group, sep = "-"),
+                              paste("WW", sample_received_date, sample_group, sep = "-"),
                               uniq_sample_name))
 
 if(all(is.na(selection_data$ddpcr_analysis_date))) {
