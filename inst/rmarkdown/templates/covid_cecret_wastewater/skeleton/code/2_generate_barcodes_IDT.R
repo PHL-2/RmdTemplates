@@ -488,7 +488,7 @@ metadata_sheet <- metadata_sheet %>%
                                          TRUE ~ "Philadelphia Water Department"),
          sample_collect_date = case_when(!(is.na(sample_collect_date) | as.character(sample_collect_date) == "") ~ as.character(sample_collect_date),
                                          #if sample collect date column is not available, grab the date from the sample_name
-                                         grepl("^WW-([0-9]{6})-([0-9]{6})-", sample_name) ~ as.character(gsub("^(WW)-([0-9]{6})-([0-9]{6})-(.*)", "\\2", sample_name)),
+                                         grepl("^WW-([0-9]{6})-([0-9]{6})-", sample_name) ~ as.character(as.Date(gsub("^(WW)-([0-9]{6})-([0-9]{6})-(.*)", "\\2", sample_name), tryFormats = "%y%m%d")),
                                          #if it's a wastewater sample without a date or does not start with WW, throw an error
                                          sample_type == "Wastewater" ~ NA,
                                          #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet

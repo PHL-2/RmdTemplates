@@ -37,6 +37,7 @@ library(stringdist)
 library(scales)
 library(vegan)
 library(ape)
+library(stringi)
 
 ```
 
@@ -1005,8 +1006,7 @@ fasta_fp <- here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")
 #read in data submission metadata
 data_submit_metadata_fp <- file.path(dirname(here()), "aux_files", "data_submission", "ww", "wastewater_data_submission_metadata.csv")
 
-data_submit_metadata <- read_csv(data_submit_metadata_fp) %>%
-  separate_rows(c(db, db_specific_field), sep=", ")
+data_submit_metadata <- generate_common_metadata_fields(data_submit_metadata_fp)
 
 ```
 
@@ -1040,7 +1040,8 @@ if(nrow(data_upload_all) != 0) {
   data_upload_all %>%
     select(any_of(c("wwtp_name", "sample_collect_date", "zipcode", "population_served", "lod_sewage"))) %>%
     cbind(data_submit_metadata %>%
-            filter_n_pivot(db, "NWSS", "db_specific_field", "value")) %>%
+            select(starts_with("nwss-")) %>%
+            rename_at(vars(starts_with("nwss-")), ~ gsub("nwss-", "", .))) %>%
     write_csv(nwss_upload_fp)
   
   data_upload_all %>%
@@ -1053,7 +1054,8 @@ if(nrow(data_upload_all) != 0) {
                     "covv_subm_sample_id" = "sample_id"))) %>%
     mutate(fn = "") %>%
     cbind(data_submit_metadata %>%
-            filter_n_pivot(db, "GISAID", "db_specific_field", "value")) %>%
+            select(starts_with("gs-")) %>%
+            rename_at(vars(starts_with("gs-")), ~ gsub("gs-", "", .))) %>%
     write_csv(gisaid_upload_fp)
   
   data_upload_all %>%
@@ -1071,7 +1073,8 @@ if(nrow(data_upload_all) != 0) {
                     "E_present",
                     "ww_surv_target_2_conc" = "E_gc/L"))) %>%
     cbind(data_submit_metadata %>%
-           filter_n_pivot(db, "BioSample", "db_specific_field", "value")) %>%
+            select(starts_with("bs-")) %>%
+            rename_at(vars(starts_with("bs-")), ~ gsub("bs-", "", .))) %>%
     mutate(description = paste(sample_description, design_description),
            ww_surv_target_1_conc = ifelse(is.na(ww_surv_target_1_conc), "", ww_surv_target_1_conc), #this is the ddPCR transformed unit
            ww_surv_target_2_conc = ifelse(is.na(ww_surv_target_2_conc), "", ww_surv_target_2_conc),
@@ -1095,8 +1098,9 @@ if(nrow(data_upload_all) != 0) {
                     "raw_sequence_data_processing_method" = "assembly_method"))) %>%
     mutate(filename = "",
            filename2 = "") %>%
-    cbind(data_submit_metadata %>%
-            filter_n_pivot(db, "SRA", "db_specific_field", "value")) %>%
+    cbind(data_submit_metadata  %>%
+            select(starts_with("sra-")) %>%
+            rename_at(vars(starts_with("sra-")), ~ gsub("sra-", "", .))) %>%
     write_csv(sra_upload_fp)
 
 }
