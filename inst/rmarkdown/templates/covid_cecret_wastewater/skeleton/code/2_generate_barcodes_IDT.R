@@ -515,7 +515,7 @@ metadata_sheet <- metadata_sheet %>%
                                      TRUE ~ epi_email),
          sample_group = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ sample_type,
                                   !(is.na(sample_group) | sample_group == "") ~ sample_group,
-                                  TRUE ~ gsub("^WW-|^Test", "", uniq_sample_name)),
+                                  TRUE ~ gsub(".*-", "", uniq_sample_name)),
          ww_group = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ sample_type,
                               grepl(paste0(sample_group_controls, collapse = "|"), uniq_sample_name) ~ "Wastewater control",
                               TRUE ~ "Wastewater sample")) %>%
