@@ -14,7 +14,7 @@ library(stringr)
 create_sample_replicates <- 4 #enter a positive integer for the number of biological replicates created during concentration and extraction
 
 # set this to TRUE to copy the platemap to the shared drive
-copy_platemap <- FALSE
+copy_platemap <- TRUE
 
 sample_type_acronym <- "WW" #use WW for wastewater samples
 
@@ -58,7 +58,7 @@ tryCatch(
 failed_regex <- "test|exclude"
 
 ddPCR_files <- list.files(ddPCR_run_fp, pattern = ".*_ww_sequencing_metadata.csv", full.names = TRUE, recursive = TRUE)
-ddPCR_files <- tail(ddPCR_files[!grepl(failed_regex, ddPCR_files)], 5)
+ddPCR_files <- tail(ddPCR_files[!grepl(failed_regex, ddPCR_files)], 10)
 
 ddPCR_data <- ddPCR_files %>%
   data_frame(FileName = .) %>%
