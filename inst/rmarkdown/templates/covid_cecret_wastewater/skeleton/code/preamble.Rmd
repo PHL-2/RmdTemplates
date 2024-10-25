@@ -895,6 +895,7 @@ freyja_lineages <- s %>%
 if(report_only_cdc_lineages) {
   
   lineages_to_keep <- read_csv(cdc_tracker_fp) %>%
+    filter(!is.na(variant)) %>%
     select(variant) %>%
     unique()
   

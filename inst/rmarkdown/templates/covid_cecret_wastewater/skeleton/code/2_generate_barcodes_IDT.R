@@ -22,6 +22,8 @@ have_AWS_EC2_SSH_access <- TRUE
 
 remove_sample_from_bcl_samplesheet <- c("") #add in sample names to remove from demultiplexing
 
+sample_w_empty_reads <- c("") #add in sample ids that have empty fastq files
+
 # temporary directory to hold the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl"
 
@@ -701,6 +703,7 @@ if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
 
 samp_sheet_2_write <- metadata_sheet %>%
   filter(!sample_name %in% remove_sample_from_bcl_samplesheet) %>%
+  filter(!sample_id %in% sample_w_empty_reads) %>%
   # do not include lane in the sample sheet otherwise it will only demultiplex that sample in that specified lane, not in all lanes
   rowwise() %>%
   #BCL Convert does not take Index Plate
@@ -791,6 +794,7 @@ bclconvert_output_final_path <- paste(s3_fastq_bucket, sequencing_date, sample_t
 
 #write the sample sheet for merging nextflow script
 metadata_sheet %>%
+  filter(!sample_id %in% sample_w_empty_reads) %>%
   select(fastq = sample_id, uniq_sample_name) %>%
   mutate(fastq_1 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R1_001.fastq.gz"),
          fastq_2 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R2_001.fastq.gz")) %>%
