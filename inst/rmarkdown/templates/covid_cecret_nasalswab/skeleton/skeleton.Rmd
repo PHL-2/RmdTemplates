@@ -21,6 +21,12 @@ output:
 
 \tableofcontents
 
+```{r}
+
+run_uploaded_2_basespace <- FALSE
+
+```
+
 ```{r filter out samples, message = TRUE, include=FALSE, eval = FALSE}
 
 #this script filters the Excel file provided by the epidemiologist by excluding low RLU samples and samples received by the Health Centers
@@ -524,3 +530,4 @@ download_submission_log <- system2("scp", c(paste0(ec2_hostname, ":", submission
 ssh_command_check(download_submission_log)
 
 ```
+

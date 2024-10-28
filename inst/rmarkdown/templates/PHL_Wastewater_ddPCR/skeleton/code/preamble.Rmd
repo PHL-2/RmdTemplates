@@ -244,7 +244,7 @@ if (variance_test | signal_check) {
   wellsToRemove2 <- d_sd %>%
     filter(Target == "MHV",
            Positives < 100,
-           outlier_median >= 9| GESD_q <= 0.01, 
+           outlier_median >= 9| GESD_q <= 0.01,
            grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
            Process == "Concentrated",
            Spiked == "Spiked",
