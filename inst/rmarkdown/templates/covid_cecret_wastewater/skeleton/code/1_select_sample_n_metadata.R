@@ -67,25 +67,8 @@ ddPCR_data <- ddPCR_files %>%
                 show_col_types = FALSE,
                 col_types = cols("sample_received_date" = col_date()))) %>%
   ungroup() %>%
-<<<<<<< HEAD
-  mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName)),
-         sample_received_date = as.Date(ifelse(is.na(sample_received_date), sample_collect_date, sample_received_date)),
-         sample_collect_date = as.Date(sample_received_date - 1),
-         uniq_sample_name = ifelse(is.na(uniq_sample_name),
-                                   paste("WW", format(sample_collect_date, format = "%y%m%d"), format(ddpcr_analysis_date, format = "%y%m%d"), sample_group, sep = "-"),
-                                   uniq_sample_name),
-         uniq_sample_name = case_when(
-           grepl(pattern = "NorthEast", x = uniq_sample_name) ~ gsub(pattern = "NorthEast", replacement = "NE", x = uniq_sample_name),
-           grepl(pattern = "SouthEast", x = uniq_sample_name) ~ gsub(pattern = "SouthEast", replacement = "SE", x = uniq_sample_name),
-           grepl(pattern = "SouthWest", x = uniq_sample_name) ~ gsub(pattern = "SouthWest", replacement = "SW", x = uniq_sample_name),
-         )
-         #sample_collect_date = as.Date(sample_collect_date)
-  ) %>%
-  group_by(sample_group, sample_collect_date) %>%
-=======
   mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName))) %>%
   group_by(sample_group, sample_received_date) %>%
->>>>>>> d96020397e485e3a063c0421f15199f2ec5c0846
   #get the latest run only
   filter(ddpcr_analysis_date == max(ddpcr_analysis_date)) %>%
   ungroup() %>%
@@ -108,25 +91,15 @@ if(length(select_fp) == 0) {
 
 selection_data <- lapply(select_fp, read_csv) %>%
   do.call(rbind, .) %>%
-<<<<<<< HEAD
-  mutate(sample_received_date = as.Date(sample_collect_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
-=======
   mutate(sample_received_date = as.Date(sample_received_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
->>>>>>> d96020397e485e3a063c0421f15199f2ec5c0846
   select(any_of("sample_group"), sample_received_date) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x))),
          !matches("^\\.\\.\\.")) %>%
   merge(ddPCR_data, by = c("sample_group", "sample_received_date"), all.x = TRUE, sort = FALSE) %>%
   mutate(uniq_sample_name = ifelse((is.na(uniq_sample_name) | uniq_sample_name == ""),
-<<<<<<< HEAD
-                                   paste("WW", format(sample_collect_date, "%y%m%d"), format(sequencing_date, "%y%m%d"), sample_group, sep = "-"),
-                                   uniq_sample_name),
-         uniq_sample_name = gsub(pattern = "orth|est|ast|outh", replacement = "", x = uniq_sample_name))
-=======
                               paste("WW", sample_received_date, sample_group, sep = "-"),
                               uniq_sample_name))
->>>>>>> d96020397e485e3a063c0421f15199f2ec5c0846
 
 if(all(is.na(selection_data$ddpcr_analysis_date))) {
   message("\n\nWarning!!!\nSamples selected for sequencing do not have a corresponding ddPCR date!")

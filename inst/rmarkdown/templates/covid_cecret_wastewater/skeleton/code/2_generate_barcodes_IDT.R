@@ -410,21 +410,12 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   arrange(plate, plate_col, plate_row) %>%
   rename(any_of(c(sample_received_date = "sample_collection_date"))) %>%
   #find sample group from sample_name
-<<<<<<< HEAD
-  mutate(sample_group = gsub("^WW-([0-9]{4})-([0-9]{2})-([0-9]{2})-|^WW-|-Rep.*$", "", sample_name),
-         # sample_group = case_when(sample_group == "NE" ~ "NorthEast",
-         #                          sample_group == "SE" ~ "SouthEast",
-         #                          sample_group == "SW" ~ "SouthWest",
-         #                          (sample_group == "character(0)" | sample_group == "") ~ NA_character_,
-         #                          TRUE ~ sample_group),
-=======
   mutate(sample_group = gsub("^WW-([0-9-]+)|^WW-|-Rep.*$", "", sample_name),
          sample_group = case_when(sample_group == "NE" ~ "NorthEast",
                                   sample_group == "SE" ~ "SouthEast",
                                   sample_group == "SW" ~ "SouthWest",
                                   (sample_group == "character(0)" | sample_group == "") ~ NA_character_,
                                   TRUE ~ sample_group),
->>>>>>> d96020397e485e3a063c0421f15199f2ec5c0846
          # sample_group = as.character(lapply(sample_name,
          #                                    function(x) unlist(lapply(c(sample_group_controls, sample_group_sites),
          #                                                              function(y) y[grepl(y, x)])))),
@@ -490,11 +481,7 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^[A-Z0-9][0-9]*$" = "Nasal swab",
                        "^WW-" = "Wastewater")
 
-<<<<<<< HEAD
-extra_cols2merge <- c("sample_group", "sample_received_date", "sample_collect_date")
-=======
 extra_cols2merge <- c("uniq_sample_name", "sample_group", "sample_received_date")
->>>>>>> d96020397e485e3a063c0421f15199f2ec5c0846
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
@@ -505,20 +492,12 @@ metadata_sheet <- metadata_sheet %>%
                                          TRUE ~ "Philadelphia Water Department"),
          sample_received_date = case_when(!(is.na(sample_received_date) | as.character(sample_received_date) == "") ~ as.character(sample_received_date),
                                          #if sample collect date column is not available, grab the date from the sample_name
-<<<<<<< HEAD
-                                         grepl("^WW-[0-9]{4}-[0-9]{2}-[0-9]{2}", sample_name) ~ as.character(str_extract(pattern = "[0-9]{4}-[0-9]{2}-[0-9]{2}", string = sample_name)),
-=======
                                          grepl("^WW-([0-9-]{10})-", sample_name) ~ gsub("^(WW)-([0-9-]{10})-(.*)", "\\2", sample_name),
->>>>>>> d96020397e485e3a063c0421f15199f2ec5c0846
                                          #if it's a wastewater sample without a date or does not start with WW, throw an error
                                          sample_type == "Wastewater" ~ NA,
                                          #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet
                                          TRUE ~ as.character(as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1)),
-<<<<<<< HEAD
-         sample_collect_date = as.Date(sample_collect_date)-1,
-=======
          sample_received_date = as.Date(sample_received_date),
->>>>>>> d96020397e485e3a063c0421f15199f2ec5c0846
          organism = case_when(!(is.na(organism) | organism == "") ~ organism,
                               sample_type == "Wastewater" ~ "Wastewater metagenome",
                               !is.na(sample_type) ~ sample_type,
@@ -540,11 +519,7 @@ metadata_sheet <- metadata_sheet %>%
                                      TRUE ~ epi_email),
          sample_group = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ sample_type,
                                   !(is.na(sample_group) | sample_group == "") ~ sample_group,
-<<<<<<< HEAD
-                                  TRUE ~ gsub("^WW-|^Test", "", sample_name)),
-=======
                                   TRUE ~ gsub(".*-", "", uniq_sample_name)),
->>>>>>> d96020397e485e3a063c0421f15199f2ec5c0846
          ww_group = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ sample_type,
                               grepl(paste0(sample_group_controls, collapse = "|"), sample_name) ~ "Wastewater control",
                               TRUE ~ "Wastewater sample")
