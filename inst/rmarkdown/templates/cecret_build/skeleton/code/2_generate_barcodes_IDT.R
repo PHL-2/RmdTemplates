@@ -16,13 +16,11 @@ if(!exists("run_uploaded_2_basespace")){
   run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 }
 
-sequencer_select <- 2 # set variable as 1 for MiSeq or 2 for NextSeq
+sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
 
 have_AWS_EC2_SSH_access <- TRUE
 
 remove_sample_from_bcl_samplesheet <- c("") #add in sample names to remove from demultiplexing
-
-sample_w_empty_reads <- c("") #add in sample ids that have empty fastq files
 
 # temporary directory to hold the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl"
@@ -336,8 +334,7 @@ read_sheet <- function(fp, sheet_name) {
 }
 
 index_sheet <- read_sheet(metadata_input_fp, "Index")
-sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info") %>%
-  mutate(PHL_sample_received_date = str_extract(sample_name, pattern = "[0-9]{4}-[0,1][0-9]-[0-3][0-9]"))
+sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
 
 #######################################################
 # Load the wastewater metadata sheet from the ddPCR run
@@ -345,14 +342,14 @@ sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info") %>%
 
 ddPCR_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.csv", full.names = TRUE, recursive = TRUE)
 
-ddPCR_data <- read_csv(ddPCR_fp, show_col_types = FALSE) #%>%
+ddPCR_data <- read_csv(ddPCR_fp, show_col_types = FALSE)
 
 # if ddPCR_data does not exist, create an empty dataframe
 if(ncol(ddPCR_data) == 0) {
 
   ddPCR_data <- data.frame(
     sample_group = NA_character_,
-    sample_received_date = NA
+    sample_collect_date = NA
   )
 
   # if ddPCR_data exists, reformat the columns
@@ -363,7 +360,7 @@ if(ncol(ddPCR_data) == 0) {
            !matches("^\\.\\.\\.")) %>%
     rename(any_of(c(sample_group = "sample_id"))) %>%
     mutate(sample_group = as.character(sample_group),
-           sample_received_date = as.Date(sample_received_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
+           sample_collect_date = as.Date(sample_collect_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
     as.data.frame()
 
 }
@@ -377,9 +374,9 @@ ENV_fp <- max(list.files(here("metadata", "extra_metadata"), pattern = "environm
 if(!is.na(ENV_fp)) {
 
   ENV_data <- read_csv(ENV_fp) %>%
-    #use the Tuesday of the sequencing week as the sample_received_date
-    mutate(sample_received_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
-    select(sample_group = sample_name, sample_received_date, environmental_site) %>%
+    #use the Tuesday of the sequencing week as the sample_collect_date
+    mutate(sample_collect_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
+    select(sample_group = sample_name, sample_collect_date, environmental_site) %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_group)) %>%
     #filter empty columns
@@ -392,8 +389,7 @@ if(!is.na(ENV_fp)) {
 
 extra_metadata_merge <- ddPCR_data %>%
   bind_rows(ENV_data) %>%
-  unique() %>%
-  filter(!is.na(sample_group))
+  unique()
 
 #########################################
 # Merge read in sequencing metadata sheet
@@ -410,9 +406,9 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   #add in barcodes
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
   arrange(plate, plate_col, plate_row) %>%
-  rename(any_of(c(sample_received_date = "sample_collection_date"))) %>%
+  rename(any_of(c(sample_collect_date = "sample_collection_date"))) %>%
   #find sample group from sample_name
-  mutate(sample_group = gsub("^WW-([0-9-]+)|^WW-|-Rep.*$", "", sample_name),
+  mutate(sample_group = gsub("^WW-([0-9]{6})-([0-9]{6})-|^WW-|-Rep.*$", "", sample_name),
          sample_group = case_when(sample_group == "NE" ~ "NorthEast",
                                   sample_group == "SE" ~ "SouthEast",
                                   sample_group == "SW" ~ "SouthWest",
@@ -431,16 +427,14 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
          run_cd = run_cd,
          run_q30 = run_q30,
          run_pf = run_pf,
-         run_error = run_error,
-         PHL_sample_received_date = as.Date(PHL_sample_received_date)) %>%
-  rename(sample_received_date = "PHL_sample_received_date") %>%
+         run_error = run_error) %>%
   select(sample_id, everything())
 
 #####################################################################
 # Fill in these columns in the metadata sheet if they were left blank
 #####################################################################
 
-fill_in_columns <- c("sample_type", "sample_collected_by", "sample_received_date",
+fill_in_columns <- c("sample_type", "sample_collected_by", "sample_collect_date",
                      "organism", "host_scientific_name", "host_disease", "isolation_source",
                      "requester", "requester_email")
 
@@ -483,7 +477,7 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^[A-Z0-9][0-9]*$" = "Nasal swab",
                        "^WW-" = "Wastewater")
 
-extra_cols2merge <- c("uniq_sample_name", "sample_group", "sample_received_date")
+extra_cols2merge <- c("uniq_sample_name", "sample_group", "sample_collect_date")
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
@@ -492,14 +486,14 @@ metadata_sheet <- metadata_sheet %>%
                                  TRUE ~ NA),
          sample_collected_by = case_when(!(is.na(sample_collected_by) | sample_collected_by == "") ~ sample_collected_by,
                                          TRUE ~ "Philadelphia Water Department"),
-         sample_received_date = case_when(!(is.na(sample_received_date) | as.character(sample_received_date) == "") ~ as.character(sample_received_date),
-                                          #if sample collect date column is not available, grab the date from the sample_name
-                                          grepl("^WW-([0-9-]{10})-", sample_name) ~ gsub("^(WW)-([0-9-]{10})-(.*)", "\\2", sample_name),
-                                          #if it's a wastewater sample without a date or does not start with WW, throw an error
-                                          sample_type == "Wastewater" ~ NA,
-                                          #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet
-                                          TRUE ~ as.character(as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1)),
-         sample_received_date = as.Date(sample_received_date),
+         sample_collect_date = case_when(!(is.na(sample_collect_date) | as.character(sample_collect_date) == "") ~ as.character(sample_collect_date),
+                                         #if sample collect date column is not available, grab the date from the sample_name
+                                         grepl("^WW-([0-9]{6})-([0-9]{6})-", sample_name) ~ as.character(gsub("^(WW)-([0-9]{6})-([0-9]{6})-(.*)", "\\2", sample_name)),
+                                         #if it's a wastewater sample without a date or does not start with WW, throw an error
+                                         sample_type == "Wastewater" ~ NA,
+                                         #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet
+                                         TRUE ~ as.character(as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1)),
+         sample_collect_date = as.Date(sample_collect_date),
          organism = case_when(!(is.na(organism) | organism == "") ~ organism,
                               sample_type == "Wastewater" ~ "Wastewater metagenome",
                               !is.na(sample_type) ~ sample_type,
@@ -521,15 +515,14 @@ metadata_sheet <- metadata_sheet %>%
                                      TRUE ~ epi_email),
          sample_group = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ sample_type,
                                   !(is.na(sample_group) | sample_group == "") ~ sample_group,
-                                  TRUE ~ gsub(".*-", "", uniq_sample_name)),
+                                  TRUE ~ gsub("^WW-|^Test", "", uniq_sample_name)),
          ww_group = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ sample_type,
-                              grepl(paste0(sample_group_controls, collapse = "|"), sample_name) ~ "Wastewater control",
-                              TRUE ~ "Wastewater sample")
-  ) %>%
+                              grepl(paste0(sample_group_controls, collapse = "|"), uniq_sample_name) ~ "Wastewater control",
+                              TRUE ~ "Wastewater sample")) %>%
   merge(extra_metadata_merge, by = extra_cols2merge, all.x = TRUE, sort = FALSE) %>%
   mutate(environmental_site = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
-                                        grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
-                                        TRUE ~ environmental_site)) %>%
+                                 grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
+                                 TRUE ~ environmental_site)) %>%
   arrange(plate, plate_col, plate_row)
 
 ##########################
@@ -574,7 +567,7 @@ if(ncol(ddPCR_data) > 0) {
     filter(grepl(paste0(sample_group_sites, collapse = "|"), sample_group)) %>%
     merge(metadata_sheet, by = extra_cols2merge, all.x = TRUE) %>%
     filter(is.na(sample_id)) %>%
-    mutate(date_n_name = paste(sample_received_date, "-", sample_group)) %>%
+    mutate(date_n_name = paste(sample_collect_date, "-", sample_group)) %>%
     select(date_n_name) %>%
     pull() %>%
     str_sort()
@@ -595,7 +588,7 @@ missing_metadata_non_ctrl_samples <- metadata_sheet %>%
   filter(!grepl("control", sample_type))
 
 missing_sample_date <- missing_metadata_non_ctrl_samples %>%
-  filter(is.na(sample_received_date)) %>%
+  filter(is.na(sample_collect_date)) %>%
   select(sample_name) %>%
   pull() %>%
   str_sort()
@@ -628,7 +621,7 @@ if(nrow(missing_ddPCR_data) > 0){
 #check lowest date of sample collection
 oldest_ww_date <- metadata_sheet %>%
   filter(!grepl("control", ww_group)) %>%
-  select(sample_received_date) %>%
+  select(sample_collect_date) %>%
   pull() %>%
   min()
 
@@ -645,7 +638,7 @@ for(x in c(cols2merge, "sample_id",
            "idt_set", "idt_plate_row", "idt_plate_col", "idt_plate_coord",
            "index", "index2", "UDI_Index_ID", "I7_Index_ID", "I5_Index_ID",
            "sequencing_date", "prj_descrip", "instrument_type", "read_length", "index_length",
-           "environmental_site", "sample_received_date")) {
+           "environmental_site", "sample_collect_date")) {
   if(!grepl(paste0(colnames(metadata_sheet), collapse = "|"), x)) {
     stop(simpleError(paste0("\nMissing column [", x, "] in the metadata sheet template!!!")))
   }
@@ -708,7 +701,6 @@ if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
 
 samp_sheet_2_write <- metadata_sheet %>%
   filter(!sample_name %in% remove_sample_from_bcl_samplesheet) %>%
-  filter(!sample_id %in% sample_w_empty_reads) %>%
   # do not include lane in the sample sheet otherwise it will only demultiplex that sample in that specified lane, not in all lanes
   rowwise() %>%
   #BCL Convert does not take Index Plate
@@ -799,7 +791,6 @@ bclconvert_output_final_path <- paste(s3_fastq_bucket, sequencing_date, sample_t
 
 #write the sample sheet for merging nextflow script
 metadata_sheet %>%
-  filter(!sample_id %in% sample_w_empty_reads) %>%
   select(fastq = sample_id, uniq_sample_name) %>%
   mutate(fastq_1 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R1_001.fastq.gz"),
          fastq_2 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R2_001.fastq.gz")) %>%
