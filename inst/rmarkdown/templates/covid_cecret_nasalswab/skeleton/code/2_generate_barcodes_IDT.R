@@ -22,7 +22,7 @@ have_AWS_EC2_SSH_access <- TRUE
 
 remove_sample_from_samplesheets <- c("") #add sample names to remove from demultiplexing
 
-sample_w_empty_reads <- c("") #add sample ids that have empty fastq files
+sample_w_empty_reads <- c("PHL2-VH-A-G06-20241008") #add sample ids that have empty fastq files
 
 # temporary directory to hold the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl"
