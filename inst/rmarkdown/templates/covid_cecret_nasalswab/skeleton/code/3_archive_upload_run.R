@@ -102,7 +102,7 @@ tar_command_function <- function(input_fp, output_fp = input_fp, bars = 99, use_
                                 "'.xml$'",
                                 "'/Data/'",
                                 "'/InterOp/'")
-  grep_command <- paste("grep", paste("-e", minimum_bs_files_pattern, collapse = " "))
+  grep_command <- paste("grep", paste("-e", minimum_bs_files_pattern, collapse = " "), " | grep -v '/Analysis/'")
 
   checkpoint_flags <- if(use_checkpoint) {
     paste("--checkpoint=`find", input_fp, "-type f -exec du -ak --apparent-size {} + |",

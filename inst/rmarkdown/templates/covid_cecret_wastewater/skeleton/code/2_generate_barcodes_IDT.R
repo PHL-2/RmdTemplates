@@ -22,6 +22,8 @@ have_AWS_EC2_SSH_access <- TRUE
 
 remove_sample_from_bcl_samplesheet <- c("") #add in sample names to remove from demultiplexing
 
+sample_w_empty_reads <- c("") #add in sample ids that have empty fastq files
+
 # temporary directory to hold the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl"
 
@@ -493,6 +495,7 @@ metadata_sheet <- metadata_sheet %>%
          sample_collect_date = case_when(!(is.na(sample_collect_date) | as.character(sample_collect_date) == "") ~ as.character(sample_collect_date),
                                          #if sample collect date column is not available, grab the date from the sample_name
                                          grepl("^WW-[0-9]{4}-[0-9]{2}-[0-9]{2}", sample_name) ~ as.character(str_extract(pattern = "[0-9]{4}-[0-9]{2}-[0-9]{2}", string = sample_name)),
+
                                          #if it's a wastewater sample without a date or does not start with WW, throw an error
                                          sample_type == "Wastewater" ~ NA,
                                          #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet
@@ -520,6 +523,7 @@ metadata_sheet <- metadata_sheet %>%
          sample_group = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ sample_type,
                                   !(is.na(sample_group) | sample_group == "") ~ sample_group,
                                   TRUE ~ gsub("^WW-|^Test", "", sample_name)),
+
          ww_group = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ sample_type,
                               grepl(paste0(sample_group_controls, collapse = "|"), sample_name) ~ "Wastewater control",
                               TRUE ~ "Wastewater sample")
@@ -706,6 +710,7 @@ if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
 
 samp_sheet_2_write <- metadata_sheet %>%
   filter(!sample_name %in% remove_sample_from_bcl_samplesheet) %>%
+  filter(!sample_id %in% sample_w_empty_reads) %>%
   # do not include lane in the sample sheet otherwise it will only demultiplex that sample in that specified lane, not in all lanes
   rowwise() %>%
   #BCL Convert does not take Index Plate
@@ -796,6 +801,7 @@ bclconvert_output_final_path <- paste(s3_fastq_bucket, sequencing_date, sample_t
 
 #write the sample sheet for merging nextflow script
 metadata_sheet %>%
+  filter(!sample_id %in% sample_w_empty_reads) %>%
   select(fastq = sample_id, uniq_sample_name) %>%
   mutate(fastq_1 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R1_001.fastq.gz"),
          fastq_2 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R2_001.fastq.gz")) %>%

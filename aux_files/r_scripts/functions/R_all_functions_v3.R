@@ -259,8 +259,7 @@ convert_sample_size_2_font_size <- function(sample_size = x,
                                             max_font = 8) {
 
   if(sample_size > max_sample_size) {
-    stop(simpleError(paste("Sample size input of", sample_size, "is greater than the max sample size of", max_sample_size,
-                           "\nPlease adjust these inputs for this function accordingly")))
+    max_sample_size <- sample_size
   }
 
   font_range = min_font - max_font

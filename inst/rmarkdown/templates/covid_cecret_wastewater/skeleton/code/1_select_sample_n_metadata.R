@@ -112,6 +112,7 @@ selection_data <- lapply(select_fp, read_csv) %>%
          !matches("^\\.\\.\\.")) %>%
   merge(ddPCR_data, by = c("sample_group", "sample_received_date"), all.x = TRUE, sort = FALSE) %>%
   mutate(uniq_sample_name = ifelse((is.na(uniq_sample_name) | uniq_sample_name == ""),
+
                                    paste("WW", format(sample_collect_date, "%y%m%d"), format(sequencing_date, "%y%m%d"), sample_group, sep = "-"),
                                    uniq_sample_name),
          uniq_sample_name = gsub(pattern = "orth|est|ast|outh", replacement = "", x = uniq_sample_name))
