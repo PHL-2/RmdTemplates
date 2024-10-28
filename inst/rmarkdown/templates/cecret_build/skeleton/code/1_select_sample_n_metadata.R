@@ -7,21 +7,7 @@ library(stringr)
 
 #This Rscript adds the relevant metadata fields to wastewater samples for sequencing
 
-##############
-# Manual input
-##############
-
-create_sample_replicates <- 4 #enter a positive integer for the number of biological replicates created during concentration and extraction
-
-# set this to TRUE to copy the platemap to the shared drive
-copy_platemap <- TRUE
-
-sample_type_acronym <- "WW" #use WW for wastewater samples
-
-prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
-
-# number of unspecified environmental swabs to add to plate
-#enviro_number <- 10
+source(file.path(here(), "local_config.R"))
 
 ################
 # Load functions
@@ -58,22 +44,21 @@ tryCatch(
 failed_regex <- "test|exclude"
 
 ddPCR_files <- list.files(ddPCR_run_fp, pattern = ".*_ww_sequencing_metadata.csv", full.names = TRUE, recursive = TRUE)
-ddPCR_files <- tail(ddPCR_files[!grepl(failed_regex, ddPCR_files)], 10)
+ddPCR_files <- tail(ddPCR_files[!grepl(failed_regex, ddPCR_files)], 5)
 
 ddPCR_data <- ddPCR_files %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
   do(read_delim(.$FileName,
                 show_col_types = FALSE,
-                col_types = cols("sample_received_date" = col_date()))) %>%
+                col_types = cols("sample_collect_date" = col_date()))) %>%
   ungroup() %>%
   mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName))) %>%
-  group_by(sample_group, sample_received_date) %>%
+  group_by(sample_group, sample_collect_date) %>%
   #get the latest run only
   filter(ddpcr_analysis_date == max(ddpcr_analysis_date)) %>%
   ungroup() %>%
   select(-FileName)
-
 
 ##########################
 # Load the selection sheet
@@ -91,15 +76,15 @@ if(length(select_fp) == 0) {
 
 selection_data <- lapply(select_fp, read_csv) %>%
   do.call(rbind, .) %>%
-  mutate(sample_received_date = as.Date(sample_received_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
-  select(any_of("sample_group"), sample_received_date) %>%
+  mutate(sample_collect_date = as.Date(sample_collect_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
+  select(any_of("sample_group"), sample_collect_date) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x))),
          !matches("^\\.\\.\\.")) %>%
-  merge(ddPCR_data, by = c("sample_group", "sample_received_date"), all.x = TRUE, sort = FALSE) %>%
+  merge(ddPCR_data, by = c("sample_group", "sample_collect_date"), all.x = TRUE, sort = FALSE) %>%
   mutate(uniq_sample_name = ifelse((is.na(uniq_sample_name) | uniq_sample_name == ""),
-                                   paste("WW", sample_received_date, sample_group, sep = "-"),
-                                   uniq_sample_name))
+                              paste("WW", format(sample_collect_date, "%y%m%d"), format(sequencing_date, "%y%m%d"), sample_group, sep = "-"),
+                              uniq_sample_name))
 
 if(all(is.na(selection_data$ddpcr_analysis_date))) {
   message("\n\nWarning!!!\nSamples selected for sequencing do not have a corresponding ddPCR date!")
@@ -165,12 +150,12 @@ if(length(older_samples_fp) > 0) {
 
   older_ddPCR_samples <- older_samples_fp %>%
     lapply(read_csv) %>%
-    select(sample_group, sample_received_date, uniq_sample_name) %>%
+    select(sample_group, sample_collect_date, uniq_sample_name) %>%
     filter(sample_group != "",
            !is.na(sample_group))
 
 } else {
-  older_samples <- data.frame(sample_group = "", sample_received_date = "", uniq_sample_name = "")
+  older_samples <- data.frame(sample_group = "", sample_collect_date = "", uniq_sample_name = "")
 }
 
 #################
@@ -179,12 +164,12 @@ if(length(older_samples_fp) > 0) {
 
 sample_group_order <- c("ZeptoSC2", "SouthWest", "NorthEast", "SouthEast", "oldWW")
 
-combined_list <- select(selection_data, sample_group, sample_received_date, uniq_sample_name) %>%
+combined_list <- select(selection_data, sample_group, sample_collect_date, uniq_sample_name) %>%
   rbind(older_samples) %>%
   filter(sample_group != "",
-         !is.na(sample_received_date)) %>%
+         !is.na(sample_collect_date)) %>%
   mutate(sample_group = factor(sample_group, levels = sample_group_order)) %>%
-  arrange(sample_received_date, sample_group) %>%
+  arrange(sample_collect_date, sample_group) %>%
   mutate(order = 1:nrow(.)) %>%
   expand(nesting(uniq_sample_name, order), rep = paste0("-Rep", 1:create_sample_replicates)) %>%
   mutate(sample_name = paste0(uniq_sample_name, rep)) %>%
@@ -241,7 +226,7 @@ if(copy_platemap) {
 message("\nNumber of samples to sequence:")
 message(nrow(selection_data))
 message("\nDate of samples to sequence:")
-message(paste0(unique(selection_data$sample_received_date), collapse = "\n"))
+message(paste0(unique(selection_data$sample_collect_date), collapse = "\n"))
 message("\nSample sites to sequence:")
 message(paste0(unique(selection_data$sample_group), collapse = "\n"))
 message("\nNumber of rerun samples to sequence:")
