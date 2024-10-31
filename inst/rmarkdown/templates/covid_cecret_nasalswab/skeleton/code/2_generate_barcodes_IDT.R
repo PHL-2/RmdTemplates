@@ -24,6 +24,9 @@ remove_sample_from_samplesheets <- c("") #add sample names to remove from demult
 
 sample_w_empty_reads <- c("") #add sample ids that have empty fastq files
 
+# temporary directory to hold the screen log files
+tmp_screen_fp <- "~/.tmp_screen_sc2_ns/"
+
 # temporary directory to hold the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl"
 
@@ -218,12 +221,14 @@ if(samplesheet_exists) {
       submit_screen_job(message2display = "Downloading sequencing run from BaseSpace",
                         ec2_login = ec2_hostname,
                         screen_session_name = "basespace-run-download",
+                        screen_log_fp = tmp_screen_fp,
                         command2run = bs_dl_cmd
       )
 
       check_screen_job(message2display = "Checking BaseSpace download job",
                        ec2_login = ec2_hostname,
-                       screen_session_name = "basespace-run-download")
+                       screen_session_name = "basespace-run-download",
+                       screen_log_fp = tmp_screen_fp)
 
       # Download the SampleSheet from EC2 instance
       run_in_terminal(paste("scp",

@@ -17,6 +17,9 @@ if(!exists("run_uploaded_2_basespace")){
 
 have_AWS_EC2_SSH_access <- TRUE
 
+# temporary directory to hold the screen log files
+tmp_screen_fp <- "~/.tmp_screen_sc2_ns/"
+
 # temporary directory holding the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl"
 
@@ -174,17 +177,20 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
   submit_screen_job(message2display = "Creating tarball of the sequencing run folder",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-tarball",
+                    screen_log_fp = tmp_screen_fp,
                     command2run = tar_command_function(temporary_seq_run_fp)
   )
 
   check_screen_job(message2display = "Checking tar job",
                    ec2_login = ec2_hostname,
-                   screen_session_name = "sequencing-tarball")
+                   screen_session_name = "sequencing-tarball",
+                   screen_log_fp = tmp_screen_fp)
 
   # Generate md5 checksum
   submit_screen_job(message2display = "Generating md5 checksum",
                     ec2_login = ec2_hostname,
                     screen_session_name = "sequencing-checksum",
+                    screen_log_fp = tmp_screen_fp,
                     command2run = paste0("cd ", ec2_tmp_fp, ";",
                                          "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, "/", sequencing_run, ".md5;",
                                          "cat ", ec2_tmp_fp, "/", sequencing_run, ".md5")
@@ -192,7 +198,8 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
 
   check_screen_job(message2display = "Checking md5 job",
                    ec2_login = ec2_hostname,
-                   screen_session_name = "sequencing-checksum")
+                   screen_session_name = "sequencing-checksum",
+                   screen_log_fp = tmp_screen_fp)
 
 } else {
 
@@ -331,6 +338,7 @@ if(have_AWS_EC2_SSH_access) {
   submit_screen_job(message2display = "Uploading run to S3",
                     ec2_login = ec2_hostname,
                     screen_session_name = "upload-run",
+                    screen_log_fp = tmp_screen_fp,
                     command2run = paste("aws s3 cp",
                                         ec2_tmp_fp,
                                         s3_run_bucket_fp,
@@ -344,7 +352,8 @@ if(have_AWS_EC2_SSH_access) {
 
   check_screen_job(message2display = "Checking run upload job",
                    ec2_login = ec2_hostname,
-                   screen_session_name = "upload-run")
+                   screen_session_name = "upload-run",
+                   screen_log_fp = tmp_screen_fp)
 
   rstudioapi::executeCommand("activateConsole")
 }
