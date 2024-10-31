@@ -120,8 +120,9 @@ selection_data %>%
 dir.create(here("metadata", "for_scientists"))
 
 empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_col = sprintf("%02d", rep(1:12, 8)), plate = 1) %>%
-  mutate(plate_coord = paste0(plate, "_", plate_row, plate_col)) %>%
-  arrange(plate_col) %>%
+  mutate(plate_coord = paste0(plate, "_", plate_row, plate_col),
+         half_plate = !plate_row %in% LETTERS[1:4]) %>%
+  arrange(half_plate, plate_col) %>%
   mutate(sample_order = row_number()) %>%
   select(plate, plate_row, plate_col, plate_coord, sample_order)
 
@@ -179,7 +180,7 @@ if(length(older_samples_fp) > 0) {
 
 sample_group_order <- c("ZeptoSC2", "SouthWest", "NorthEast", "SouthEast", "oldWW")
 
-combined_list <- select(selection_data, sample_group, sample_received_date, uniq_sample_name) %>%
+grouped_samples <- select(selection_data, sample_group, sample_received_date, uniq_sample_name) %>%
   rbind(older_samples) %>%
   filter(sample_group != "",
          !is.na(sample_received_date)) %>%
@@ -190,14 +191,25 @@ combined_list <- select(selection_data, sample_group, sample_received_date, uniq
   mutate(sample_name = paste0(uniq_sample_name, rep)) %>%
   arrange(order) %>%
   select(sample_name) %>%
-  #put samples in groups of 8
-  mutate(grp = (row_number() - 1) %/% 8) %>%
-  add_row(., sample_name = paste0("NC-pre-extract", 1:8), .before = ceiling(median(.$grp))*8+1) %>%
-  filter(sample_name != "") %>%
-  select(-grp)
+  #put samples in groups of 4
+  mutate(grp = (row_number() - 1) %/% 4)
+
+# Add in controls to the plate
+if(max(grouped_samples$grp) > 4) {
+  combined_list <- grouped_samples %>%
+    add_row(., sample_name = paste0("NC-pre-extract", 5:8), .before = 61) %>%
+    add_row(., sample_name = c("NC-pre-extract9", "BLANK", "PC", "NC-pre-cDNA"), .before = 41) %>%
+    add_row(., sample_name = paste0("NC-pre-extract", 1:4), .before = 21)
+} else {
+  combined_list <- grouped_samples %>%
+    add_row(., sample_name = c("NC-pre-extract5", "BLANK", "PC", "NC-pre-cDNA"), .before = 21) %>%
+    add_row(., sample_name = paste0("NC-pre-extract", 1:4), .before = ceiling(median(.$grp, na.rm = TRUE))*4+1)
+}
 
 plate_view <- combined_list %>%
-  rbind(data.frame(sample_name = c("NC-pre-extract9", "BLANK", "PC", "NC-pre-cDNA", "NC-pre-ARTIC", "NC-pre-library"))) %>%
+  filter(sample_name != "") %>%
+  select(-grp) %>%
+  rbind(data.frame(sample_name = c("NC-pre-ARTIC", "NC-pre-library"))) %>%
   mutate(sample_order = row_number()) %>%
   merge(empty_plate, by = "sample_order", all = TRUE, sort = FALSE) %>%
   mutate(sample_name = case_when(sample_order == 96 ~ "NC-corner",
