@@ -6,21 +6,6 @@ system2("aws", c("sso login"))
 
 #This Rscript submits the relevant jobs to Nextflow once the sequencing run has been uploaded
 
-###############
-# Manual inputs
-###############
-
-# temporary directory to hold the screen log files
-tmp_screen_fp <- "~/.tmp_screen_ns_sc2/"
-
-ec2_tmp_fp <- "~/tmp_bs_dl"
-
-update_pangolin_dataset <- TRUE
-
-update_freyja_and_cecret_pipeline <- TRUE
-
-cecret_version <- "master"
-
 #########################
 # AWS and sequencing date
 #########################

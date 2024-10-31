@@ -12,6 +12,8 @@ library(stringr)
 # Default variables
 ###################
 
+prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
+
 index_length <- "10"
 
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
@@ -26,9 +28,6 @@ barcode_fp <- file.path(dirname(here()), "aux_files", "illumina_references", "ne
 
 if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
   stop(simpleError(paste0("Please use the 'YYYY-MM-DD' format for this RStudio project date. This date should correspond to the desired sequencing run date")))
-}
-if (prj_description == "") {
-  stop (simpleError(paste0("The project description variable in ", here("code"), "/2_generate_barcodes_IDT.R is empty. Make sure it is set to the correct project workflow")))
 }
 
 ###################################################

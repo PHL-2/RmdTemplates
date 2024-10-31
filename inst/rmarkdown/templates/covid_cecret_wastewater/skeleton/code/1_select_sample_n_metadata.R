@@ -7,14 +7,9 @@ library(stringr)
 
 #This Rscript adds the relevant metadata fields to wastewater samples for sequencing
 
-##############
-# Manual input
-##############
-
-create_sample_replicates <- 4 #enter a positive integer for the number of biological replicates created during concentration and extraction
-
-# set this to TRUE to copy the platemap to the shared drive
-copy_platemap <- TRUE
+###################
+# Default variables
+###################
 
 sample_type_acronym <- "WW" #use WW for wastewater samples
 
