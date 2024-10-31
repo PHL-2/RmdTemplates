@@ -25,7 +25,7 @@ remove_sample_from_samplesheets <- c("") #add sample names to remove from demult
 sample_w_empty_reads <- c("") #add sample ids that have empty fastq files
 
 # temporary directory to hold the screen log files
-tmp_screen_fp <- "~/.tmp_screen_sc2_ns/"
+tmp_screen_fp <- "~/.tmp_screen_ns_sc2/"
 
 # temporary directory to hold the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl"

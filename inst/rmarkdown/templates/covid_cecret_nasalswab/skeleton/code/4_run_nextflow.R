@@ -11,7 +11,7 @@ system2("aws", c("sso login"))
 ###############
 
 # temporary directory to hold the screen log files
-tmp_screen_fp <- "~/.tmp_screen_sc2_ns/"
+tmp_screen_fp <- "~/.tmp_screen_ns_sc2/"
 
 ec2_tmp_fp <- "~/tmp_bs_dl"
 
@@ -96,7 +96,7 @@ data_output_fp <- paste0(ec2_tmp_fp, "/", sequencing_date, "/data")
 # Demultiplexing
 submit_screen_job(message2display = "Demultiplexing with BCLConvert",
                   ec2_login = ec2_hostname,
-                  screen_session_name = "demux_ns",
+                  screen_session_name = "demux",
                   screen_log_fp = tmp_screen_fp,
                   command2run = paste("cd", paste0(tmp_screen_fp, ";"),
                                       "nextflow run nf-core/demultiplex",
@@ -110,7 +110,7 @@ submit_screen_job(message2display = "Demultiplexing with BCLConvert",
 
 check_screen_job(message2display = "Checking BCLConvert job",
                  ec2_login = ec2_hostname,
-                 screen_session_name = "demux_ns",
+                 screen_session_name = "demux",
                  screen_log_fp = tmp_screen_fp)
 
 # Checking the demultiplexing results

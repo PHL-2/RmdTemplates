@@ -18,7 +18,7 @@ if(!exists("run_uploaded_2_basespace")){
 have_AWS_EC2_SSH_access <- TRUE
 
 # temporary directory to hold the screen log files
-tmp_screen_fp <- "~/.tmp_screen_sc2_ns/"
+tmp_screen_fp <- "~/.tmp_screen_ns_sc2/"
 
 # temporary directory holding the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl"
