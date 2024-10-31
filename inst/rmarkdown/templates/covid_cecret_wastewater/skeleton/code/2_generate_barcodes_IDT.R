@@ -21,6 +21,14 @@ sequencer_type <- c("MiSeq", "NextSeq1k2k")[sequencer_select]
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
+# temporary directory to hold the screen log files
+tmp_screen_fp <- paste("~", ".tmp_screen", sequencer_type, "WW_SC2", basename(here()), sep = "/")
+
+session_suffix <- tolower(paste(sequencer_type, "ww-sc2", basename(here()), sep = "-"))
+
+# temporary directory to hold the sequencing run download
+ec2_tmp_fp <- "~/tmp_bs_dl"
+
 #file location of the nextera udi indices
 barcode_fp <- file.path(dirname(here()), "aux_files", "illumina_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
@@ -193,14 +201,14 @@ if(samplesheet_exists) {
       # Download the run from BaseSpace onto a running EC2 instance
       submit_screen_job(message2display = "Downloading sequencing run from BaseSpace",
                         ec2_login = ec2_hostname,
-                        screen_session_name = "basespace-run-download",
+                        screen_session_name = paste("basespace-run-download", session_suffix, sep = "-"),
                         screen_log_fp = tmp_screen_fp,
                         command2run = bs_dl_cmd
       )
 
       check_screen_job(message2display = "Checking BaseSpace download job",
                        ec2_login = ec2_hostname,
-                       screen_session_name = "basespace-run-download",
+                       screen_session_name = paste("basespace-run-download", session_suffix, sep = "-"),
                        screen_log_fp = tmp_screen_fp)
 
       # Download the SampleSheet from EC2 instance
