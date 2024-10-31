@@ -7,22 +7,6 @@ system2("aws", c("sso login"))
 
 #This Rscript uploads the sequencing run and related files to S3
 
-##############
-# Manual input
-##############
-
-if(!exists("run_uploaded_2_basespace")){
-  run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
-}
-
-have_AWS_EC2_SSH_access <- TRUE
-
-# temporary directory to hold the screen log files
-tmp_screen_fp <- "~/.tmp_screen_ns_sc2/"
-
-# temporary directory holding the sequencing run download
-ec2_tmp_fp <- "~/tmp_bs_dl"
-
 ####################
 # Selected variables
 ####################

@@ -8,17 +8,9 @@ library(openxlsx)
 #This Rscript filters out low RLU values from the metadata sheet received from the epidemiologists
 #Send this filtered sheet to the epidemiologists and scientists
 
-##############
-# Manual input
-##############
-
-missing_samples <- c("")
-
-# number of unspecified environmental swabs to add to plate
-enviro_number <- 10
-
-# set this to FALSE to not copy the platemap to the shared drive (such as when rerunning this script with updated extra metadata info)
-copy_platemap <- TRUE
+###################
+# Default variables
+###################
 
 sample_type_acronym <- "NS" #use NS for nasal swabs
 

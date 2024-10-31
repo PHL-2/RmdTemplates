@@ -8,37 +8,13 @@ library(stringr)
 #This Rscript currently generates the SampleSheet for demultiplexing a run using the BCL Convert program
 #https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/bcl_convert/bcl-convert-v3-7-5-software-guide-1000000163594-00.pdf
 
-##############
-# Manual input
-##############
-
-if(!exists("run_uploaded_2_basespace")){
-  run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
-}
-
-sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
-
-have_AWS_EC2_SSH_access <- TRUE
-
-remove_sample_from_samplesheets <- c("") #add sample names to remove from demultiplexing
-
-sample_w_empty_reads <- c("") #add sample ids that have empty fastq files
-
-# temporary directory to hold the screen log files
-tmp_screen_fp <- "~/.tmp_screen_ns_sc2/"
-
-# temporary directory to hold the sequencing run download
-ec2_tmp_fp <- "~/tmp_bs_dl"
-
-prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
+###################
+# Default variables
+###################
 
 index_length <- "10"
 
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
-
-####################
-# Selected variables
-####################
 
 sequencer_type <- c("MiSeq", "NextSeq1k2k")[sequencer_select]
 
