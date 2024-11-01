@@ -59,10 +59,11 @@ ddPCR_data <- ddPCR_files %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
   do(read_delim(.$FileName,
-                show_col_types = FALSE,
-                col_types = cols("sample_received_date" = col_date()))) %>%
+                show_col_types = FALSE)) %>%
   ungroup() %>%
-  mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName))) %>%
+  mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName)),
+         sample_received_date = as.Date(sample_received_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y")),
+         sample_collect_date = as.Date(sample_collect_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
   group_by(sample_group, sample_received_date) %>%
   #get the latest run only
   filter(ddpcr_analysis_date == max(ddpcr_analysis_date)) %>%
