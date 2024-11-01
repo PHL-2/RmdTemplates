@@ -21,7 +21,7 @@ output:
 
 \tableofcontents
 
-```{r settings for processing the sequencing run}
+```{r settings for processing the sequencing run, include=FALSE, eval=FALSE}
 
 #####################################################################
 # 1_remove_low_RLU.R (Cleaning up metadata sheet and making platemap)
