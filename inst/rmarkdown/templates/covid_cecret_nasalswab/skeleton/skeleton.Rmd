@@ -21,9 +21,41 @@ output:
 
 \tableofcontents
 
-```{r}
+```{r settings for processing the sequencing run}
 
-run_uploaded_2_basespace <- FALSE
+#####################################################################
+# 1_remove_low_RLU.R (Cleaning up metadata sheet and making platemap)
+#####################################################################
+
+# samples that are missing from the metadata sheet
+missing_samples <- c("")
+
+# set this to FALSE to not copy the platemap to the shared drive (such as when rerunning this script with updated extra metadata info)
+copy_platemap <- TRUE
+
+###################################################################################
+# 2_generate_barcodes_IDT.R and 3_archive_upload_run.R (BaseSpace and AWS settings)
+###################################################################################
+
+run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
+
+sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
+
+have_AWS_EC2_SSH_access <- TRUE
+
+remove_sample_from_samplesheets <- c("") #add sample names to remove from demultiplexing
+
+sample_w_empty_reads <- c("") #add sample ids that have empty fastq files
+
+####################################
+# 4_run_nextflow.R (Cecret settings)
+####################################
+
+update_pangolin_dataset <- TRUE
+
+update_freyja_and_cecret_pipeline <- TRUE
+
+cecret_version <- "master"
 
 ```
 
