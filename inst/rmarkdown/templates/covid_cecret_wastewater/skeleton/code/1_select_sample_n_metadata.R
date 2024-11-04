@@ -87,9 +87,15 @@ if(length(select_fp) == 0) {
   stop (simpleError("\n\nThere is no sample selection sheet in extra_metadata!"))
 }
 
-selection_data <- lapply(select_fp, read_csv) %>%
-  do.call(rbind, .) %>%
-  mutate(sample_received_date = as.Date(sample_received_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
+selection_data <- select_fp %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName,
+                show_col_types = FALSE,
+                col_types = cols("sample_received_date" = col_character(),
+                                 "sample_collect_date" = col_character()))) %>%
+  ungroup() %>%
+  mutate(sample_received_date = as.Date(parse_date_time(sample_received_date, c("ymd", "mdy")))) %>%
   select(any_of("sample_group"), sample_received_date) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x))),
@@ -97,7 +103,8 @@ selection_data <- lapply(select_fp, read_csv) %>%
   merge(ddPCR_data, by = c("sample_group", "sample_received_date"), all.x = TRUE, sort = FALSE) %>%
   mutate(uniq_sample_name = ifelse((is.na(uniq_sample_name) | uniq_sample_name == ""),
                                    paste("WW", sample_received_date, sample_group, sep = "-"),
-                                   uniq_sample_name))
+                                   uniq_sample_name)) %>%
+  filter(!is.na(sample_group))
 
 if(all(is.na(selection_data$ddpcr_analysis_date))) {
   message("\n\nWarning!!!\nSamples selected for sequencing do not have a corresponding ddPCR date!")
