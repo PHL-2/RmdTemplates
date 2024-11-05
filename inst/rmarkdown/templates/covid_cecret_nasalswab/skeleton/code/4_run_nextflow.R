@@ -152,7 +152,7 @@ if(length(instrument_run_id) > 1) {
                             "Currently, you are pulling the sequencing run from the ", sequencer_type)))
 }
 
-if(remove_undetermined_file & any(grepl("Undetermined", fastq_file_sizes$filename))) {
+if(remove_undetermined_file) {
   # Move the Undetermined file to another bucket path
   aws_s3_mv_undetermined <- system2("aws", c("s3 mv",
                                              paste(bclconvert_output_path, instrument_run_id, sep = "/"),
@@ -163,9 +163,11 @@ if(remove_undetermined_file & any(grepl("Undetermined", fastq_file_sizes$filenam
 
   # If the aws-cli provides an SSL error on local machine, run the command through the instance
   if(length(aws_s3_mv_undetermined) == 0) {
+    rstudioapi::executeCommand('activateConsole')
+    message("Moving Undetermined files out of s3 input filepath...")
+
     aws_s3_mv_undetermined <- system2("ssh", c("-tt", ec2_hostname,
-                                           shQuote(paste("echo 'Moving Undetermined files out of input filepath...';",
-                                                         "aws s3 mv",
+                                           shQuote(paste("aws s3 mv",
                                                          paste(bclconvert_output_path, instrument_run_id, sep = "/"),
                                                          paste(bclconvert_output_path, "Undetermined", instrument_run_id, sep = "/"),
                                                          "--recursive",
