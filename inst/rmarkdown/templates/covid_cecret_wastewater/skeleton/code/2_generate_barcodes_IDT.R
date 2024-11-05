@@ -8,46 +8,32 @@ library(stringr)
 #This Rscript currently generates the SampleSheet for demultiplexing a run using the BCL Convert program
 #https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/bcl_convert/bcl-convert-v3-7-5-software-guide-1000000163594-00.pdf
 
-##############
-# Manual input
-##############
-
-if(!exists("run_uploaded_2_basespace")){
-  run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
-}
-
-sequencer_select <- 2 # set variable as 1 for MiSeq or 2 for NextSeq
-
-have_AWS_EC2_SSH_access <- TRUE
-
-remove_sample_from_bcl_samplesheet <- c("") #add in sample names to remove from demultiplexing
-
-sample_w_empty_reads <- c("") #add in sample ids that have empty fastq files
-
-# temporary directory to hold the sequencing run download
-ec2_tmp_fp <- "~/tmp_bs_dl"
+###################
+# Default variables
+###################
 
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
 index_length <- "10"
-
-####################
-# Selected variables
-####################
 
 sequencer_type <- c("MiSeq", "NextSeq1k2k")[sequencer_select]
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
+# temporary directory to hold the screen log files
+tmp_screen_fp <- paste("~", ".tmp_screen", sequencer_type, "WW_SC2", basename(here()), sep = "/")
+
+session_suffix <- tolower(paste(sequencer_type, "ww-sc2", basename(here()), sep = "-"))
+
+# temporary directory to hold the sequencing run download
+ec2_tmp_fp <- "~/tmp_bs_dl"
+
 #file location of the nextera udi indices
 barcode_fp <- file.path(dirname(here()), "aux_files", "illumina_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
 
 if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
   stop(simpleError(paste0("Please use the 'YYYY-MM-DD' format for this RStudio project date. This date should correspond to the desired sequencing run date")))
-}
-if (prj_description == "") {
-  stop (simpleError(paste0("The project description variable in ", here("code"), "/2_generate_barcodes_IDT.R is empty. Make sure it is set to the correct project workflow")))
 }
 
 ###################################################
@@ -215,13 +201,15 @@ if(samplesheet_exists) {
       # Download the run from BaseSpace onto a running EC2 instance
       submit_screen_job(message2display = "Downloading sequencing run from BaseSpace",
                         ec2_login = ec2_hostname,
-                        screen_session_name = "basespace-run-download",
+                        screen_session_name = paste("basespace-run-download", session_suffix, sep = "-"),
+                        screen_log_fp = tmp_screen_fp,
                         command2run = bs_dl_cmd
       )
 
       check_screen_job(message2display = "Checking BaseSpace download job",
                        ec2_login = ec2_hostname,
-                       screen_session_name = "basespace-run-download")
+                       screen_session_name = paste("basespace-run-download", session_suffix, sep = "-"),
+                       screen_log_fp = tmp_screen_fp)
 
       # Download the SampleSheet from EC2 instance
       run_in_terminal(paste("scp",

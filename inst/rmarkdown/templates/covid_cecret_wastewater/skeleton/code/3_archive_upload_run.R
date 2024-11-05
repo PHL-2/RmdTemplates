@@ -7,25 +7,15 @@ system2("aws", c("sso login"))
 
 #This Rscript uploads the sequencing run and related files to S3
 
-##############
-# Manual input
-##############
-
-if(!exists("run_uploaded_2_basespace")){
-  run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
-}
-
-have_AWS_EC2_SSH_access <- TRUE
-
-# temporary directory holding the sequencing run download
-ec2_tmp_fp <- "~/tmp_bs_dl"
-
 ####################
 # Selected variables
 ####################
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
+
+# temporary directory to hold the sequencing run download
+ec2_tmp_fp <- "~/tmp_bs_dl"
 
 if(sequencing_date == "") {
   stop (simpleError(paste0("Please fill in the correct sequencing date or short project description in ", here("code"), "/3_archive_upload_run.R")))
@@ -90,6 +80,11 @@ sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sa
 prj_description <- gsub(paste0("^[0-9-]*_.*", sample_type_acronym, "_|_.*"), "", sample_sheet_fn)
 
 s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
+
+# temporary directory to hold the screen log files
+tmp_screen_fp <- paste("~", ".tmp_screen", sequencer_type, "WW_SC2", basename(here()), sep = "/")
+
+session_suffix <- tolower(paste(sequencer_type, "ww-sc2", basename(here()), sep = "-"))
 
 tar_command_function <- function(input_fp, output_fp = input_fp, bars = 99, use_checkpoint = TRUE) {
 
@@ -173,18 +168,21 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
 
   submit_screen_job(message2display = "Creating tarball of the sequencing run folder",
                     ec2_login = ec2_hostname,
-                    screen_session_name = "sequencing-tarball",
+                    screen_session_name = paste("sequencing-tarball", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
                     command2run = tar_command_function(temporary_seq_run_fp)
   )
 
   check_screen_job(message2display = "Checking tar job",
                    ec2_login = ec2_hostname,
-                   screen_session_name = "sequencing-tarball")
+                   screen_session_name = paste("sequencing-tarball", session_suffix, sep = "-"),
+                   screen_log_fp = tmp_screen_fp)
 
   # Generate md5 checksum
   submit_screen_job(message2display = "Generating md5 checksum",
                     ec2_login = ec2_hostname,
-                    screen_session_name = "sequencing-checksum",
+                    screen_session_name = paste("sequencing-checksum", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
                     command2run = paste0("cd ", ec2_tmp_fp, ";",
                                          "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, "/", sequencing_run, ".md5;",
                                          "cat ", ec2_tmp_fp, "/", sequencing_run, ".md5")
@@ -192,7 +190,8 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
 
   check_screen_job(message2display = "Checking md5 job",
                    ec2_login = ec2_hostname,
-                   screen_session_name = "sequencing-checksum")
+                   screen_session_name = paste("sequencing-checksum", session_suffix, sep = "-"),
+                   screen_log_fp = tmp_screen_fp)
 
 } else {
 
@@ -330,7 +329,8 @@ if(have_AWS_EC2_SSH_access) {
   # Upload data
   submit_screen_job(message2display = "Uploading run to S3",
                     ec2_login = ec2_hostname,
-                    screen_session_name = "upload-run",
+                    screen_session_name = paste("upload-run", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
                     command2run = paste("aws s3 cp",
                                         ec2_tmp_fp,
                                         s3_run_bucket_fp,
@@ -344,7 +344,8 @@ if(have_AWS_EC2_SSH_access) {
 
   check_screen_job(message2display = "Checking run upload job",
                    ec2_login = ec2_hostname,
-                   screen_session_name = "upload-run")
+                   screen_session_name = paste("upload-run", session_suffix, sep = "-"),
+                   screen_log_fp = tmp_screen_fp)
 
   rstudioapi::executeCommand("activateConsole")
 }

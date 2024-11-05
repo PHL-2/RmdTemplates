@@ -7,14 +7,9 @@ library(stringr)
 
 #This Rscript adds the relevant metadata fields to wastewater samples for sequencing
 
-##############
-# Manual input
-##############
-
-create_sample_replicates <- 4 #enter a positive integer for the number of biological replicates created during concentration and extraction
-
-# set this to TRUE to copy the platemap to the shared drive
-copy_platemap <- TRUE
+###################
+# Default variables
+###################
 
 sample_type_acronym <- "WW" #use WW for wastewater samples
 
@@ -65,9 +60,12 @@ ddPCR_data <- ddPCR_files %>%
   group_by(FileName) %>%
   do(read_delim(.$FileName,
                 show_col_types = FALSE,
-                col_types = cols("sample_received_date" = col_date()))) %>%
+                col_types = cols("sample_received_date" = col_character(),
+                                 "sample_collect_date" = col_character()))) %>%
   ungroup() %>%
-  mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName))) %>%
+  mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName)),
+         sample_received_date = as.Date(parse_date_time(sample_received_date, c("ymd", "mdy"))),
+         sample_collect_date = as.Date(parse_date_time(sample_collect_date, c("ymd", "mdy")))) %>%
   group_by(sample_group, sample_received_date) %>%
   #get the latest run only
   filter(ddpcr_analysis_date == max(ddpcr_analysis_date)) %>%
@@ -89,9 +87,15 @@ if(length(select_fp) == 0) {
   stop (simpleError("\n\nThere is no sample selection sheet in extra_metadata!"))
 }
 
-selection_data <- lapply(select_fp, read_csv) %>%
-  do.call(rbind, .) %>%
-  mutate(sample_received_date = as.Date(sample_received_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"))) %>%
+selection_data <- select_fp %>%
+  data_frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName,
+                show_col_types = FALSE,
+                col_types = cols("sample_received_date" = col_character(),
+                                 "sample_collect_date" = col_character()))) %>%
+  ungroup() %>%
+  mutate(sample_received_date = as.Date(parse_date_time(sample_received_date, c("ymd", "mdy")))) %>%
   select(any_of("sample_group"), sample_received_date) %>%
   #filter empty columns
   select(where(function(x) any(!is.na(x))),
@@ -99,7 +103,8 @@ selection_data <- lapply(select_fp, read_csv) %>%
   merge(ddPCR_data, by = c("sample_group", "sample_received_date"), all.x = TRUE, sort = FALSE) %>%
   mutate(uniq_sample_name = ifelse((is.na(uniq_sample_name) | uniq_sample_name == ""),
                                    paste("WW", sample_received_date, sample_group, sep = "-"),
-                                   uniq_sample_name))
+                                   uniq_sample_name)) %>%
+  filter(!is.na(sample_group))
 
 if(all(is.na(selection_data$ddpcr_analysis_date))) {
   message("\n\nWarning!!!\nSamples selected for sequencing do not have a corresponding ddPCR date!")
@@ -120,8 +125,9 @@ selection_data %>%
 dir.create(here("metadata", "for_scientists"))
 
 empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_col = sprintf("%02d", rep(1:12, 8)), plate = 1) %>%
-  mutate(plate_coord = paste0(plate, "_", plate_row, plate_col)) %>%
-  arrange(plate_col) %>%
+  mutate(plate_coord = paste0(plate, "_", plate_row, plate_col),
+         half_plate = !plate_row %in% LETTERS[1:4]) %>%
+  arrange(half_plate, plate_col) %>%
   mutate(sample_order = row_number()) %>%
   select(plate, plate_row, plate_col, plate_coord, sample_order)
 
@@ -179,7 +185,7 @@ if(length(older_samples_fp) > 0) {
 
 sample_group_order <- c("ZeptoSC2", "SouthWest", "NorthEast", "SouthEast", "oldWW")
 
-combined_list <- select(selection_data, sample_group, sample_received_date, uniq_sample_name) %>%
+grouped_samples <- select(selection_data, sample_group, sample_received_date, uniq_sample_name) %>%
   rbind(older_samples) %>%
   filter(sample_group != "",
          !is.na(sample_received_date)) %>%
@@ -190,14 +196,25 @@ combined_list <- select(selection_data, sample_group, sample_received_date, uniq
   mutate(sample_name = paste0(uniq_sample_name, rep)) %>%
   arrange(order) %>%
   select(sample_name) %>%
-  #put samples in groups of 8
-  mutate(grp = (row_number() - 1) %/% 8) %>%
-  add_row(., sample_name = paste0("NC-pre-extract", 1:8), .before = ceiling(median(.$grp))*8+1) %>%
-  filter(sample_name != "") %>%
-  select(-grp)
+  #put samples in groups of 4
+  mutate(grp = (row_number() - 1) %/% 4)
+
+# Add in controls to the plate
+if(max(grouped_samples$grp) > 4) {
+  combined_list <- grouped_samples %>%
+    add_row(., sample_name = paste0("NC-pre-extract", 5:8), .before = 61) %>%
+    add_row(., sample_name = c("NC-pre-extract9", "BLANK", "PC", "NC-pre-cDNA"), .before = 41) %>%
+    add_row(., sample_name = paste0("NC-pre-extract", 1:4), .before = 21)
+} else {
+  combined_list <- grouped_samples %>%
+    add_row(., sample_name = c("NC-pre-extract5", "BLANK", "PC", "NC-pre-cDNA"), .before = 21) %>%
+    add_row(., sample_name = paste0("NC-pre-extract", 1:4), .before = ceiling(median(.$grp, na.rm = TRUE))*4+1)
+}
 
 plate_view <- combined_list %>%
-  rbind(data.frame(sample_name = c("NC-pre-extract9", "BLANK", "PC", "NC-pre-cDNA", "NC-pre-ARTIC", "NC-pre-library"))) %>%
+  filter(sample_name != "") %>%
+  select(-grp) %>%
+  rbind(data.frame(sample_name = c("NC-pre-ARTIC", "NC-pre-library"))) %>%
   mutate(sample_order = row_number()) %>%
   merge(empty_plate, by = "sample_order", all = TRUE, sort = FALSE) %>%
   mutate(sample_name = case_when(sample_order == 96 ~ "NC-corner",
