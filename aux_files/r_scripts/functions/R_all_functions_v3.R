@@ -191,7 +191,7 @@ run_in_terminal <- function(command2run = "", command2print = "") {
 ##   Use the run_in_terminal function to submit jobs to EC2 instance through ssh
 ## =============================================================================
 
-submit_screen_job <- function(message2display = "Running function to submit screen job", ec2_login = "", screen_session_name = "", command2run = "") {
+submit_screen_job <- function(message2display = "Running function to submit screen job", ec2_login = "", screen_session_name = "", screen_log_fp = "~/.tmp_screen", command2run = "") {
 
   run_in_terminal(paste("echo", paste0("'", message2display, " through a screen command on EC2 instance [", ec2_login, "]';"),
                         "ssh -tt", ec2_login,
@@ -199,10 +199,10 @@ submit_screen_job <- function(message2display = "Running function to submit scre
                                       "if screen -ls | grep", paste0("'", screen_session_name, "'"), "-q;",
                                         "then echo 'Detached", screen_session_name, "session detected. Skipping ahead to check status';",
                                         "else echo 'Submitting job now';",
-                                        "mkdir -p ~/.tmp_screen;",
-                                        "rm -f", paste0("~/.tmp_screen/", screen_session_name, ".screenlog;"),
+                                        "mkdir -p", paste0(screen_log_fp, ";"),
+                                        "rm -f", paste0(screen_log_fp, "/", screen_session_name, ".screenlog;"),
                                         "sleep 5;",
-                                        "screen -dm -S", screen_session_name, "-L -Logfile", paste0("~/.tmp_screen/", screen_session_name, ".screenlog"), "bash -c",
+                                        "screen -dm -S", screen_session_name, "-L -Logfile", paste0(screen_log_fp, "/", screen_session_name, ".screenlog"), "bash -c",
                                         paste0("\"", command2run, "\";"),
                                         "sleep 5;",
                                       "fi"), type = "sh")),
@@ -213,7 +213,7 @@ submit_screen_job <- function(message2display = "Running function to submit scre
 ##   Use the run_in_terminal function to check on submitted jobs
 ## =============================================================
 
-check_screen_job <- function(message2display = "Running function to check screen job", ec2_login = "", screen_session_name = "") {
+check_screen_job <- function(message2display = "Running function to check screen job", ec2_login = "", screen_session_name = "", screen_log_fp = "~/.tmp_screen") {
 
   run_in_terminal(paste("echo 'Checking for dead jobs';",
                         "ssh -tt", ec2_login,
@@ -234,17 +234,17 @@ check_screen_job <- function(message2display = "Running function to check screen
                                       "then echo 'Job finished already';",
                                       "echo -n 'Log last modified: ';",
                                       "TZ='US/Eastern'",
-                                      "date '+%F %r' -r", paste0("~/.tmp_screen/", screen_session_name, ".screenlog;"),
+                                      "date '+%F %r' -r", paste0(screen_log_fp, "/", screen_session_name, ".screenlog;"),
                                       "echo '\n';",
                                       "echo", paste0(c(rep("-", 100), ";"), collapse = ""),
                                       "echo '\n';",
-                                      "tail -n 100", paste0("~/.tmp_screen/", screen_session_name, ".screenlog;"),
+                                      "tail -n 100", paste0(screen_log_fp, "/", screen_session_name, ".screenlog;"),
                                       "sleep 15;",
                                       "else echo Monitoring screen session: $SCREEN_PID;",
                                       "echo '\n';",
                                       "echo", paste0(c(rep("-", 100), ";"), collapse = ""),
                                       "echo '\n';",
-                                      "tail --pid=$SCREEN_PID -f", paste0("~/.tmp_screen/", screen_session_name, ".screenlog;"),
+                                      "tail --pid=$SCREEN_PID -f", paste0(screen_log_fp, "/", screen_session_name, ".screenlog;"),
                                       "sleep 15;",
                                       "fi"), type = "sh")))
 }

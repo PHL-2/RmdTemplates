@@ -6,24 +6,15 @@ system2("aws", c("sso login"))
 
 #This Rscript submits the relevant jobs to Nextflow once the sequencing run has been uploaded
 
-###############
-# Manual inputs
-###############
-
-ec2_tmp_fp <- "~/tmp_bs_dl"
-
-update_pangolin_dataset <- TRUE
-
-update_freyja_and_cecret_pipeline <- TRUE
-
-cecret_version <- "master"
-
 #########################
 # AWS and sequencing date
 #########################
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
+
+# temporary directory to hold the sequencing run download
+ec2_tmp_fp <- "~/tmp_bs_dl"
 
 if(sequencing_date == "") {
   stop (simpleError(paste0("Please fill in the correct sequencing date or short project description in ", here("code"), "/4_run_nextflow.R")))
@@ -90,11 +81,17 @@ workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acr
 
 data_output_fp <- paste0(ec2_tmp_fp, "/", sequencing_date, "/data")
 
+# temporary directory to hold the screen log files
+tmp_screen_fp <- paste("~", ".tmp_screen", sequencer_type, "NS_SC2", basename(here()), sep = "/")
+
+session_suffix <- tolower(paste(sequencer_type, "ns-sc2", basename(here()), sep = "-"))
+
 # Demultiplexing
 submit_screen_job(message2display = "Demultiplexing with BCLConvert",
                   ec2_login = ec2_hostname,
-                  screen_session_name = "demux_ns",
-                  command2run = paste("cd ~/.tmp_screen_ns/;",
+                  screen_session_name = paste("demux", session_suffix, sep = "-"),
+                  screen_log_fp = tmp_screen_fp,
+                  command2run = paste("cd", paste0(tmp_screen_fp, ";"),
                                       "nextflow run nf-core/demultiplex",
                                       "-c ~/.nextflow/config",
                                       "-profile", demux_profile,
@@ -106,7 +103,8 @@ submit_screen_job(message2display = "Demultiplexing with BCLConvert",
 
 check_screen_job(message2display = "Checking BCLConvert job",
                  ec2_login = ec2_hostname,
-                 screen_session_name = "demux_ns")
+                 screen_session_name = paste("demux", session_suffix, sep = "-"),
+                 screen_log_fp = tmp_screen_fp)
 
 # Checking the demultiplexing results
 aws_s3_fastq_files <- system2("aws", c("s3 ls", bclconvert_output_path,
@@ -180,7 +178,8 @@ fastq_path <- paste(bclconvert_output_path, instrument_run_id, sep = "/")
 if(update_pangolin_dataset) {
   submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
                     ec2_login = ec2_hostname,
-                    screen_session_name = "nextclade-dl",
+                    screen_session_name = paste("nextclade-dl", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
                     command2run = paste("mkdir -p ~/.local/bin/;",
                                         "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
                                         "chmod +x ~/.local/bin/nextclade;",
@@ -194,7 +193,8 @@ if(update_pangolin_dataset) {
 
   check_screen_job(message2display = "Checking Nextclade download job",
                    ec2_login = ec2_hostname,
-                   screen_session_name = "nextclade-dl")
+                   screen_session_name = paste("nextclade-dl", session_suffix, sep = "-"),
+                   screen_log_fp = tmp_screen_fp)
 }
 
 # Update the Cecret pipeline; this should be done as often as possible as it also updates the freyja data used for assignment
@@ -202,32 +202,36 @@ if(update_pangolin_dataset) {
 if (update_freyja_and_cecret_pipeline) {
   submit_screen_job(message2display = "Updating Cecret pipeline",
                     ec2_login = ec2_hostname,
-                    screen_session_name = "update-cecret",
+                    screen_session_name = paste("update-cecret", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
                     command2run = "nextflow pull UPHL-BioNGS/Cecret -r master"
   )
 
   check_screen_job(message2display = "Checking Cecret update",
                    ec2_login = ec2_hostname,
-                   screen_session_name = "update-cecret")
+                   screen_session_name = paste("update-cecret", session_suffix, sep = "-"),
+                   screen_log_fp = tmp_screen_fp)
 }
 
 # Cecret pipeline
 submit_screen_job(message2display = "Processing data through Cecret pipeline",
                   ec2_login = ec2_hostname,
-                  screen_session_name = "ns_cecret",
-                  command2run = paste("cd ~/.tmp_screen/;",
+                  screen_session_name = paste("cecret", session_suffix, sep = "-"),
+                  screen_log_fp = tmp_screen_fp,
+                  command2run = paste("cd", paste0(tmp_screen_fp, ";"),
                                       "nextflow run UPHL-BioNGS/Cecret",
                                       "-profile", cecret_profile,
                                       "-bucket-dir", paste0(s3_nextflow_work_bucket, "/cecret_", sample_type_acronym, "_", sequencing_date),
                                       "-r", cecret_version,
-                                      #"-resume",
+                                      "-resume",
                                       "--reads", fastq_path,
                                       "--outdir", paste(workflow_output_fp, "processed_cecret", sep = "/"))
 )
 
 check_screen_job(message2display = "Checking Cecret job",
                  ec2_login = ec2_hostname,
-                 screen_session_name = "ns_cecret")
+                 screen_session_name = paste("cecret", session_suffix, sep = "-"),
+                 screen_log_fp = tmp_screen_fp)
 
 rstudioapi::executeCommand('activateConsole')
 
@@ -285,7 +289,8 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
   # Download BCLConvert data
   submit_screen_job(message2display = "Downloading BCLConvert data",
                     ec2_login = ec2_hostname,
-                    screen_session_name = "bclconvert-dl",
+                    screen_session_name = paste("bclconvert-dl", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
                     command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
                                         "aws",
                                         paste0(bcl_file_download_command, collapse = " "),
@@ -295,12 +300,14 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
 
   check_screen_job(message2display = "Checking BCLConvert download job",
                    ec2_login = ec2_hostname,
-                   screen_session_name = "bclconvert-dl")
+                   screen_session_name = paste("bclconvert-dl", session_suffix, sep = "-"),
+                   screen_log_fp = tmp_screen_fp)
 
   # Download Cecret data
   submit_screen_job(message2display = "Downloading Cecret data",
                     ec2_login = ec2_hostname,
-                    screen_session_name = "cecret-dl",
+                    screen_session_name = paste("cecret-dl", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
                     command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
                                         "aws",
                                         paste0(cecret_file_download_command, collapse = " "),
@@ -310,12 +317,14 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
 
   check_screen_job(message2display = "Checking Cecret download job",
                    ec2_login = ec2_hostname,
-                   screen_session_name = "cecret-dl")
+                   screen_session_name = paste("cecret-dl", session_suffix, sep = "-"),
+                   screen_log_fp = tmp_screen_fp)
 
   # Download Nextclade dataset
   submit_screen_job(message2display = "Downloading Nextclade dataset version",
                     ec2_login = ec2_hostname,
-                    screen_session_name = "nextclade-version-dl",
+                    screen_session_name = paste("nextclade-version-dl", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
                     command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
                                         "aws",
                                         paste0(nextclade_dataset_download_command, collapse = " "),
@@ -324,7 +333,8 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
 
   check_screen_job(message2display = "Checking Nextclade version download job",
                    ec2_login = ec2_hostname,
-                   screen_session_name = "nextclade-version-dl")
+                   screen_session_name = paste("nextclade-version-dl", session_suffix, sep = "-"),
+                   screen_log_fp = tmp_screen_fp)
 
   # Download data from EC2 instance to local
   run_in_terminal(paste("scp -r", paste0(ec2_hostname, ":", data_output_fp),
@@ -347,7 +357,8 @@ run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
 # Clean up environment
 submit_screen_job(message2display = "Cleaning up EC2 run folder",
                   ec2_login = ec2_hostname,
-                  screen_session_name = "delete-run",
+                  screen_session_name = paste("delete-run", session_suffix, sep = "-"),
+                  screen_log_fp = tmp_screen_fp,
                   command2run = paste0("rm -rf ", ec2_tmp_fp, ";",
                                        "echo Here are your files and directories at home:;",
                                        "ls ~ -GF")
@@ -355,6 +366,7 @@ submit_screen_job(message2display = "Cleaning up EC2 run folder",
 
 check_screen_job(message2display = "Checking delete job",
                  ec2_login = ec2_hostname,
-                 screen_session_name = "delete-run")
+                 screen_session_name = paste("delete-run", session_suffix, sep = "-"),
+                 screen_log_fp = tmp_screen_fp)
 
 rstudioapi::executeCommand('activateConsole')

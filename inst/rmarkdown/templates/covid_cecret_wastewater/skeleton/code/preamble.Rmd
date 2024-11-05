@@ -841,8 +841,6 @@ tryCatch(
 #          across(ends_with("creation_date"), ~ as.Date(.))) %>%
 #   select(variant)
 
-dl_cdc_names <- read_csv(cdc_tracker_fp)
-
 cdc_lineages <- dl_cdc_names %>%
   unique() %>%
   mutate(week_ending = as.Date(week_ending),
