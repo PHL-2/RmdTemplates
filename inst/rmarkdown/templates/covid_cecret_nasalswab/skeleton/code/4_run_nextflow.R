@@ -152,13 +152,37 @@ if(length(instrument_run_id) > 1) {
                             "Currently, you are pulling the sequencing run from the ", sequencer_type)))
 }
 
-undetermined_bytes <- fastq_file_sizes %>%
-  filter(grepl("Undetermined", filename)) %>%
-  select(bytes) %>%
-  pull()
+if(remove_undetermined_file & any(grepl("Undetermined", fastq_file_sizes$filename))) {
+  # Move the Undetermined file to another bucket path
+  aws_s3_mv_undetermined <- system2("aws", c("s3 mv",
+                                             bclconvert_output_path,
+                                             paste(bclconvert_output_path, "Undetermined/", sep = "/"),
+                                             "--recursive",
+                                             "--exclude '*'",
+                                             "--include '*Undetermined_S0_*_001.fastq.gz'"), stdout = TRUE)
 
-if(undetermined_bytes/sum(fastq_file_sizes$bytes) > 0.5) {
-  stop(simpleError("Something might've went wrong with the demultiplexing!\nThe unassigned reads makes up more than 50% of the total reads!"))
+  # If the aws-cli provides an SSL error on local machine, run the command through the instance
+  if(length(aws_s3_mv_undetermined) == 0) {
+    aws_s3_mv_undetermined <- system2("ssh", c("-tt", ec2_hostname,
+                                           shQuote(paste("aws s3 mv",
+                                                         bclconvert_output_path,
+                                                         paste(bclconvert_output_path, "Undetermined/", sep = "/"),
+                                                         "--recursive",
+                                                         "--exclude '*'",
+                                                         "--include '*Undetermined_S0_*_001.fastq.gz'"),
+                                                   type = "sh")),
+                                  stdout = TRUE, stderr = TRUE) %>%
+      head(-1)
+  }
+} else {
+  undetermined_bytes <- fastq_file_sizes %>%
+    filter(grepl("Undetermined", filename)) %>%
+    select(bytes) %>%
+    pull()
+
+  if(undetermined_bytes/sum(fastq_file_sizes$bytes) > 0.5) {
+    stop(simpleError("Something might've went wrong with the demultiplexing!\nThe unassigned reads makes up more than 50% of the total reads!"))
+  }
 }
 
 fastq_path <- paste(bclconvert_output_path, instrument_run_id, sep = "/")
