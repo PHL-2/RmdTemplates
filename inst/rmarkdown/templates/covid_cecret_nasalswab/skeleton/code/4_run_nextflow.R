@@ -153,30 +153,25 @@ if(length(instrument_run_id) > 1) {
 }
 
 if(remove_undetermined_file) {
+
   # Move the Undetermined file to another bucket path
-  aws_s3_mv_undetermined <- system2("aws", c("s3 mv",
-                                             paste(bclconvert_output_path, instrument_run_id, sep = "/"),
-                                             paste(bclconvert_output_path, "Undetermined", instrument_run_id, sep = "/"),
-                                             "--recursive",
-                                             "--exclude '*'",
-                                             "--include '*Undetermined_S0_*_001.fastq.gz'"), stdout = TRUE)
+  submit_screen_job(message2display = "Moving Undetermined files out of input filepath",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = paste("undetermined-mv", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
+                    command2run = paste("aws s3 mv",
+                                        paste(bclconvert_output_path, instrument_run_id, sep = "/"),
+                                        paste(bclconvert_output_path, "Undetermined", instrument_run_id, sep = "/"),
+                                        "--recursive",
+                                        "--exclude '*'",
+                                        "--include '*Undetermined_S0_*_001.fastq.gz'")
+  )
 
-  # If the aws-cli provides an SSL error on local machine, run the command through the instance
-  if(length(aws_s3_mv_undetermined) == 0) {
-    rstudioapi::executeCommand('activateConsole')
-    message("Moving Undetermined files out of s3 input filepath...")
+  check_screen_job(message2display = "Checking Undetermined move job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = paste("undetermined-mv", session_suffix, sep = "-"),
+                   screen_log_fp = tmp_screen_fp)
 
-    aws_s3_mv_undetermined <- system2("ssh", c("-tt", ec2_hostname,
-                                           shQuote(paste("aws s3 mv",
-                                                         paste(bclconvert_output_path, instrument_run_id, sep = "/"),
-                                                         paste(bclconvert_output_path, "Undetermined", instrument_run_id, sep = "/"),
-                                                         "--recursive",
-                                                         "--exclude '*'",
-                                                         "--include '*Undetermined_S0_*_001.fastq.gz'"),
-                                                   type = "sh")),
-                                  stdout = TRUE, stderr = TRUE) %>%
-      head(-1)
-  }
 } else {
   undetermined_bytes <- fastq_file_sizes %>%
     filter(grepl("Undetermined", filename)) %>%
