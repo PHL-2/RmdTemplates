@@ -146,9 +146,9 @@ s %>%
 ```{r percent reads of lane, echo=FALSE}
 
 s %>%
-  mutate(percent_of_lane = read_counts/sum(read_counts)) %>%
+  mutate(percent_of_lane = read_counts/sum(read_counts, na.rm = TRUE)) %>%
   group_by(sample_type) %>%
-  mutate(tot_percent = sum(percent_of_lane)) %>%
+  mutate(tot_percent = sum(percent_of_lane, na.rm = TRUE)) %>%
   ungroup() %>%
   order_on_other_col(sample_type, tot_percent, decreasing = FALSE) %>%
   order_on_other_col(sample_id, percent_of_lane) %>%
