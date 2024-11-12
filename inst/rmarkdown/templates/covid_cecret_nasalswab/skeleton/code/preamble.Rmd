@@ -208,9 +208,11 @@ non_ctrl_samples <- s_meta %>%
   pull()
 
 #throw error if Undetermined sample has more reads than non-control samples
-if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] >
-   sum(samp_reads[samp_reads$sample_id %in% non_ctrl_samples, "read_counts"])) {
-  stop(simpleError("Undetermined sample has more reads than the median. Double check the sample barcodes"))
+if(!remove_undetermined_file) {
+  if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] >
+     sum(samp_reads[samp_reads$sample_id %in% non_ctrl_samples, "read_counts"])) {
+    stop(simpleError("Undetermined sample has more reads than the median. Double check the sample barcodes"))
+  }
 }
 
 ```
