@@ -100,7 +100,7 @@ s %>%
     theme(panel.grid = element_blank(),
           axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)) +
     labs(
-      title = paste0("Total number of reads: ", round(sum(s$read_counts)/1000000, digits = 2), "M"),
+      title = paste0("Total number of reads: ", round(sum(s$read_counts, na.rm = TRUE)/1000000, digits = 2), "M"),
       y="Read counts",
       x="",
       fill = "Sample Type",
