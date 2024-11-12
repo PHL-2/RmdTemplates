@@ -134,7 +134,7 @@ empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) re
 #if the shared drive can be accessed, copy the environmental swabs over
 # if(file.exists(shared_drive_fp)) {
 #
-#   shared_environ_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing Action plan updated", "Enviromental_samples"),
+#   shared_environ_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing_files", "Enviromental_samples"),
 #                                       pattern = "^[0-9]*-[0-9]*-[0-9]*", full.names = TRUE, recursive = TRUE))
 #
 #   environmental_file_date <- as.Date(gsub("_.*", "", basename(shared_environ_fp)))
@@ -235,7 +235,7 @@ if(copy_platemap) {
 
   if(file.exists(shared_drive_fp)) {
 
-    plate_map_cp_fp <- file.path(shared_drive_fp, "Sequencing Action plan updated", "1_Plate_Maps", "wastewater", format(Sys.Date(), "%Y"),
+    plate_map_cp_fp <- file.path(shared_drive_fp, "Sequencing_files", "1_Plate_Maps", "wastewater", format(Sys.Date(), "%Y"),
                                  paste(format(Sys.time(), "%Y-%m-%d"), sample_type_acronym, prj_description, "Plate_Map.csv", sep = "_"))
     file.copy(plate_map_local_fp, plate_map_cp_fp, overwrite = TRUE)
 
