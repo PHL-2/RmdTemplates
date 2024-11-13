@@ -210,7 +210,8 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
 
       scp_command <- paste("scp -r",
                            paste0(miseq_hostname, ":", intended_miseq_folder_regex, "/"),
-                           ec2_tmp_fp)
+                           paste0(ec2_tmp_fp, ";"),
+                           "sleep 5")
 
       run_in_terminal(scp_command)
 
@@ -245,7 +246,8 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
 
     scp_command <- paste("scp -r",
                          paste0(nextseq_hostname, ":", nextseq_run_fp, sequencing_run, "/", sequencing_run, ".tar.gz"),
-                         ec2_tmp_fp)
+                         paste0(ec2_tmp_fp, ";"),
+                         "sleep 5")
 
     run_in_terminal(scp_command)
 
