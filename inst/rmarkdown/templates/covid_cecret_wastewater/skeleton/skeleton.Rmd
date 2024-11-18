@@ -1,9 +1,18 @@
 ---
 title: |
-  ![](../aux_files/pdf_generation/forKnitting/logo_blk.png){width=4.5in}  
-  `r paste0('QC report for sequencing run')`
-  `r basename(here())`
-author: "Philadelphia Public Health Labs"
+    | 
+    | 
+    | 
+    | 
+    | ![](../aux_files/pdf_generation/forKnitting/logo_blk.png){width=4.5in}  
+    | 
+    | Sequencing Lab
+    | 
+    | QC report for `r instrument_type` run
+    | 
+    | `r basename(here())`
+
+author: "Philadelphia Public Health Laboratory"
 date: \today
 geometry: margin=3cm
 output:
