@@ -266,10 +266,26 @@ ssh_seqsender_cmd <- function(pos_argument,
                                  function(x) c(paste("Creating submission files for", x),
                                                paste("Files are stored at:", paste(submission_dir, submission_name, "submission_files", x, sep = "/")))))
   
-  if (pos_argument == "prep") {
-    additional_flags <- paste("-bsng", additional_flags)
-    success_msg <- c("here", success_msg)
+  if (pos_argument == "prep gisaid") {
+    pos_argument <- "prep"
+    additional_flags <- paste("-g", additional_flags)
+    success_msg <- success_msg[grepl("GISAID", success_msg)]
 
+  } else if (pos_argument == "prep ncbi") {
+    pos_argument <- "prep"
+    additional_flags <- paste("-bsn", additional_flags)
+    success_msg <- success_msg[grepl("BIOSAMPLE|SRA|GENBANK", success_msg)]
+
+  # in the current version of seqsender, the password field is only limited to ^[a-zA-Z0-9_.+-]+ characters
+  # once this issue is resolved, can try submitting to gisaid through this program instead of covCLI
+  # } else if (pos_argument == "submit --gisaid") {
+  #   additional_flags <- paste(additional_flags, is_test)
+  #   
+  #   success_msg <- c(success_msg[grepl("GISAID", success_msg)],
+  #                    "Connecting to NCBI FTP Server",
+  #                    paste0("Submission name: ", submission_name, "_GISAID"),
+  #                    paste0("Submitting '", submission_name, "'"))
+  #   
   } else if (pos_argument == "submit --biosample --sra") {
     additional_flags <- paste(additional_flags, is_test)
     
@@ -324,7 +340,6 @@ project_name <- basename(here())
 aux_seqsender_fp <- file.path(dirname(here()), "aux_files", "data_submission", "seqsender")
 seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload_orig.csv", sep = "_"))
 appended_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"))
-gisaid_meta_fp <- here("gisaid", paste(project_name, "gisaid.csv", sep = "_"))
 
 #path of local seqsender config file
 seqsender_config_fp <- list.files(aux_seqsender_fp, pattern = "seqsender_ns_login_config.yaml", full.names = TRUE)
@@ -405,21 +420,6 @@ seqsender <- read_csv(seqsender_meta_fp) %>%
 seqsender %>%
   write_csv(appended_seqsender_meta_fp, na = "")
 
-#creating a separate GISAID metadata file until seqsender fixes issue
-dir.create(here("gisaid"))
-
-gisaid_metadata <- seqsender %>%
-  rename(`gs-covv_virus_name` = `gs-sample_name`,
-         `gs-covv_collection_date` = collection_date) %>%
-  select(starts_with("gs-")) %>%
-  rename_at(vars(starts_with("gs-")), ~ gsub("gs-", "", .)) %>%
-  mutate(submitter = gisaid_username,
-         fn = NA,
-         covv_authors = authors)
-
-gisaid_metadata %>%
-  write_csv(gisaid_meta_fp, na = "")
-
 passed_fasta_files <- seqsender %>%
   filter(`gb-sample_name` != "") %>%
   select(sequence_name) %>%
@@ -483,15 +483,14 @@ upload_seqsender_files <- system2("scp", c(appended_seqsender_meta_fp, seqsender
                                   
 ssh_command_check(upload_seqsender_files)
 
-ssh_seqsender_cmd("prep")
+ssh_seqsender_cmd("prep gisaid")
+ssh_seqsender_cmd("prep ncbi")
 
-upload_gisaid_metadata <- system2("scp", c(gisaid_meta_fp,
-                                           paste0(ec2_hostname, ":", ec2_upload_tmp_fp, "/submission_files/GISAID/")))
-                                  
-ssh_command_check(upload_gisaid_metadata)
+dir.create(here("gisaid"))
 
 # check the seqsender file for GISAID accession numbers
 # if the seqsender file already has legit GISAID accession numbers, don't resubmit because GISAID already has these samples
+# have to manually submit GISAID files because the password field in seqsender does not accept all special characters
 if(all(grepl("^EPI_ISL_0$", seqsender$`bs-gisaid_accession`)) | all(is.na(seqsender$`bs-gisaid_accession`))) {
   
   # clear these GISAID log files if exist
@@ -503,7 +502,7 @@ if(all(grepl("^EPI_ISL_0$", seqsender$`bs-gisaid_accession`)) | all(is.na(seqsen
                         shQuote(paste(covCLI_cmd, "upload",
                                       "--clientid", gs_client_id,
                                       "--username", gisaid_username,
-                                      "--metadata", paste(ec2_upload_tmp_fp, "submission_files", "GISAID", basename(gisaid_meta_fp), sep = "/"),
+                                      "--metadata", paste(ec2_upload_tmp_fp, "submission_files", "GISAID", "metadata.csv", sep = "/"),
                                       "--fasta", paste(ec2_upload_tmp_fp, "submission_files", "GISAID", "sequence.fsa", sep = "/"),
                                       "--frameshift", "catch_novel",
                                       "--log", ec2_gs_log), type = "sh")))
