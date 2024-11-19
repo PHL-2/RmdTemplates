@@ -572,4 +572,3 @@ download_submission_log <- system2("scp", c(paste0(ec2_hostname, ":", submission
 ssh_command_check(download_submission_log)
 
 ```
-
