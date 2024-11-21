@@ -266,26 +266,12 @@ ssh_seqsender_cmd <- function(pos_argument,
                                  function(x) c(paste("Creating submission files for", x),
                                                paste("Files are stored at:", paste(submission_dir, submission_name, "submission_files", x, sep = "/")))))
   
-  if (pos_argument == "prep gisaid") {
-    pos_argument <- "prep"
-    additional_flags <- paste("-g", additional_flags)
+  if (pos_argument == "prep --gisaid") {
     success_msg <- success_msg[grepl("GISAID", success_msg)]
 
-  } else if (pos_argument == "prep ncbi") {
-    pos_argument <- "prep"
-    additional_flags <- paste("-bsn", additional_flags)
+  } else if (pos_argument == "prep -bsn") {
     success_msg <- success_msg[grepl("BIOSAMPLE|SRA|GENBANK", success_msg)]
-
-  # in the current version of seqsender, the password field is only limited to ^[a-zA-Z0-9_.+-]+ characters
-  # once this issue is resolved, can try submitting to gisaid through this program instead of covCLI
-  # } else if (pos_argument == "submit --gisaid") {
-  #   additional_flags <- paste(additional_flags, is_test)
-  #   
-  #   success_msg <- c(success_msg[grepl("GISAID", success_msg)],
-  #                    "Connecting to NCBI FTP Server",
-  #                    paste0("Submission name: ", submission_name, "_GISAID"),
-  #                    paste0("Submitting '", submission_name, "'"))
-  #   
+    
   } else if (pos_argument == "submit --biosample --sra") {
     additional_flags <- paste(additional_flags, is_test)
     
@@ -483,8 +469,7 @@ upload_seqsender_files <- system2("scp", c(appended_seqsender_meta_fp, seqsender
                                   
 ssh_command_check(upload_seqsender_files)
 
-ssh_seqsender_cmd("prep gisaid")
-ssh_seqsender_cmd("prep ncbi")
+ssh_seqsender_cmd("prep --gisaid")
 
 dir.create(here("gisaid"))
 
@@ -509,8 +494,7 @@ if(all(grepl("^EPI_ISL_0$", seqsender$`bs-gisaid_accession`)) | all(is.na(seqsen
   
   rstudioapi::executeCommand('activateConsole')
   
-  download_gisaid_load <- system2("mkdir", c("-p", paste0(here("gisaid"), ";"),
-                                             "scp", c(paste0(ec2_hostname, ":", ec2_gs_log), local_gs_log)))
+  download_gisaid_load <- system2("scp", c(paste0(ec2_hostname, ":", ec2_gs_log), local_gs_log))
   
   ssh_command_check(download_gisaid_load)
   
@@ -559,6 +543,9 @@ seqsender %>%
 reupload_seqsender_file <- system2("scp", c(appended_seqsender_meta_fp, paste0(ec2_hostname, ":", ec2_seqsender_meta_fp)))
 
 ssh_command_check(reupload_seqsender_file)
+
+### can uncomment the below command to create the NCBI files to check manually before submission
+#ssh_seqsender_cmd("prep -bsn")
 
 ### submit files to biosample and sra
 ssh_seqsender_cmd("submit --biosample --sra")
