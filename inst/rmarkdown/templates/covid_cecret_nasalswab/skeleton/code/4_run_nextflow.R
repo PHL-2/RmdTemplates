@@ -179,7 +179,9 @@ if(remove_undetermined_file) {
     pull()
 
   if(undetermined_bytes/sum(fastq_file_sizes$bytes) > 0.5) {
-    stop(simpleError("Something might've went wrong with the demultiplexing!\nThe unassigned reads makes up more than 50% of the total reads!"))
+    stop(simpleError(paste("Something might've went wrong with the demultiplexing!",
+                           "The unassigned reads makes up more than 50% of the total reads!",
+                           "To remove the Undetermined file from processing, set remove_undetermined_file to TRUE", sep = "\n")))
   }
 }
 
