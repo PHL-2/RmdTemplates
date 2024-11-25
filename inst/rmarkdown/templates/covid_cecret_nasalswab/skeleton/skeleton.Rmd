@@ -1,9 +1,18 @@
 ---
 title: |
-  ![](../aux_files/pdf_generation/forKnitting/logo_blk.png){width=4.5in}  
-  `r paste0('QC report for sequencing run')`
-  `r basename(here())`
-author: "Philadelphia Public Health Labs"
+    | 
+    | 
+    | 
+    | 
+    | ![](../aux_files/pdf_generation/forKnitting/logo_blk.png){width=4.5in}  
+    | 
+    | Sequencing Lab
+    | 
+    | QC report for sequencing run
+    | 
+    | `r basename(here())`
+
+author: "Philadelphia Public Health Laboratory"
 date: \today
 geometry: margin=3cm
 output:
@@ -56,6 +65,8 @@ update_pangolin_dataset <- TRUE
 update_freyja_and_cecret_pipeline <- TRUE
 
 cecret_version <- "master"
+
+remove_undetermined_file <- FALSE
 
 ```
 
@@ -255,10 +266,12 @@ ssh_seqsender_cmd <- function(pos_argument,
                                  function(x) c(paste("Creating submission files for", x),
                                                paste("Files are stored at:", paste(submission_dir, submission_name, "submission_files", x, sep = "/")))))
   
-  if (pos_argument == "prep") {
-    additional_flags <- paste("-bsng", additional_flags)
-    success_msg <- c("here", success_msg)
+  if (pos_argument == "prep --gisaid") {
+    success_msg <- success_msg[grepl("GISAID", success_msg)]
 
+  } else if (pos_argument == "prep -bsn") {
+    success_msg <- success_msg[grepl("BIOSAMPLE|SRA|GENBANK", success_msg)]
+    
   } else if (pos_argument == "submit --biosample --sra") {
     additional_flags <- paste(additional_flags, is_test)
     
@@ -313,7 +326,6 @@ project_name <- basename(here())
 aux_seqsender_fp <- file.path(dirname(here()), "aux_files", "data_submission", "seqsender")
 seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload_orig.csv", sep = "_"))
 appended_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"))
-gisaid_meta_fp <- here("gisaid", paste(project_name, "gisaid.csv", sep = "_"))
 
 #path of local seqsender config file
 seqsender_config_fp <- list.files(aux_seqsender_fp, pattern = "seqsender_ns_login_config.yaml", full.names = TRUE)
@@ -394,21 +406,6 @@ seqsender <- read_csv(seqsender_meta_fp) %>%
 seqsender %>%
   write_csv(appended_seqsender_meta_fp, na = "")
 
-#creating a separate GISAID metadata file until seqsender fixes issue
-dir.create(here("gisaid"))
-
-gisaid_metadata <- seqsender %>%
-  rename(`gs-covv_virus_name` = `gs-sample_name`,
-         `gs-covv_collection_date` = collection_date) %>%
-  select(starts_with("gs-")) %>%
-  rename_at(vars(starts_with("gs-")), ~ gsub("gs-", "", .)) %>%
-  mutate(submitter = gisaid_username,
-         fn = NA,
-         covv_authors = authors)
-
-gisaid_metadata %>%
-  write_csv(gisaid_meta_fp, na = "")
-
 passed_fasta_files <- seqsender %>%
   filter(`gb-sample_name` != "") %>%
   select(sequence_name) %>%
@@ -472,15 +469,13 @@ upload_seqsender_files <- system2("scp", c(appended_seqsender_meta_fp, seqsender
                                   
 ssh_command_check(upload_seqsender_files)
 
-ssh_seqsender_cmd("prep")
+ssh_seqsender_cmd("prep --gisaid")
 
-upload_gisaid_metadata <- system2("scp", c(gisaid_meta_fp,
-                                           paste0(ec2_hostname, ":", ec2_upload_tmp_fp, "/submission_files/GISAID/")))
-                                  
-ssh_command_check(upload_gisaid_metadata)
+dir.create(here("gisaid"))
 
 # check the seqsender file for GISAID accession numbers
 # if the seqsender file already has legit GISAID accession numbers, don't resubmit because GISAID already has these samples
+# have to manually submit GISAID files because the password field in seqsender does not accept all special characters
 if(all(grepl("^EPI_ISL_0$", seqsender$`bs-gisaid_accession`)) | all(is.na(seqsender$`bs-gisaid_accession`))) {
   
   # clear these GISAID log files if exist
@@ -492,15 +487,14 @@ if(all(grepl("^EPI_ISL_0$", seqsender$`bs-gisaid_accession`)) | all(is.na(seqsen
                         shQuote(paste(covCLI_cmd, "upload",
                                       "--clientid", gs_client_id,
                                       "--username", gisaid_username,
-                                      "--metadata", paste(ec2_upload_tmp_fp, "submission_files", "GISAID", basename(gisaid_meta_fp), sep = "/"),
+                                      "--metadata", paste(ec2_upload_tmp_fp, "submission_files", "GISAID", "metadata.csv", sep = "/"),
                                       "--fasta", paste(ec2_upload_tmp_fp, "submission_files", "GISAID", "sequence.fsa", sep = "/"),
                                       "--frameshift", "catch_novel",
                                       "--log", ec2_gs_log), type = "sh")))
   
   rstudioapi::executeCommand('activateConsole')
   
-  download_gisaid_load <- system2("mkdir", c("-p", paste0(here("gisaid"), ";"),
-                                             "scp", c(paste0(ec2_hostname, ":", ec2_gs_log), local_gs_log)))
+  download_gisaid_load <- system2("scp", c(paste0(ec2_hostname, ":", ec2_gs_log), local_gs_log))
   
   ssh_command_check(download_gisaid_load)
   
@@ -550,6 +544,9 @@ reupload_seqsender_file <- system2("scp", c(appended_seqsender_meta_fp, paste0(e
 
 ssh_command_check(reupload_seqsender_file)
 
+### can uncomment the below command to create the NCBI files to check manually before submission
+#ssh_seqsender_cmd("prep -bsn")
+
 ### submit files to biosample and sra
 ssh_seqsender_cmd("submit --biosample --sra")
 
@@ -562,4 +559,3 @@ download_submission_log <- system2("scp", c(paste0(ec2_hostname, ":", submission
 ssh_command_check(download_submission_log)
 
 ```
-
