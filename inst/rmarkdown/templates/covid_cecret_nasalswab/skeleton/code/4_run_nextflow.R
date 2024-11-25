@@ -378,19 +378,4 @@ run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
                       here("data", "processed_cecret", "nextflow.config"))
 )
 
-# Clean up environment
-submit_screen_job(message2display = "Cleaning up EC2 run folder",
-                  ec2_login = ec2_hostname,
-                  screen_session_name = paste("delete-run", session_suffix, sep = "-"),
-                  screen_log_fp = tmp_screen_fp,
-                  command2run = paste0("rm -rf ", ec2_tmp_fp, ";",
-                                       "echo Here are your files and directories at home:;",
-                                       "ls ~ -GF")
-)
-
-check_screen_job(message2display = "Checking delete job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = paste("delete-run", session_suffix, sep = "-"),
-                 screen_log_fp = tmp_screen_fp)
-
 rstudioapi::executeCommand('activateConsole')
