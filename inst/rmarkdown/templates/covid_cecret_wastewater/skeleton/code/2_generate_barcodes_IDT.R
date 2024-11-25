@@ -324,8 +324,7 @@ read_sheet <- function(fp, sheet_name) {
 }
 
 index_sheet <- read_sheet(metadata_input_fp, "Index")
-sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info") %>%
-  mutate(PHL_sample_received_date = str_extract(sample_name, pattern = "[0-9]{4}-[0,1][0-9]-[0-3][0-9]"))
+sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
 
 #######################################################
 # Load the wastewater metadata sheet from the ddPCR run
@@ -398,7 +397,6 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   #add in barcodes
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
   arrange(plate, plate_col, plate_row) %>%
-  rename(any_of(c(sample_received_date = "sample_collection_date"))) %>%
   #find sample group from sample_name
   mutate(sample_group = gsub("^WW-([0-9-]+)|^WW-|-Rep.*$", "", sample_name),
          sample_group = case_when(sample_group == "NE" ~ "NorthEast",
@@ -420,9 +418,14 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
          run_q30 = run_q30,
          run_pf = run_pf,
          run_error = run_error,
-         PHL_sample_received_date = as.Date(PHL_sample_received_date)) %>%
-  rename(sample_received_date = "PHL_sample_received_date") %>%
+         sample_received_date = str_extract(sample_name, pattern = "[0-9]{4}-[0,1][0-9]-[0-3][0-9]")) %>%
   select(sample_id, everything())
+
+for(additional_sample_info in c("sample_collection_date", "PHL_sample_received_date")) {
+  if(additional_sample_info %in% colnames(metadata_sheet)) {
+    stop(simpleError(paste0("Investigate why the ", additional_sample_info, " column was filled out in the metadata sheet by the scientists")))
+  }
+}
 
 #####################################################################
 # Fill in these columns in the metadata sheet if they were left blank

@@ -100,7 +100,7 @@ s %>%
     theme(panel.grid = element_blank(),
           axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)) +
     labs(
-      title = paste0("Total number of reads: ", round(sum(s$read_counts)/1000000, digits = 2), "M"),
+      title = paste0("Total number of reads: ", round(sum(s$read_counts, na.rm = TRUE)/1000000, digits = 2), "M"),
       y="Read counts",
       x="",
       fill = "Sample Type",
@@ -146,9 +146,9 @@ s %>%
 ```{r percent reads of lane, echo=FALSE}
 
 s %>%
-  mutate(percent_of_lane = read_counts/sum(read_counts)) %>%
+  mutate(percent_of_lane = read_counts/sum(read_counts, na.rm = TRUE)) %>%
   group_by(sample_type) %>%
-  mutate(tot_percent = sum(percent_of_lane)) %>%
+  mutate(tot_percent = sum(percent_of_lane, na.rm = TRUE)) %>%
   ungroup() %>%
   order_on_other_col(sample_type, tot_percent, decreasing = FALSE) %>%
   order_on_other_col(sample_id, percent_of_lane) %>%
@@ -1517,7 +1517,7 @@ freyja_sample_type %>%
   ggplot(., aes(x = sample_type, y = avg_rel_abund, fill = combined_lineage)) +
     geom_col() +
     scale_fill_manual(values = 
-                        c(colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$combined_lineage))-2),
+                        c(colorRampPalette(brewer.pal(11, "Spectral"))(max(length(unique(.$combined_lineage))-2, 1)),
                           "#808080", "#000000")) +
     scale_y_continuous(labels = percent, expand=c(0,0), limits = c(0, 1)) +
     theme_classic() +

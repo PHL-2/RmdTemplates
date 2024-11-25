@@ -963,7 +963,7 @@ freyja_average %>%
     geom_col() +
     facet_wrap(~sample_collect_date+sample_group) +
     scale_fill_manual(values = 
-                        c(colorRampPalette(brewer.pal(11, "Spectral"))(length(unique(.$CDC_lineages))-3),
+                        c(colorRampPalette(brewer.pal(11, "Spectral"))(max(length(unique(.$CDC_lineages))-3, 1)),
                           "#000000", "#E6BE8A", "#808080")) +
     scale_y_continuous(labels = percent, expand=c(0,0), limits = c(0, 1.01)) +
     theme_classic() +
