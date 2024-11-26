@@ -484,20 +484,19 @@ run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
                       here("data", "processed_cecret", "nextflow.config"))
 )
 
-# Show amount of space on instance
-submit_screen_job(message2display = "Displaying the amount of space on drive",
+# Clean up environment
+submit_screen_job(message2display = "Cleaning up run from temporary folder",
                   ec2_login = ec2_hostname,
-                  screen_session_name = paste("display-space", session_suffix, sep = "-"),
+                  screen_session_name = paste("delete-run", session_suffix, sep = "-"),
                   screen_log_fp = tmp_screen_fp,
-                  command2run = paste("echo 'This is the amount of space available on your mounted drive';",
-                                      "echo 'Please delete", ec2_tmp_fp, "if you are running out of space:\n';",
-                                      "df -h | grep -e", gsub("/.*", "", gsub("^/", "", ec2_tmp_fp)), "-e 'Filesystem';",
-                                      "sleep 40")
+                  command2run = paste0("rm ", ec2_tmp_fp, "/", instrument_run_id, "*;",
+                                       "echo 'Here are the files in the tmp directory:';",
+                                       "ls ", ec2_tmp_fp)
 )
 
-check_screen_job(message2display = "Checking space job",
+check_screen_job(message2display = "Checking delete job",
                  ec2_login = ec2_hostname,
-                 screen_session_name = paste("display-space", session_suffix, sep = "-"),
+                 screen_session_name = paste("delete-run", session_suffix, sep = "-"),
                  screen_log_fp = tmp_screen_fp)
 
 rstudioapi::executeCommand('activateConsole')
