@@ -383,7 +383,7 @@ submit_screen_job(message2display = "Cleaning up run from temporary folder",
                   ec2_login = ec2_hostname,
                   screen_session_name = paste("delete-run", session_suffix, sep = "-"),
                   screen_log_fp = tmp_screen_fp,
-                  command2run = paste0("rm ", ec2_tmp_fp, "/", instrument_run_id, "*;",
+                  command2run = paste0("rm -rf ", ec2_tmp_fp, "/", instrument_run_id, "*;",
                                        "echo 'Here are the files in the tmp directory:';",
                                        "ls ", ec2_tmp_fp)
 )
