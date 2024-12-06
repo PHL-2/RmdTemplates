@@ -786,16 +786,25 @@ metadata_sheet %>%
   rbind(merged_samples_metadata_sheet) %>%
   write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")))
 
-bclconvert_output_final_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sequencing_run, sep = "/")
+if(samplesheet_exists) {
+  message("\n*****")
+  message("nf_concat_fastq_samplesheet.csv sheet not generated")
+  message("Delete the existing SampleSheet.csv or SampleSheet_v2.csv in the metadata/munge directory to regenerate")
+  message("*****")
+} else {
 
-#write the sample sheet for merging nextflow script
-metadata_sheet %>%
-  filter(!sample_id %in% sample_w_empty_reads) %>%
-  select(fastq = sample_id, uniq_sample_name) %>%
-  mutate(fastq_1 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R1_001.fastq.gz"),
-         fastq_2 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R2_001.fastq.gz")) %>%
-  merge(select(merged_samples_metadata_sheet, sample_id, uniq_sample_name), by = "uniq_sample_name", all = TRUE) %>%
-  filter(!is.na(sample_id)) %>%
-  select(sample_id, fastq_1, fastq_2) %>%
-  write_csv(file = here("metadata", "munge",
-                        tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, "nf_concat_fastq_samplesheet.csv", sep = "_"))))
+  bclconvert_output_final_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sequencing_run, sep = "/")
+
+  #write the sample sheet for merging nextflow script
+  metadata_sheet %>%
+    filter(!sample_id %in% sample_w_empty_reads) %>%
+    select(fastq = sample_id, uniq_sample_name) %>%
+    mutate(fastq_1 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R1_001.fastq.gz"),
+           fastq_2 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R2_001.fastq.gz")) %>%
+    merge(select(merged_samples_metadata_sheet, sample_id, uniq_sample_name), by = "uniq_sample_name", all = TRUE) %>%
+    filter(!is.na(sample_id)) %>%
+    select(sample_id, fastq_1, fastq_2) %>%
+    write_csv(file = here("metadata", "munge",
+                          tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, "nf_concat_fastq_samplesheet.csv", sep = "_"))))
+
+}
