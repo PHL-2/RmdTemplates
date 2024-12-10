@@ -250,7 +250,7 @@ if(samplesheet_exists) {
                                                  type = "sh")),
                                 stdout = TRUE)
 
-      host_samplesheet_fp <- paste0(nextseq_hostname, ":", nextseq_run_fp, sequencing_run, "/SampleSheet.csv")
+      host_samplesheet_fp <- paste0(nextseq_hostname, ":", nextseq_run_fp, sequencing_run, "/SampleSheet*.csv")
     }
 
     message("\n\n\n*****")
