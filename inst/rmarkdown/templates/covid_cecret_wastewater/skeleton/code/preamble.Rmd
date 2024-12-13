@@ -134,7 +134,7 @@ if (folder_date != gsub("_.*", "", basename(here()))) {
 
 ```
 
-```{r file paths for qc data, eval = import_data}
+```{r file paths for qc data and software versions, eval = import_data}
 
 ### demultiplexing results from nfcore
 demux_software_fp <- here("data", "processed_bclconvert", "pipeline_info", "software_versions.yml")
@@ -142,18 +142,37 @@ demuxsum_fp <- here("data", "processed_bclconvert", run_folder_name, "Reports", 
 quality_metrics_fp <- here("data", "processed_bclconvert", run_folder_name, "Reports", "Quality_Metrics.csv")
 top_unkwn_fp <- here("data", "processed_bclconvert", run_folder_name, "Reports", "Top_Unknown_Barcodes.csv")
 
+cecret_software_fp <- here("data", "processed_cecret", "software_versions.yml")
+
 ```
 
-```{r save demux software versions, eval = import_data}
+```{r save software versions, eval = import_data}
 
-read_delim(demux_software_fp, delim = " ", col_names = FALSE) %>%
-  filter(grepl("Nextflow: |nf-core/demultiplex: |bclconvert: |untar: |falco: ", X1)) %>%
+bcl_version <- read_delim(demux_software_fp, delim = " ", col_names = FALSE) %>%
+  filter(grepl("Nextflow: |nf-core/demultiplex: |bclconvert: |falco: ", X1)) %>%
   separate(col = "X1", into = c("software", "version"), sep = ": ") %>%
   mutate(software = gsub("^ *", "", software),
-         software = gsub("/", "-", software)) %>%
-  mutate(version = gsub("'", "", version)) %>%
-  mutate(pipeline = "nf-core-demultiplex") %>%
-  select(pipeline, software, version) %>%
+         software = gsub("/", "-", software),
+         version = gsub("'", "", version),
+         pipeline = "nf-core-demultiplex") %>%
+  select(pipeline, software, version)
+
+cecret_workflow_version <- read_delim(cecret_software_fp, delim = " ", col_names = FALSE) %>%
+  filter(!grepl("container:", X1),
+         grepl("^ ", X1)) %>%
+  unique() %>%
+  separate(col = "X1", into = c("software", "version"), sep = ": ") %>%
+  mutate(software = gsub("^ *", "", software),
+         software = gsub("/", "-", software),
+         version = gsub("'", "", version),
+         pipeline = "UPHL-BioNGS-Cecret",
+         software = case_when(software == "workflow" ~ "Cecret",
+                              software == "tag" ~ "nextclade-dataset",
+                              software == "barcode" ~ "freyja-dataset",
+                              TRUE ~ software))
+
+bcl_version %>%
+  rbind(cecret_workflow_version) %>%
   write_csv(file = software_version_fp)
 
 ```
@@ -508,40 +527,6 @@ next_clade <- nc_fp %>%
          nextclade_qc_overallscore = "qc.overallScore",
          nextclade_index = "index") %>%
   mutate(sample_id = gsub("_S[0-9]*$", "", sample_id))
-
-nc_v_fp <- here("data", "processed_cecret", "nextclade", "nextclade.json")
-
-nc_v_fp %>%
-  read_delim(n_max = 1, delim = ":", col_names = FALSE, skip = 2) %>%
-  rename(version = "X2") %>%
-  mutate(pipeline = "UPHL-BioNGS-Cecret",
-         software = "nextclade",
-         version = gsub("\"|,| ", "", version)) %>%
-  select(pipeline, software, version) %>%
-  write_csv(file = software_version_fp, append = TRUE)
-
-nc_dl_fp <- here("data", "processed_cecret", "nextclade", "nextclade-sars.json")
-
-nc_dl_v <- nc_dl_fp %>%
-  read_csv(col_names = FALSE) %>%
-  rename(version = "X1") %>%
-  mutate(find_version = ifelse(grepl("version: \\{", version), TRUE, NA)) %>%
-  fill(find_version, .direction = "down") %>%
-  filter(find_version) %>%
-  filter(grepl("updatedAt", version)) %>%
-  unique() %>%
-  select(version)
-
-if(nrow(nc_dl_v) > 1) {
-  stop(simpleError("Check the nextclade dataset version"))
-}
-
-nc_dl_v %>%
-  mutate(pipeline = "UPHL-BioNGS-Cecret",
-         software = "nextclade-dataset",
-         version = gsub("updatedAt: |,", "", version)) %>%
-  select(pipeline, software, version) %>%
-  write_csv(file = software_version_fp, append = TRUE)
 
 ```
 

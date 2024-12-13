@@ -60,7 +60,9 @@ sample_w_empty_reads <- c("") #add sample ids that have empty fastq files
 # 4_run_nextflow.R (Cecret settings)
 ####################################
 
-update_pangolin_dataset <- TRUE
+#tag of nextclade dataset to use for lineage assignment
+#leave empty to use the latest nextclade dataset
+nextclade_dataset_version <- ""
 
 update_freyja_and_cecret_pipeline <- TRUE
 

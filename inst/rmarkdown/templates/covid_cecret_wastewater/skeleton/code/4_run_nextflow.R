@@ -304,9 +304,13 @@ if(!is_nf_concat_samplesheet_empty) {
   }
 }
 
-# Download most recent Nextclade pangolin dataset
-# Big if-else statement; run code manually if TRUE
-if (update_pangolin_dataset) {
+# Download most recent Nextclade dataset for lineage assignment
+if (nextclade_dataset_version != "") {
+  nextclade_tag <- paste("--tag", nextclade_dataset_version)
+} else {
+  nextclade_tag <- ""
+}
+
   submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
                     ec2_login = ec2_hostname,
                     screen_session_name = paste("nextclade-dl", session_suffix, sep = "-"),
@@ -315,18 +319,16 @@ if (update_pangolin_dataset) {
                                         "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
                                         "chmod +x ~/.local/bin/nextclade;",
                                         "nextclade --version;",
-                                        "nextclade dataset list --name sars-cov-2 --json > ~/nextclade-sars.json;",
-                                        "nextclade dataset get --name sars-cov-2 --output-zip ~/sars.zip;",
-                                        "aws s3 cp ~/nextclade-sars.json", paste0(s3_reference_bucket, "/nextclade/nextclade-sars.json;"),
+                                        "nextclade dataset get --name sars-cov-2", nextclade_tag, "--output-zip ~/sars.zip;",
                                         "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
-                                        "rm ~/nextclade-sars.json ~/sars.zip")
+                                        "rm ~/sars.zip")
                     )
 
   check_screen_job(message2display = "Checking Nextclade download job",
                    ec2_login = ec2_hostname,
                    screen_session_name = paste("nextclade-dl", session_suffix, sep = "-"),
                    screen_log_fp = tmp_screen_fp)
-}
+
 
 # Update the Cecret pipeline; this should be done as often as possible as it also updates the freyja data used for assignment
 # Big if-else statement; run code manually if TRUE
@@ -389,12 +391,12 @@ cecret_file_download_command <- c("s3 cp", workflow_output_fp)
 cecret_file_download_param <- c("--recursive",
                                 "--exclude '*'",
                                 paste0("--include '*/",
-                                       c("*_demix.tsv",
+                                       c("software_versions.yml",
+                                         "*_demix.tsv",
                                          "*_kraken2_report.txt",
                                          "snp-dists.txt",
                                          "*_amplicon_depth.csv",
                                          "nextclade.tsv",
-                                         "nextclade.json",
                                          "*.stats.txt",
                                          "*.cov.txt",
                                          "*.depth.txt",
@@ -406,15 +408,8 @@ aws_s3_cecret_download <- system2("aws", c(cecret_file_download_command,
                                            cecret_file_download_param),
                                   stdout = TRUE, stderr = TRUE)
 
-# Download Nextclade dataset
-nextclade_dataset_download_command <- c("s3 cp", paste0(s3_reference_bucket, "/nextclade/nextclade-sars.json"))
-
-aws_s3_nextclade_dataset_download <- system2("aws", c(nextclade_dataset_download_command,
-                                                      here("data", "processed_cecret", "nextclade/")),
-                                             stdout = TRUE, stderr = TRUE)
-
 # If the aws-cli provides an SSL error on local machine, run the command through the instance
-if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s3_nextclade_dataset_download)))) {
+if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download)))) {
 
   # Download BCLConvert data
   submit_screen_job(message2display = "Downloading BCLConvert data",
@@ -448,22 +443,6 @@ if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download, aws_s
   check_screen_job(message2display = "Checking Cecret download job",
                    ec2_login = ec2_hostname,
                    screen_session_name = paste("cecret-dl", session_suffix, sep = "-"),
-                   screen_log_fp = tmp_screen_fp)
-
-  # Download Nextclade dataset
-  submit_screen_job(message2display = "Downloading Nextclade dataset version",
-                    ec2_login = ec2_hostname,
-                    screen_session_name = paste("nextclade-version-dl", session_suffix, sep = "-"),
-                    screen_log_fp = tmp_screen_fp,
-                    command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
-                                        "aws",
-                                        paste0(nextclade_dataset_download_command, collapse = " "),
-                                        paste0(data_output_fp, "/processed_cecret", "/nextclade/"))
-  )
-
-  check_screen_job(message2display = "Checking Nextclade version download job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = paste("nextclade-version-dl", session_suffix, sep = "-"),
                    screen_log_fp = tmp_screen_fp)
 
   # Download data from EC2 instance to local
