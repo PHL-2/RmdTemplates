@@ -574,9 +574,10 @@ snpdists %>%
   
 ```
 
-```{r load cecret software versions, eval = import_data}
+```{r load cecret results, eval = import_data}
 
-cecret_software_select <- c("ivar", "bwa", "seqyclean", "Cecret version", "pangolin_scorpio_version", "pangolin_constellation_version", "pangolin_pangolin_version", "pangolin_version")
+# remove these software versions from the cecret results
+cecret_software_select <- c("ivar", "ivar consensus", "bwa", "seqyclean", "Cecret version", "pangolin_scorpio_version", "pangolin_constellation_version", "pangolin_pangolin_version", "pangolin_version")
 
 #pangolin data is included with this summary file
 cecret_aggregate <- here("data", "processed_cecret", "cecret_results.csv") %>%
@@ -587,27 +588,7 @@ cecret_aggregate <- here("data", "processed_cecret", "cecret_results.csv") %>%
          vadr_passfail = "vadr_p/f",
          nextclade_qc_overallscore = "nextclade_qc.overallScore",
          nextclade_qc_overallstatus = "nextclade_qc.overallStatus") %>%
-  as.data.frame()
-
-cecret_aggregate %>%
-  select(all_of(cecret_software_select)) %>%
-  unique() %>%
-  mutate_at(.cols = cecret_software_select[1:3],
-            .funs = function(x) sub(".*version.*? ", "", x, ignore.case = TRUE)) %>%
-  mutate_all(.funs = function(x) as.character(x)) %>%
-  pivot_longer(cols = everything(), names_to = "software", values_to = "version") %>%
-  filter(!is.na(version)) %>%
-  unique() %>%
-  mutate(software = case_when(grepl("^PUSHER-", version) ~ "PUSHER",
-                              grepl("^PANGO-", version) ~ "PANGO",
-                              grepl("^SCORPIO_", version) ~ "SCORPIO",
-                              TRUE ~ gsub("^pangolin_|.version$", "", software)),
-         version = gsub("^PUSHER-|^PANGO-|^SCORPIO_", "", version)) %>%
-  mutate(pipeline = "UPHL-BioNGS-Cecret") %>%
-  select(pipeline, software, version) %>%
-  write_csv(file = software_version_fp, append = TRUE)
-
-cecret_aggregate <- cecret_aggregate %>%
+  as.data.frame() %>%
   select(-all_of(cecret_software_select))
 
 ```
