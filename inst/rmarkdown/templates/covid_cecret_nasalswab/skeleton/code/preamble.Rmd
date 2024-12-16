@@ -778,8 +778,7 @@ seqsender <- s_toPlot %>%
          #GISAID fields
          `gs-covv_specimen` = "sample_type",
          `gs-covv_coverage` = "median_coverage",
-         `gs-covv_orig_lab` = "sample_collected_by",
-) %>%
+         `gs-covv_orig_lab` = "sample_collected_by") %>%
   mutate(collection_date = case_when(!(is.na(sample_collection_date) |
                                          as.character(sample_collection_date) == "Unknown") ~ as.character(sample_collection_date),
                                      !is.na(PHL_sample_received_date) ~ as.character(PHL_sample_received_date),
