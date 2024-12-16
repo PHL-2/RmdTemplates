@@ -556,15 +556,7 @@ freyja <- freyja_fps %>%
 snpdists_raw_fp <- here("data", "processed_cecret", "snp-dists", "snp-dists.txt")
 
 snpdists <- snpdists_raw_fp %>%
-  read_csv()
-
-colnames(snpdists)[1] %>%
-  gsub(" ", ",", .) %>%
-  paste0("UPHL-BioNGS-Cecret,", .) %>%
-  as.data.frame() %>%
-  write_csv(file = software_version_fp, append = TRUE, quote = "none")
-
-snpdists <- snpdists %>%
+  read_csv() %>%
   rename(sample_id = 1) %>%
   mutate(sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
   rename_all(.funs = function(x) gsub("_S[0-9]*$", "", x)) %>%
