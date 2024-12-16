@@ -785,7 +785,6 @@ seqsender <- s_toPlot %>%
                                      TRUE ~ as.character(sequencing_date)),
          collection_date = as.Date(collection_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y")),
          collection_year = format(collection_date, format = "%Y"),
-         #GISAID fields
          #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/sample collection year (collection year may be different from sequence year)
          `gs-sample_name` = paste0("hCoV-19/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sequence_name), "/", collection_year),
          `gs-covv_gender` = ifelse(is.na(gender)|`gs-covv_orig_lab` == "Temple University", "Unknown", gender),
