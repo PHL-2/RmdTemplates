@@ -734,10 +734,6 @@ if(any(is.na(s$sample_type))) {
 
 ```{r upload filepaths}
 
-#path of seqsender config file
-seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "data_submission", "seqsender"), pattern = "seqsender_config.yaml", full.names = TRUE)
-seqsender_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "data_submission", "seqsender"), pattern = "seqsender_config_test.yaml", full.names = TRUE)
-
 epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
 seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload_orig.csv", sep = "_"))
 
