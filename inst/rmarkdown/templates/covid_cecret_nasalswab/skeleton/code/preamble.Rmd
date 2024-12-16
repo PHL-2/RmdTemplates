@@ -833,8 +833,8 @@ seqsender <- s_toPlot %>%
   select(sequence_name, organism, collection_date,
          matches("^gs-", ignore.case = FALSE),
          #order the column names by the numbers 1 to 100
-         starts_with(paste0("bs", 1:100, "-"), ignore.case = FALSE),
-         starts_with(paste0("sra", 1:100, "-"), ignore.case = FALSE),
+         starts_with(paste0("bs", 1:1000, "-"), ignore.case = FALSE),
+         starts_with(paste0("sra", 1:1000, "-"), ignore.case = FALSE),
          matches("^gb-", ignore.case = FALSE)) %>%
   rename_at(vars(starts_with("bs")), ~ gsub("bs[0-9]+-", "bs-", .)) %>%
   rename_at(vars(starts_with("sra")), ~ gsub("sra[0-9]+-", "sra-", .)) %>%
