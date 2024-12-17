@@ -800,8 +800,8 @@ seqsender <- s_toPlot %>%
          #BioSample fields
          #make BioSample name blank if it didn't pass vadr
          `bs1-sample_name` = ifelse(vadr_passfail == "PASS",
-                                   paste0("SARS-CoV-2/Human/USA/", sequence_name, "/", collection_year),
-                                   ""),
+                                    paste0("SARS-CoV-2/Human/USA/", sequence_name, "/", collection_year),
+                                    ""),
          `bs2-isolate` = `bs1-sample_name`,
          `bs3-isolation_source` = `gs-covv_specimen`,
          `bs4-host` = host_scientific_name,
