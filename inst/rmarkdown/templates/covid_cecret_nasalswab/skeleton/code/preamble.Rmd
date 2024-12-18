@@ -808,17 +808,30 @@ seqsender <- s_toPlot %>%
          `bs5-host_sex` = ifelse(`gs-covv_gender` == "Unknown", "Not provided", `gs-covv_gender`),
          `bs6-host_age` = ifelse(`gs-covv_patient_age` == "Unknown", "Not provided", `gs-covv_patient_age`),
          `bs7-host_disease` = host_disease,
+         #bs8-geo_loc_name
          `bs9-collected_by` = `gs-covv_orig_lab`,
+         #bs10-sequenced_by
+         #bs11-purpose_of_sequencing
          `bs12-lineage/clade name` = Nextclade_pango,
          `bs13-gisaid_virus_name` = `gs-sample_name`,
+         #bs14-gisaid_accession
+         #bs15-sample_title
          #SRA fields
          `sra1-sample_name` = paste0("SARS-CoV-2/Human/USA/", sequence_name),
          `sra2-library_name` = paste0("ARTIC Network Protocol ", artic_primer_scheme),
          `sra3-instrument_model` = gsub("^Illumina NextSeq", "NextSeq", `gs-covv_seq_technology`),
+         #sra4-library_strategy
+         #sra5-library_source
+         #sra6-library_selection
+         #sra7-library_layout
+         #sra8-platform
+         #sra9-enrichment_kit
          `sra10-design_description` = paste0("Genomic reads were enriched using a tiled amplicon strategy with the ARTIC Network Protocol ", artic_primer_scheme,
                                            " primer scheme. Sequencing was performed on the ", `gs-covv_seq_technology`,
                                            " with 2x", read_length,
                                            " bp chemistry. Libraries were prepared using the Illumina COVIDSeq Assay."),
+         #sra11-file_location
+         #sra12-filetype
          `sra13-file_1` = paste0(sequence_name, "_S", sample_number, "_filtered_R1.fastq.gz"),
          `sra14-file_2` = paste0(sequence_name, "_S", sample_number, "_filtered_R2.fastq.gz"),
          #GenBank fields
