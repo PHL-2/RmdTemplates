@@ -809,8 +809,8 @@ seqsender <- s_toPlot %>%
          `bs6-host_age` = ifelse(`gs-covv_patient_age` == "Unknown", "Not provided", `gs-covv_patient_age`),
          `bs7-host_disease` = host_disease,
          `bs9-collected_by` = `gs-covv_orig_lab`,
-         `bs12-gisaid_virus_name` = `gs-sample_name`,
-         `bs14-lineage/clade name` = Nextclade_pango,
+         `bs12-lineage/clade name` = Nextclade_pango,
+         `bs13-gisaid_virus_name` = `gs-sample_name`,
          #SRA fields
          `sra1-sample_name` = paste0("SARS-CoV-2/Human/USA/", sequence_name),
          `sra2-library_name` = paste0("ARTIC Network Protocol ", artic_primer_scheme),
