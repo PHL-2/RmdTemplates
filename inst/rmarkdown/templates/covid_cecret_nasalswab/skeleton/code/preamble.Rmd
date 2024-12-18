@@ -797,6 +797,16 @@ seqsender <- s_toPlot %>%
                                              `gs-covv_orig_lab` == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122, USA",
                                              TRUE ~ "Unknown"),
          `gs-covv_subm_sample_id` = sequence_name,
+         #the follow fields are from the metadata
+         #gs-covv_type
+         #gs-covv_passage
+         #gs-covv_location
+         #gs-covv_host
+         #gs-covv_subm_lab
+         #gs-covv_subm_lab_addr
+         #gs-covv_comment
+         #gs-comment_type
+         
          #BioSample fields
          #make BioSample name blank if it didn't pass vadr
          `bs1-sample_name` = ifelse(vadr_passfail == "PASS",
