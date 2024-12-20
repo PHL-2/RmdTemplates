@@ -199,11 +199,6 @@ file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = T
 
 ```
 
-```{r}
-
-
-```
-
 ```{r GISAID BioSample SRA submission, message=TRUE, include=FALSE, eval=FALSE}
 
 #seqsender submit. Check that the GISAID sample_id always have "Merged" in the name; check that the bs-GISAID virus name field also has "Merged" in the name
