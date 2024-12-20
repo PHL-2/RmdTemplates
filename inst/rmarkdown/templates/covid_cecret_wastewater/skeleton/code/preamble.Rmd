@@ -1050,7 +1050,7 @@ if(nrow(seqsender) != 0) {
            `bs33-ww_surv_target_2_known_present` = ifelse(has_N2,
                                                           ifelse(E_present & !is.na(E_present), "Yes", "No"),
                                                           ""),
-           `bs34-ww_surv_target_2_conc` = ifelse(is.na(`E2_gc/L`), "", `E2_gc/L`),
+           `bs34-ww_surv_target_2_conc` = ifelse(is.na(`E_gc/L`), "", `E_gc/L`),
            #bs35-ww_surv_target_2_conc_unit
            #bs36-ww_surv_target_2_protocol
            `bs37-gisaid_virus_name` = `gs-sample_name`,
