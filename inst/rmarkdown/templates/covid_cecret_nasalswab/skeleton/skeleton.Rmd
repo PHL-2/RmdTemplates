@@ -206,7 +206,7 @@ file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = T
 
 ```
 
-```{r upload sequencing results, message=TRUE, include=FALSE, eval=FALSE}
+```{r GISAID GenBank BioSample SRA submission, message=TRUE, include=FALSE, eval=FALSE}
 
 ### =============
 ### Manual inputs
