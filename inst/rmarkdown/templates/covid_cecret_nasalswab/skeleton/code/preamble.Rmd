@@ -828,7 +828,7 @@ seqsender <- s_toPlot %>%
          #bs15-sample_title
          #SRA fields
          `sra1-sample_name` = paste0("SARS-CoV-2/Human/USA/", sequence_name),
-         `sra2-library_name` = paste0("ARTIC Network Protocol ", artic_primer_scheme),
+         `sra2-library_name` = paste0("PHL2-NS-COVIDSeq-", sequencing_date),
          `sra3-instrument_model` = gsub("^Illumina NextSeq", "NextSeq", `gs-covv_seq_technology`),
          #sra4-library_strategy
          #sra5-library_source
@@ -836,14 +836,16 @@ seqsender <- s_toPlot %>%
          #sra7-library_layout
          #sra8-platform
          #sra9-enrichment_kit
-         `sra10-design_description` = paste0("Genomic reads were enriched using a tiled amplicon strategy with the ARTIC Network Protocol ", artic_primer_scheme,
-                                           " primer scheme. Sequencing was performed on the ", `gs-covv_seq_technology`,
-                                           " with 2x", read_length,
-                                           " bp chemistry. Libraries were prepared using the Illumina COVIDSeq Assay."),
-         #sra11-file_location
-         #sra12-filetype
-         `sra13-file_1` = paste0(sequence_name, "_S", sample_number, "_filtered_R1.fastq.gz"),
-         `sra14-file_2` = paste0(sequence_name, "_S", sample_number, "_filtered_R2.fastq.gz"),
+         `sra10-amplicon_PCR_primer_scheme` = paste0("SARS-CoV-2 ARTIC ", artic_primer_scheme),
+         #sra11-library_preparation_kit
+         `sra12-design_description` = paste0("Genomic reads were enriched using a tiled amplicon strategy with the ARTIC Network Protocol ",
+                                             artic_primer_scheme, " primer scheme. Sequencing was performed on the ", `gs-covv_seq_technology`,
+                                             " with 2x", read_length, " bp chemistry. Libraries were prepared using the Illumina COVIDSeq Assay."),
+         #sraX-sample_title #include when this works in the seqsender package
+         #sra13-file_location
+         #sra14-filetype
+         `sra15-file_1` = paste0(sequence_name, "_S", sample_number, "_filtered_R1.fastq.gz"),
+         `sra16-file_2` = paste0(sequence_name, "_S", sample_number, "_filtered_R2.fastq.gz"),
          #GenBank fields
          `gb-sample_name` = sequence_name,
          `gb-src-isolate` = `bs1-sample_name`,
