@@ -194,7 +194,7 @@ run_in_terminal <- function(command2run = "", command2print = "") {
 submit_screen_job <- function(message2display = "Running function to submit screen job",
                               ec2_login = "", screen_session_name = "", screen_log_fp = "~/.tmp_screen",
                               command2run = "",
-                              window_height = 100,
+                              window_height = 40,
                               window_length = 120) {
 
   run_in_terminal(paste("echo", paste0("'", message2display, " through a screen command on EC2 instance [", ec2_login, "]';"),
