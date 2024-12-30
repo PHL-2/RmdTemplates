@@ -46,7 +46,7 @@ copy_platemap <- TRUE
 # 2_generate_barcodes_IDT.R and 3_archive_upload_run.R (BaseSpace and AWS settings)
 ###################################################################################
 
-run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
+run_uploaded_2_basespace <- FALSE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
 
