@@ -966,7 +966,8 @@ data_submit_metadata <- generate_common_metadata_fields(data_submit_metadata_fp)
 
 dir.create(here("upload", "seqsender"), recursive = TRUE)
 
-seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload_orig.csv", sep = "_"))
+fasta_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_fasta_upload_orig.csv", sep = "_"))
+fastq_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_fastq_upload_orig.csv", sep = "_"))
 
 seqsender <- s %>%
   filter(uniq_sample_name %in% s_toPlot$uniq_sample_name,
@@ -1080,7 +1081,7 @@ if(nrow(seqsender) != 0) {
            `sra15-file_1` = paste0(sequence_name, "_S", sample_number, "_filtered_R1.fastq.gz"),
            `sra16-file_2` = paste0(sequence_name, "_S", sample_number, "_filtered_R2.fastq.gz")) %>%
     cbind(data_submit_metadata) %>%
-    select(sequence_name, organism, collection_date,
+    select(sequence_name, organism, collection_date, ww_group,
            matches("^gs-", ignore.case = FALSE),
            #order the column names by the numbers 1 to 100
            starts_with(paste0("bs", 1:1000, "-"), ignore.case = FALSE),
@@ -1088,16 +1089,16 @@ if(nrow(seqsender) != 0) {
     rename_at(vars(starts_with("bs")), ~ gsub("bs[0-9]+-", "bs-", .)) %>%
     rename_at(vars(starts_with("sra")), ~ gsub("sra[0-9]+-", "sra-", .))
   
-  seqsender_fasta <- seqsender %>%
-    filter(ww_group == "Wastewater sample - Merged")
+  seqsender %>%
+    filter(ww_group == "Wastewater sample - Merged") %>%
+    select(-ww_group) %>%
+    write_csv(fasta_seqsender_meta_fp, na = "")
+
+  seqsender %>%
+    filter(ww_group != "Wastewater sample - Merged") %>%
+    select(-ww_group) %>%
+    write_csv(fastq_seqsender_meta_fp, na = "")
   
-  seqsender_fastq <- seqsender %>%
-    filter(ww_group != "Wastewater sample - Merged")
-
-  seqsender_something %>%
-    write_csv(seqsender_meta_fp, na = "")
-  #may have to split seqsender file into two files for fasta vs fastq submission. Not sure yet, try making the prep files from the same file
-
 }
 
 #TODO: incorporate the flow data; see email

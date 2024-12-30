@@ -201,7 +201,7 @@ file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = T
 
 ```{r GISAID BioSample SRA submission, message=TRUE, include=FALSE, eval=FALSE}
 
-#seqsender submit. Check that the GISAID sample_id always have "Merged" in the name; check that the bs-GISAID virus name field also has "Merged" in the name
+  #add a check to make sure the uni sample ID (bs-isolate?) in the fastq seqsender are all found in the uni sample name in fasta seqsender
 
 #check to make sure the seqsender file has these fields from the metadata sheet
 #to check
@@ -263,17 +263,20 @@ ssh_seqsender_cmd <- function(pos_argument,
   
   additional_flags <- paste(organism,
                             "--config_file", config,
-                            "--metadata_file", metadata,
-                            "--fasta_file", fasta)
+                            "--metadata_file", metadata)
   
   success_msg <- unlist(lapply(c("BIOSAMPLE", "SRA", "GENBANK", "GISAID"),
                                  function(x) c(paste("Creating submission files for", x),
                                                paste("Files are stored at:", paste(submission_dir, submission_name, "submission_files", x, sep = "/")))))
   
   if (pos_argument == "prep --gisaid") {
+    additional_flags <- paste(additional_flags, "--fasta_file", fasta)
+    
     success_msg <- success_msg[grepl("GISAID", success_msg)]
 
   } else if (pos_argument == "prep -bsn") {
+    additional_flags <- paste(additional_flags, "--fasta_file", fasta)
+    
     success_msg <- success_msg[grepl("BIOSAMPLE|SRA|GENBANK", success_msg)]
     
   } else if (pos_argument == "submit --biosample --sra") {
@@ -285,7 +288,7 @@ ssh_seqsender_cmd <- function(pos_argument,
                      paste0("Submitting '", submission_name, "'"))
     
   } else if (pos_argument == "submit --genbank") {
-    additional_flags <- paste(additional_flags, is_test)
+    additional_flags <- paste(additional_flags, "--fasta_file", fasta, is_test)
     
     success_msg <- c(success_msg[grepl("GENBANK", success_msg)],
                      "Connecting to NCBI FTP Server",
@@ -328,8 +331,10 @@ ssh_command_check <- function(stdoutput) {
 
 project_name <- basename(here())
 aux_seqsender_fp <- file.path(dirname(here()), "aux_files", "data_submission", "seqsender")
-seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload_orig.csv", sep = "_"))
-appended_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"))
+fasta_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_fasta_upload_orig.csv", sep = "_"))
+fasta_appended_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_fasta_upload.csv", sep = "_"))
+fastq_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_fastq_upload_orig.csv", sep = "_"))
+fastq_appended_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_fastq_upload.csv", sep = "_"))
 
 #path of local seqsender config file
 seqsender_config_fp <- list.files(aux_seqsender_fp, pattern = "seqsender_ww_login_config.yaml", full.names = TRUE)
@@ -377,7 +382,8 @@ submission_path <- paste(seqsender_upload_tmp_fp, sample_type_acronym, sep = "/"
 ec2_upload_tmp_fp <- paste(submission_path, project_name, sep = "/")
 consensus_fasta_fp <- paste(ec2_upload_tmp_fp, "processed_cecret", "merged_consensus",
                             paste0(project_name, "_PHL2_combined.fasta"), sep = "/")
-ec2_seqsender_meta_fp <- paste0(ec2_upload_tmp_fp, "/seqsender/", paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"))
+fasta_ec2_seqsender_meta_fp <- paste0(ec2_upload_tmp_fp, "/seqsender/", paste(project_name, "PHL2_seqsender_fasta_upload.csv", sep = "_"))
+fastq_ec2_seqsender_meta_fp <- paste0(ec2_upload_tmp_fp, "/seqsender/", paste(project_name, "PHL2_seqsender_fastq_upload.csv", sep = "_"))
 
 seqsender_py <- paste(seqsender_fp, "seqsender.py", sep = "/")
 covCLI_cmd <- paste(seqsender_fp, "gisaid_cli", "covCLI", sep = "/")
@@ -398,26 +404,51 @@ organism_flag <- "--organism COV"
 config2use <- paste0(ec2_upload_tmp_fp, "/seqsender/", basename(seqsender_config_fp))
 ec2_gs_log <- paste0(ec2_upload_tmp_fp, "/submission_files/GISAID/", basename(local_gs_log))
 
-#######################
-# Read in seqsender csv
-#######################
-seqsender <- read_csv(seqsender_meta_fp) %>%
+#######################################
+# Read in fasta and fastq seqsender csv
+#######################################
+fasta_seqsender <- read_csv(fasta_seqsender_meta_fp) %>%
   filter(!sequence_name %in% failed_sample_fasta,
          !is.na(`bs-sample_name`)) %>%
   mutate(authors = authors,
          bioproject = BioProject)
 
-seqsender %>%
-  write_csv(appended_seqsender_meta_fp, na = "")
+fastq_seqsender <- read_csv(fastq_seqsender_meta_fp) %>%
+  filter(!sequence_name %in% failed_sample_fasta,
+         !is.na(`bs-sample_name`)) %>%
+  mutate(authors = authors,
+         bioproject = BioProject)
 
-passed_fasta_files <- seqsender %>%
-  filter(`gs-sample_name` != "") %>%
-  select(sequence_name) %>%
-  pull()
+seqsender_merge_check_cols <- c("gs-covv_subm_sample_id", "bs-isolate", "bs-ww_surv_system_sample_id")
 
-if(nrow(seqsender) < 1) {
+seqsender_check <- fasta_seqsender %>%
+  select(fasta_name = "sequence_name",
+         fasta_processing = "bs-specimen_processing_id",
+         seqsender_merge_check_cols) %>%
+  merge(select(fastq_seqsender,
+               fastq_name = "sequence_name",
+               fastq_processing = "bs-specimen_processing_id",
+               seqsender_merge_check_cols),
+        by = seqsender_merge_check_cols, all = TRUE)
+
+if(nrow(fasta_seqsender) < 1) {
   stop(simpleError("No samples passed QC for data submission. Don't have to submit this run"))
 }
+if(!all(grepl("Merged", unlist(fasta_seqsender[, c("sequence_name", "gs-sample_name", "bs-sample_name", "bs-specimen_processing_id", "bs-gisaid_virus_name", "sra-sample_name")])))) {
+  stop(simpleError("Some of the samples in the seqsender metadata sheet for GISAID submission are not the merged sample"))
+}
+if(any(grepl("Merged", unlist(fastq_seqsender[, c("sra-file_1", "sra-file_2")])))) {
+  stop(simpleError("The fastq seqsender metadata file has a Merged sample in it. Samples to be submitted should be individual replicates"))
+}
+if(any(is.na(seqsender_check$fastq_name))) {
+  stop(simpleError("The fasta seqsender file does not match the fastq seqsender file"))
+}
+
+fasta_seqsender %>%
+  write_csv(fasta_appended_seqsender_meta_fp, na = "")
+
+fastq_seqsender %>%
+  write_csv(fastq_appended_seqsender_meta_fp, na = "")
 
 ######################
 # Run seqsender on EC2
@@ -426,8 +457,8 @@ if(nrow(seqsender) < 1) {
 cecret_file_download_command <- c("aws s3 cp", workflow_output_fp)
 cecret_file_download_param <- c("--recursive",
                                 "--exclude '*'",
-                                paste0("--include '*/filter/", seqsender$sequence_name, "*_filtered_R[12].fastq.gz'"),
-                                paste0("--include '*/ivar_consensus/", passed_fasta_files, "*.consensus.fa'"))
+                                paste0("--include '*/ivar_consensus/", fasta_seqsender$sequence_name, "*.consensus.fa'"),
+                                paste0("--include '*/filter/", fastq_seqsender$sequence_name, "*_filtered_R[12].fastq.gz'"))
 
 aws_s3_cecret_download <- system2("ssh", c("-tt", ec2_hostname,
                                            shQuote(paste0("rm -rf ", ec2_upload_tmp_fp, "; ",
@@ -444,7 +475,7 @@ ssh_command_check(aws_s3_cecret_download)
 
 create_concat_consensus <- system2("ssh", c("-tt", ec2_hostname,
                                             shQuote(paste0("mkdir -p ", dirname(consensus_fasta_fp), "; ",
-                                                           "sed -E 's/^N+|N+$|Consensus_|_S[0-9]*.consensus_threshold.*//g' ",
+                                                           "sed -E 's/^N+|N+$|Consensus_|\\.consensus_threshold.*//g' ",
                                                            ec2_upload_tmp_fp, "/processed_cecret/ivar_consensus/* > ",
                                                            consensus_fasta_fp, ";"), type = "sh")),
                                    stdout = TRUE, stderr = TRUE)
@@ -457,19 +488,21 @@ download_consensus <- system2("scp", c(paste0(ec2_hostname, ":", consensus_fasta
 
 ssh_command_check(c(create_concat_consensus, download_consensus))
 
-upload_seqsender_files <- system2("scp", c(appended_seqsender_meta_fp, seqsender_config_fp,
+upload_seqsender_files <- system2("scp", c(fasta_appended_seqsender_meta_fp,
+                                           fastq_appended_seqsender_meta_fp,
+                                           seqsender_config_fp,
                                            paste0(ec2_hostname, ":", ec2_upload_tmp_fp, "/seqsender")))
                                   
 ssh_command_check(upload_seqsender_files)
 
-ssh_seqsender_cmd("prep --gisaid")
+ssh_seqsender_cmd("prep --gisaid", metadata = fasta_ec2_seqsender_meta_fp)
 
 dir.create(here("gisaid"))
 
 # check the seqsender file for GISAID accession numbers
 # if the seqsender file already has legit GISAID accession numbers, don't resubmit because GISAID already has these samples
 # have to manually submit GISAID files because the password field in seqsender does not accept all special characters
-if(all(grepl("^EPI_ISL_0$", seqsender$`bs-gisaid_accession`)) | all(is.na(seqsender$`bs-gisaid_accession`))) {
+if(all(grepl("^EPI_ISL_0$", fasta_seqsender$`bs-gisaid_accession`)) | all(is.na(fasta_seqsender$`bs-gisaid_accession`))) {
   
   # clear these GISAID log files if exist
   file.remove(local_gs_log)
@@ -510,13 +543,14 @@ if(nrow(gisaid_errors) > 0) {
 gisaid_success <- read_gisaid_accessions %>%
   filter(grepl("epi_isl_id", code))
 
-if(nrow(gisaid_success) != nrow(seqsender)) {
+if(nrow(gisaid_success) != nrow(fasta_seqsender)) {
   stop(simpleError("Some GISAID samples failed to upload."))
 }
   
 gisaid_accessions <- gisaid_success %>%
   mutate(msg = gsub("^msg: ", "", msg)) %>%
   separate(msg, into = c("bs-gisaid_virus_name", "bs-gisaid_accession"), sep = "; ", extra = "merge") %>%
+  #dont need GenBank note because not submitting there
   #mutate(`src-note` = paste0("GISAID virus name: ", `bs-gisaid_virus_name`, "; GISAID accession: ", `bs-gisaid_accession`)) %>%
   select(`bs-gisaid_virus_name`, `bs-gisaid_accession`)
   
@@ -526,14 +560,20 @@ if(!test_upload) {
     write_csv(here("gisaid", paste0(project_name, "_gisaid_accessions.csv")))
 }
 
-#rewrite the seqsender file with the gisaid accession numbers and remove the old prepared files
-seqsender %>%
+#rewrite the fasta seqsender file with the gisaid accession numbers and remove the old prepared files
+gisaid_added_seqsender <- fasta_seqsender %>%
   select(-c(`bs-gisaid_accession`)) %>%
-  left_join(gisaid_accessions, by = "bs-gisaid_virus_name") %>%
-  #mutate(`src-note` = paste0(`src-note`, "; Lineage: ", `bs-lineage/clade name`)) %>%
-  write_csv(appended_seqsender_meta_fp)
+  left_join(gisaid_accessions, by = "bs-gisaid_virus_name")
+  
+gisaid_added_seqsender %>%
+  write_csv(fasta_appended_seqsender_meta_fp)
 
-reupload_seqsender_file <- system2("scp", c(appended_seqsender_meta_fp, paste0(ec2_hostname, ":", ec2_seqsender_meta_fp)))
+fastq_seqsender %>%
+  select(-c(`bs-gisaid_accession`)) %>%
+  left_join(select(gisaid_added_seqsender, seqsender_merge_check_cols, `bs-gisaid_accession`), by = seqsender_merge_check_cols) %>%
+  write_csv(fastq_appended_seqsender_meta_fp)
+
+reupload_seqsender_file <- system2("scp", c(fastq_appended_seqsender_meta_fp, paste0(ec2_hostname, ":", fastq_ec2_seqsender_meta_fp)))
 
 ssh_command_check(reupload_seqsender_file)
 
@@ -541,7 +581,7 @@ ssh_command_check(reupload_seqsender_file)
 #ssh_seqsender_cmd("prep -bsn")
 
 ### submit files to biosample and sra
-ssh_seqsender_cmd("submit --biosample --sra")
+ssh_seqsender_cmd("submit --biosample --sra", metadata = fastq_ec2_seqsender_meta_fp)
 
 #download submission file
 download_submission_log <- system2("scp", c(paste0(ec2_hostname, ":", submission_path, "/submission_log.csv"), dirname(here())))
