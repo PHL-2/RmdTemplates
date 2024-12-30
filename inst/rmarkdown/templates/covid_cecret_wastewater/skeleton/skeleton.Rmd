@@ -63,7 +63,7 @@ update_pangolin_dataset <- TRUE
 
 update_freyja_and_cecret_pipeline <- TRUE
 
-cecret_version <- "master"
+cecret_version <- "3.15.24324"
 
 ```
 
