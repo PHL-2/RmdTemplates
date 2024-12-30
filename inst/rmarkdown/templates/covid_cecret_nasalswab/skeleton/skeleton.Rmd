@@ -64,7 +64,7 @@ sample_w_empty_reads <- c("") #add sample ids that have empty fastq files
 #leave empty to use the latest nextclade dataset
 nextclade_dataset_version <- ""
 
-update_freyja_and_cecret_pipeline <- TRUE
+update_freyja_and_cecret_pipeline <- FALSE
 
 cecret_version <- "3.15.24324"
 
