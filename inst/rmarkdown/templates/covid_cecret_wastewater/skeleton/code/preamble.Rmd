@@ -980,7 +980,7 @@ if(nrow(seqsender) != 0) {
            `gs-covv_coverage` = "median_coverage",
            `gs-covv_orig_lab` = "sample_collected_by",
            `bs2-isolation_source` = "sample_type",
-           `bs17-ww_surv_system_sample_id` = "bs-ww_surv_system_sample_id") %>%
+           `bs16-ww_surv_system_sample_id` = "bs-ww_surv_system_sample_id") %>%
     mutate(collection_date = case_when(!(is.na(sample_collect_date) |
                                          as.character(sample_collect_date) == "Unknown") ~ as.character(sample_collect_date),
                                        !is.na(sample_received_date) ~ as.character(sample_received_date),
@@ -994,7 +994,7 @@ if(nrow(seqsender) != 0) {
                                                 instrument_type == "NextSeq1k2k" ~ "Illumina NextSeq 2000",
                                                 TRUE ~ NA_character_),
            `gs-covv_assembly_method` = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
-           `gs-covv_subm_sample_id` = `bs17-ww_surv_system_sample_id`,
+           `gs-covv_subm_sample_id` = `bs16-ww_surv_system_sample_id`,
            #the following columns are in the submission metadata sheet
            #gs-covv_type
            #gs-covv_passage
@@ -1030,35 +1030,34 @@ if(nrow(seqsender) != 0) {
            #bs12-concentration_method
            #bs13-extraction_method
            #bs14-extraction_control
-           #bs15-sample_description
-           #bs16-project_name
-           #bs17-ww_surv_system_sample_id #this column is defined above, not in metadata sheet
-           #bs18-ww_sample_site
-           #bs19-ww_sample_matrix
-           #bs20-ww_sample_type
-           #bs21-ww_sample_duration
-           #bs22-ww_surv_jurisdiction
-           `bs23-collection_site_id` = wwtp_name,
-           `bs24-ww_population` = population_served,
-           #bs25-ww_surv_target_1
-           #bs26-ww_surv_target_1_gene
-           `bs27-ww_surv_target_1_known_present` = ifelse(has_N2,
+           #bs15-project_name
+           #bs16-ww_surv_system_sample_id #this column is defined above, not in metadata sheet
+           #bs17-ww_sample_site
+           #bs18-ww_sample_matrix
+           #bs19-ww_sample_type
+           #bs20-ww_sample_duration
+           #bs21-ww_surv_jurisdiction
+           `bs22-collection_site_id` = wwtp_name,
+           `bs23-ww_population` = population_served,
+           #bs24-ww_surv_target_1
+           #bs25-ww_surv_target_1_gene
+           `bs26-ww_surv_target_1_known_present` = ifelse(has_N2,
                                                           ifelse(N2_present & !is.na(N2_present), "Yes", "No"),
                                                           ""),
-           `bs28-ww_surv_target_1_conc` = ifelse(is.na(`N2_gc/L`), "", `N2_gc/L`),
-           #bs29-ww_surv_target_1_conc_unit
-           #bs30-ww_surv_target_1_protocol
-           #bs31-ww_surv_target_2
-           #bs32-ww_surv_target_2_gene
-           `bs33-ww_surv_target_2_known_present` = ifelse(has_N2,
+           `bs27-ww_surv_target_1_conc` = ifelse(is.na(`N2_gc/L`), "", `N2_gc/L`),
+           #bs28-ww_surv_target_1_conc_unit
+           #bs29-ww_surv_target_1_protocol
+           #bs30-ww_surv_target_2
+           #bs31-ww_surv_target_2_gene
+           `bs32-ww_surv_target_2_known_present` = ifelse(has_N2,
                                                           ifelse(E_present & !is.na(E_present), "Yes", "No"),
                                                           ""),
-           `bs34-ww_surv_target_2_conc` = ifelse(is.na(`E_gc/L`), "", `E_gc/L`),
-           #bs35-ww_surv_target_2_conc_unit
-           #bs36-ww_surv_target_2_protocol
-           `bs37-gisaid_virus_name` = `gs-sample_name`,
-           #bs38-gisaid_accession
-           #bs39-sample_title
+           `bs33-ww_surv_target_2_conc` = ifelse(is.na(`E_gc/L`), "", `E_gc/L`),
+           #bs34-ww_surv_target_2_conc_unit
+           #bs35-ww_surv_target_2_protocol
+           `bs36-gisaid_virus_name` = `gs-sample_name`,
+           #bs37-gisaid_accession
+           #bs38-sample_title
           
            #SRA fields
            `sra1-sample_name` = paste0("SARS-CoV-2/Wastewater/USA/", sequence_name),
