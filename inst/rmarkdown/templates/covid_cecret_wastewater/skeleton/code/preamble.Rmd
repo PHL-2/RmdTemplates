@@ -1073,7 +1073,7 @@ if(nrow(seqsender) != 0) {
            #sra11-library_preparation_kit
            `sra12-design_description` = paste0("Genomic reads were enriched using a tiled amplicon strategy with the ARTIC Network Protocol ",
                                                artic_primer_scheme, " primer scheme. Sequencing was performed on the ", `gs-covv_seq_technology`,
-                                               " with 2x", read_length, " bp chemistry. Libraries were prepared using the Illumina COVIDSeq Assay."),
+                                               " with 2x", read_length, " bp chemistry. Library was prepared using the Illumina COVIDSeq Assay."),
            #sraX-sample_title #include when this works in the seqsender package
            #sra13-file_location
            #sra14-filetype
