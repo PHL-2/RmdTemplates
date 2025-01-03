@@ -201,15 +201,6 @@ file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = T
 
 ```{r GISAID BioSample SRA submission, message=TRUE, include=FALSE, eval=FALSE}
 
-
-
-#check to make sure the seqsender file has these fields from the metadata sheet
-#to check
-#covv_orig_lab_addr,
-#covv_virus_name, (make sure the final GISAID submission file has this column, should be from gs-sample_name)
-# In BioSample, see if sample_description comes up as description and whether it is in the right xml field
-#In BioSample, see if isolate shows up in the xml file and whether it passes the test
-
 ### =============
 ### Manual inputs
 ### =============
