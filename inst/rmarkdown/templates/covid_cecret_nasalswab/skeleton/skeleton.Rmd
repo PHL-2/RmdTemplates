@@ -333,7 +333,7 @@ seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqse
 appended_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"))
 
 #path of local seqsender config file
-seqsender_config_fp <- list.files(aux_seqsender_fp, pattern = "seqsender_ns_login_config.yaml", full.names = TRUE)
+seqsender_config_fp <- list.files(aux_seqsender_fp, pattern = "seqsender_ns_sc2_login_config.yaml", full.names = TRUE)
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
