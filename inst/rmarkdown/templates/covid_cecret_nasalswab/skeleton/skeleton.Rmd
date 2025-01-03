@@ -253,7 +253,7 @@ ssh_seqsender_cmd <- function(pos_argument,
                               python_script = seqsender_py,
                               organism = organism_flag,
                               submission_dir = submission_path,
-                              submission_name = project_name,
+                              submission_name = input_submission_name,
                               config = config2use,
                               metadata = ec2_seqsender_meta_fp,
                               fasta = consensus_fasta_fp,
@@ -375,7 +375,8 @@ seqsender_fp <- "/home/ec2-user/git/seqsender"
 seqsender_upload_tmp_fp <- "/home/ec2-user/tmp_data_ul"
 workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, project_name, sequencer_type, sep = "/")
 submission_path <- paste(seqsender_upload_tmp_fp, sample_type_acronym, sep = "/")
-ec2_upload_tmp_fp <- paste(submission_path, project_name, sep = "/")
+input_submission_name <- paste(project_name, sample_type_acronym, sep = "_")
+ec2_upload_tmp_fp <- paste(submission_path, input_submission_name, sep = "/")
 consensus_fasta_fp <- paste(ec2_upload_tmp_fp, "processed_cecret", "merged_consensus",
                             paste0(project_name, "_PHL2_combined.fasta"), sep = "/")
 ec2_seqsender_meta_fp <- paste0(ec2_upload_tmp_fp, "/seqsender/", paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"))
