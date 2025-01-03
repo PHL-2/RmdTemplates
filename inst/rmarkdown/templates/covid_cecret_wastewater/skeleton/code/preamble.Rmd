@@ -980,7 +980,7 @@ if(nrow(seqsender) != 0) {
            `gs-covv_coverage` = "median_coverage",
            `gs-covv_orig_lab` = "sample_collected_by",
            `bs2-isolation_source` = "sample_type",
-           `bs16-ww_surv_system_sample_id` = "bs-ww_surv_system_sample_id") %>%
+           `bs17-ww_surv_system_sample_id` = "bs-ww_surv_system_sample_id") %>%
     mutate(collection_date = case_when(!(is.na(sample_collect_date) |
                                          as.character(sample_collect_date) == "Unknown") ~ as.character(sample_collect_date),
                                        !is.na(sample_received_date) ~ as.character(sample_received_date),
@@ -994,7 +994,7 @@ if(nrow(seqsender) != 0) {
                                                 instrument_type == "NextSeq1k2k" ~ "Illumina NextSeq 2000",
                                                 TRUE ~ NA_character_),
            `gs-covv_assembly_method` = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
-           `gs-covv_subm_sample_id` = `bs16-ww_surv_system_sample_id`,
+           `gs-covv_subm_sample_id` = `bs17-ww_surv_system_sample_id`,
            #the following columns are in the submission metadata sheet
            #gs-covv_type
            #gs-covv_passage
@@ -1023,21 +1023,21 @@ if(nrow(seqsender) != 0) {
            #bs5-sequenced_by
            #bs6-purpose_of_ww_sampling
            #bs7-purpose_of_ww_sequencing
-           `bs8-isolate` = uniq_sample_name,
-           `bs9-specimen_processing_id` = sample_name,
-           #bs10-specimen_processing
-           #bs11-specimen_processing_details
-           #bs12-concentration_method
-           #bs13-extraction_method
-           #bs14-extraction_control
-           #bs15-project_name
-           #bs16-ww_surv_system_sample_id #this column is defined above, not in metadata sheet
-           #bs17-ww_sample_site
-           #bs18-ww_sample_matrix
-           #bs19-ww_sample_type
-           #bs20-ww_sample_duration
-           #bs21-ww_surv_jurisdiction
-           `bs22-collection_site_id` = wwtp_name,
+           `bs8-collection_site_id` = wwtp_name,
+           `bs9-isolate` = uniq_sample_name,
+           `bs10-specimen_processing_id` = sample_name,
+           #bs11-specimen_processing
+           #bs12-specimen_processing_details
+           #bs13-concentration_method
+           #bs14-extraction_method
+           #bs15-extraction_control
+           #bs16-project_name
+           #bs17-ww_surv_system_sample_id #this column is defined above, not in metadata sheet
+           #bs18-ww_sample_site
+           #bs19-ww_sample_matrix
+           #bs20-ww_sample_type
+           #bs21-ww_sample_duration
+           #bs22-ww_surv_jurisdiction
            `bs23-ww_population` = population_served,
            #bs24-ww_surv_target_1
            #bs25-ww_surv_target_1_gene
