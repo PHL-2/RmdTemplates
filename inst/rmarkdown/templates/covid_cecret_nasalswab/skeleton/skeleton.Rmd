@@ -267,32 +267,31 @@ ssh_seqsender_cmd <- function(pos_argument,
                                  function(x) c(paste("Creating submission files for", x),
                                                paste("Files are stored at:", paste(submission_dir, submission_name, "submission_files", x, sep = "/")))))
   
-  if (pos_argument == "prep --gisaid") {
+  if(grepl("--gisaid", pos_argument)) {
     additional_flags <- paste(additional_flags, "--fasta_file", fasta)
-    
     success_msg <- success_msg[grepl("GISAID", success_msg)]
-
-  } else if (pos_argument == "prep -bsn") {
+  }
+  if(grepl("--biosample", pos_argument)) {
+    success_msg <- success_msg[grepl("BIOSAMPLE", success_msg)]
+    submission_msg <- paste0("Submission name: ", submission_name, "_BIOSAMPLE")
+  }
+  if(grepl("--sra", pos_argument)) {
+    success_msg <- success_msg[grepl("SRA", success_msg)]
+    submission_msg <- paste0("Submission name: ", submission_name, "_SRA")
+  }
+  if(grepl("--genbank", pos_argument)) {
     additional_flags <- paste(additional_flags, "--fasta_file", fasta)
-    
-    success_msg <- success_msg[grepl("BIOSAMPLE|SRA|GENBANK", success_msg)]
-    
-  } else if (pos_argument == "submit --biosample --sra") {
+    success_msg <- success_msg[grepl("GENBANK", success_msg)]
+    submission_msg <- paste0("Submission name: ", submission_name, "_GENBANK")
+  }
+  if(grepl("^submit", pos_argument)) {
     additional_flags <- paste(additional_flags, is_test)
-    
-    success_msg <- c(success_msg[grepl("BIOSAMPLE|SRA", success_msg)],
+    success_msg <- c(success_msg,
                      "Connecting to NCBI FTP Server",
-                     paste0("Submission name: ", submission_name, c("_BIOSAMPLE", "_SRA")),
+                     submission_msg,
                      paste0("Submitting '", submission_name, "'"))
-    
-  } else if (pos_argument == "submit --genbank") {
-    additional_flags <- paste(additional_flags, "--fasta_file", fasta, is_test)
-    
-    success_msg <- c(success_msg[grepl("GENBANK", success_msg)],
-                     "Connecting to NCBI FTP Server",
-                     paste0("Submission name: ", submission_name, "_GENBANK"),
-                     paste0("Submitting '", submission_name, "'"))
-  } else if (pos_argument == "submission_status") {
+  }
+  if (pos_argument == "submission_status") {
     additional_flags <- ""
     
     success_msg <- c("Checking Submissions:",
@@ -551,7 +550,7 @@ reupload_seqsender_file <- system2("scp", c(appended_seqsender_meta_fp, paste0(e
 ssh_command_check(reupload_seqsender_file)
 
 ### can uncomment the below command to create the NCBI files to check manually before submission
-#ssh_seqsender_cmd("prep -bsn")
+#ssh_seqsender_cmd("prep --biosample --sra --genbank")
 
 ### submit files to biosample and sra
 ssh_seqsender_cmd("submit --biosample --sra")
