@@ -46,7 +46,7 @@ copy_platemap <- TRUE
 # 2_generate_barcodes_IDT.R and 3_archive_upload_run.R (BaseSpace and AWS settings)
 ###################################################################################
 
-run_uploaded_2_basespace <- TRUE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
+run_uploaded_2_basespace <- FALSE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
 
@@ -60,11 +60,13 @@ sample_w_empty_reads <- c("") #add sample ids that have empty fastq files
 # 4_run_nextflow.R (Cecret settings)
 ####################################
 
-update_pangolin_dataset <- TRUE
+#tag of nextclade dataset to use for lineage assignment
+#leave empty to use the latest nextclade dataset
+nextclade_dataset_version <- ""
 
-update_freyja_and_cecret_pipeline <- TRUE
+update_freyja_and_cecret_pipeline <- FALSE
 
-cecret_version <- "master"
+cecret_version <- "3.15.24324"
 
 remove_undetermined_file <- FALSE
 
@@ -204,7 +206,7 @@ file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = T
 
 ```
 
-```{r upload sequencing results, message=TRUE, include=FALSE, eval=FALSE}
+```{r GISAID GenBank BioSample SRA submission, message=TRUE, include=FALSE, eval=FALSE}
 
 ### =============
 ### Manual inputs
@@ -251,7 +253,7 @@ ssh_seqsender_cmd <- function(pos_argument,
                               python_script = seqsender_py,
                               organism = organism_flag,
                               submission_dir = submission_path,
-                              submission_name = project_name,
+                              submission_name = input_submission_name,
                               config = config2use,
                               metadata = ec2_seqsender_meta_fp,
                               fasta = consensus_fasta_fp,
@@ -259,35 +261,37 @@ ssh_seqsender_cmd <- function(pos_argument,
   
   additional_flags <- paste(organism,
                             "--config_file", config,
-                            "--metadata_file", metadata,
-                            "--fasta_file", fasta)
+                            "--metadata_file", metadata)
   
   success_msg <- unlist(lapply(c("BIOSAMPLE", "SRA", "GENBANK", "GISAID"),
                                  function(x) c(paste("Creating submission files for", x),
                                                paste("Files are stored at:", paste(submission_dir, submission_name, "submission_files", x, sep = "/")))))
   
-  if (pos_argument == "prep --gisaid") {
+  if(grepl("--gisaid", pos_argument)) {
+    additional_flags <- paste(additional_flags, "--fasta_file", fasta)
     success_msg <- success_msg[grepl("GISAID", success_msg)]
-
-  } else if (pos_argument == "prep -bsn") {
-    success_msg <- success_msg[grepl("BIOSAMPLE|SRA|GENBANK", success_msg)]
-    
-  } else if (pos_argument == "submit --biosample --sra") {
+  }
+  if(grepl("--biosample", pos_argument)) {
+    success_msg <- success_msg[grepl("BIOSAMPLE", success_msg)]
+    submission_msg <- paste0("Submission name: ", submission_name, "_BIOSAMPLE")
+  }
+  if(grepl("--sra", pos_argument)) {
+    success_msg <- success_msg[grepl("SRA", success_msg)]
+    submission_msg <- paste0("Submission name: ", submission_name, "_SRA")
+  }
+  if(grepl("--genbank", pos_argument)) {
+    additional_flags <- paste(additional_flags, "--fasta_file", fasta)
+    success_msg <- success_msg[grepl("GENBANK", success_msg)]
+    submission_msg <- paste0("Submission name: ", submission_name, "_GENBANK")
+  }
+  if(grepl("^submit", pos_argument)) {
     additional_flags <- paste(additional_flags, is_test)
-    
-    success_msg <- c(success_msg[grepl("BIOSAMPLE|SRA", success_msg)],
+    success_msg <- c(success_msg,
                      "Connecting to NCBI FTP Server",
-                     paste0("Submission name: ", submission_name, c("_BIOSAMPLE", "_SRA")),
+                     submission_msg,
                      paste0("Submitting '", submission_name, "'"))
-    
-  } else if (pos_argument == "submit --genbank") {
-    additional_flags <- paste(additional_flags, is_test)
-    
-    success_msg <- c(success_msg[grepl("GENBANK", success_msg)],
-                     "Connecting to NCBI FTP Server",
-                     paste0("Submission name: ", submission_name, "_GENBANK"),
-                     paste0("Submitting '", submission_name, "'"))
-  } else if (pos_argument == "submission_status") {
+  }
+  if (pos_argument == "submission_status") {
     additional_flags <- ""
     
     success_msg <- c("Checking Submissions:",
@@ -328,7 +332,7 @@ seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqse
 appended_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"))
 
 #path of local seqsender config file
-seqsender_config_fp <- list.files(aux_seqsender_fp, pattern = "seqsender_ns_login_config.yaml", full.names = TRUE)
+seqsender_config_fp <- list.files(aux_seqsender_fp, pattern = "seqsender_ns_sc2_login_config.yaml", full.names = TRUE)
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
@@ -370,7 +374,8 @@ seqsender_fp <- "/home/ec2-user/git/seqsender"
 seqsender_upload_tmp_fp <- "/home/ec2-user/tmp_data_ul"
 workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, project_name, sequencer_type, sep = "/")
 submission_path <- paste(seqsender_upload_tmp_fp, sample_type_acronym, sep = "/")
-ec2_upload_tmp_fp <- paste(submission_path, project_name, sep = "/")
+input_submission_name <- paste(project_name, sample_type_acronym, sep = "_")
+ec2_upload_tmp_fp <- paste(submission_path, input_submission_name, sep = "/")
 consensus_fasta_fp <- paste(ec2_upload_tmp_fp, "processed_cecret", "merged_consensus",
                             paste0(project_name, "_PHL2_combined.fasta"), sep = "/")
 ec2_seqsender_meta_fp <- paste0(ec2_upload_tmp_fp, "/seqsender/", paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"))
@@ -387,7 +392,7 @@ if(test_upload) {
   test_flag <- ""
   gs_client_id <- gisaid_client_id
   local_gs_log <- here("gisaid", paste0(project_name, "_gisaid.log"))
-  BioProject <- bio_prj_id_ns
+  BioProject <- bio_prj_id_ns_sc2
 }
 
 organism_flag <- "--organism COV"
@@ -545,7 +550,7 @@ reupload_seqsender_file <- system2("scp", c(appended_seqsender_meta_fp, paste0(e
 ssh_command_check(reupload_seqsender_file)
 
 ### can uncomment the below command to create the NCBI files to check manually before submission
-#ssh_seqsender_cmd("prep -bsn")
+#ssh_seqsender_cmd("prep --biosample --sra --genbank")
 
 ### submit files to biosample and sra
 ssh_seqsender_cmd("submit --biosample --sra")

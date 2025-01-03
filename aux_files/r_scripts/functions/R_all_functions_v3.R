@@ -191,20 +191,27 @@ run_in_terminal <- function(command2run = "", command2print = "") {
 ##   Use the run_in_terminal function to submit jobs to EC2 instance through ssh
 ## =============================================================================
 
-submit_screen_job <- function(message2display = "Running function to submit screen job", ec2_login = "", screen_session_name = "", screen_log_fp = "~/.tmp_screen", command2run = "") {
+submit_screen_job <- function(message2display = "Running function to submit screen job",
+                              ec2_login = "", screen_session_name = "", screen_log_fp = "~/.tmp_screen",
+                              command2run = "",
+                              window_height = 40,
+                              window_length = 120) {
 
   run_in_terminal(paste("echo", paste0("'", message2display, " through a screen command on EC2 instance [", ec2_login, "]';"),
                         "ssh -tt", ec2_login,
                         shQuote(paste("sleep 5;",
                                       "if screen -ls | grep", paste0("'", screen_session_name, "'"), "-q;",
-                                        "then echo 'Detached", screen_session_name, "session detected. Skipping ahead to check status';",
-                                        "else echo 'Submitting job now';",
-                                        "mkdir -p", paste0(screen_log_fp, ";"),
-                                        "rm -f", paste0(screen_log_fp, "/", screen_session_name, ".screenlog;"),
-                                        "sleep 5;",
-                                        "screen -dm -S", screen_session_name, "-L -Logfile", paste0(screen_log_fp, "/", screen_session_name, ".screenlog"), "bash -c",
-                                        paste0("\"", command2run, "\";"),
-                                        "sleep 5;",
+                                      "then echo 'Detached", screen_session_name, "session detected. Skipping ahead to check status';",
+                                      "else echo 'Submitting job now';",
+                                      "mkdir -p", paste0(screen_log_fp, ";"),
+                                      "rm -f", paste0(screen_log_fp, "/", screen_session_name, ".screenlog;"),
+                                      "sleep 5;",
+                                      "screen -dm -S", screen_session_name, "-L -Logfile", paste0(screen_log_fp, "/", screen_session_name, ".screenlog"), "bash -c",
+                                      paste0("\"",
+                                             "stty rows ", window_height, " cols ", window_length, "; ",
+                                             command2run,
+                                             "\";"),
+                                      "sleep 5;",
                                       "fi"), type = "sh")),
                   command2run)
 }
