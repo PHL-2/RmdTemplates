@@ -1177,7 +1177,7 @@ s %>%
     - Nextclade: `r software_version[["nextclade"]]`
       - Nextclade dataset: `r software_version[["nextclade-dataset"]]`
     - Pangolin: `r software_version[["pangolin"]]`
-      - UShER database: `r software_version[["PUSHER"]]`
+      - Pangolin dataset: `r software_version[["pangolin-data"]]`
 
 \newpage
 
