@@ -53,6 +53,7 @@ tryCatch(
 failed_regex <- "test|exclude"
 
 ddPCR_files <- list.files(ddPCR_run_fp, pattern = ".*_ww_sequencing_metadata.csv", full.names = TRUE, recursive = TRUE)
+ddPCR_files <- ddPCR_files[!grepl("test", ddPCR_files)]
 ddPCR_files <- tail(ddPCR_files[!grepl(failed_regex, ddPCR_files)], 50)
 
 ddPCR_data <- ddPCR_files %>%
