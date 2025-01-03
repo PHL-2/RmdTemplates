@@ -56,8 +56,8 @@ gisaid_username <- ""
 #####################
 
 bio_prj_id_test <- "PRJNA000000"
-bio_prj_id_ns <- "PRJNA000000"
-bio_prj_id_ww <- "PRJNA000000"
+bio_prj_id_ns_sc2 <- "PRJNA000000"
+bio_prj_id_ww_sc2 <- "PRJNA000000"
 
 ################
 # Local settings
