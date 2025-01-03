@@ -135,7 +135,7 @@ if (folder_date != gsub("_.*", "", basename(here()))) {
 
 ```
 
-```{r file paths for qc data, eval = import_data}
+```{r file paths for qc data and software versions, eval = import_data}
 
 ### demultiplexing results from nfcore
 demux_software_fp <- here("data", "processed_bclconvert", "pipeline_info", "software_versions.yml")
@@ -143,18 +143,37 @@ demuxsum_fp <- here("data", "processed_bclconvert", run_folder_name, "Reports", 
 quality_metrics_fp <- here("data", "processed_bclconvert", run_folder_name, "Reports", "Quality_Metrics.csv")
 top_unkwn_fp <- here("data", "processed_bclconvert", run_folder_name, "Reports", "Top_Unknown_Barcodes.csv")
 
+cecret_software_fp <- here("data", "processed_cecret", "software_versions.yml")
+
 ```
 
-```{r save demux software versions, eval = import_data}
+```{r save software versions, eval = import_data}
 
-read_delim(demux_software_fp, delim = " ", col_names = FALSE) %>%
-  filter(grepl("Nextflow: |nf-core/demultiplex: |bclconvert: |untar: |falco: ", X1)) %>%
+bcl_version <- read_delim(demux_software_fp, delim = " ", col_names = FALSE) %>%
+  filter(grepl("Nextflow: |nf-core/demultiplex: |bclconvert: |falco: ", X1)) %>%
   separate(col = "X1", into = c("software", "version"), sep = ": ") %>%
   mutate(software = gsub("^ *", "", software),
-         software = gsub("/", "-", software)) %>%
-  mutate(version = gsub("'", "", version)) %>%
-  mutate(pipeline = "nf-core-demultiplex") %>%
-  select(pipeline, software, version) %>%
+         software = gsub("/", "-", software),
+         version = gsub("'", "", version),
+         pipeline = "nf-core-demultiplex") %>%
+  select(pipeline, software, version)
+
+cecret_workflow_version <- read_delim(cecret_software_fp, delim = " ", col_names = FALSE) %>%
+  filter(!grepl("container:", X1),
+         grepl("^ ", X1)) %>%
+  unique() %>%
+  separate(col = "X1", into = c("software", "version"), sep = ": ") %>%
+  mutate(software = gsub("^ *", "", software),
+         software = gsub("/", "-", software),
+         version = gsub("'", "", version),
+         pipeline = "UPHL-BioNGS-Cecret",
+         software = case_when(software == "workflow" ~ "Cecret",
+                              software == "tag" ~ "nextclade-dataset",
+                              software == "barcode" ~ "freyja-dataset",
+                              TRUE ~ software))
+
+bcl_version %>%
+  rbind(cecret_workflow_version) %>%
   write_csv(file = software_version_fp)
 
 ```
@@ -498,40 +517,6 @@ next_clade <- nc_fp %>%
          nextclade_index = "index") %>%
   mutate(sample_id = gsub("_S[0-9]*$", "", sample_id))
 
-nc_v_fp <- here("data", "processed_cecret", "nextclade", "nextclade.json")
-
-nc_v_fp %>%
-  read_delim(n_max = 1, delim = ":", col_names = FALSE, skip = 2) %>%
-  rename(version = "X2") %>%
-  mutate(pipeline = "UPHL-BioNGS-Cecret",
-         software = "nextclade",
-         version = gsub("\"|,| ", "", version)) %>%
-  select(pipeline, software, version) %>%
-  write_csv(file = software_version_fp, append = TRUE)
-
-nc_dl_fp <- here("data", "processed_cecret", "nextclade", "nextclade-sars.json")
-
-nc_dl_v <- nc_dl_fp %>%
-  read_csv(col_names = FALSE) %>%
-  rename(version = "X1") %>%
-  mutate(find_version = ifelse(grepl("version: \\{", version), TRUE, NA)) %>%
-  fill(find_version, .direction = "down") %>%
-  filter(find_version) %>%
-  filter(grepl("updatedAt", version)) %>%
-  unique() %>%
-  select(version)
-
-if(nrow(nc_dl_v) > 1) {
-  stop(simpleError("Check the nextclade dataset version"))
-}
-
-nc_dl_v %>%
-  mutate(pipeline = "UPHL-BioNGS-Cecret",
-         software = "nextclade-dataset",
-         version = gsub("updatedAt: |,", "", version)) %>%
-  select(pipeline, software, version) %>%
-  write_csv(file = software_version_fp, append = TRUE)
-
 ```
 
 ```{r load freyja results, eval = import_data}
@@ -560,15 +545,7 @@ freyja <- freyja_fps %>%
 snpdists_raw_fp <- here("data", "processed_cecret", "snp-dists", "snp-dists.txt")
 
 snpdists <- snpdists_raw_fp %>%
-  read_csv()
-
-colnames(snpdists)[1] %>%
-  gsub(" ", ",", .) %>%
-  paste0("UPHL-BioNGS-Cecret,", .) %>%
-  as.data.frame() %>%
-  write_csv(file = software_version_fp, append = TRUE, quote = "none")
-
-snpdists <- snpdists %>%
+  read_csv() %>%
   rename(sample_id = 1) %>%
   mutate(sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
   rename_all(.funs = function(x) gsub("_S[0-9]*$", "", x)) %>%
@@ -586,9 +563,10 @@ snpdists %>%
   
 ```
 
-```{r load cecret software versions, eval = import_data}
+```{r load cecret results, eval = import_data}
 
-cecret_software_select <- c("ivar", "bwa", "seqyclean", "Cecret version", "pangolin_scorpio_version", "pangolin_constellation_version", "pangolin_pangolin_version", "pangolin_version")
+# remove these software versions from the cecret results
+cecret_software_select <- c("ivar", "ivar consensus", "bwa", "seqyclean", "Cecret version", "pangolin_scorpio_version", "pangolin_constellation_version", "pangolin_pangolin_version", "pangolin_version")
 
 #pangolin data is included with this summary file
 cecret_aggregate <- here("data", "processed_cecret", "cecret_results.csv") %>%
@@ -599,27 +577,7 @@ cecret_aggregate <- here("data", "processed_cecret", "cecret_results.csv") %>%
          vadr_passfail = "vadr_p/f",
          nextclade_qc_overallscore = "nextclade_qc.overallScore",
          nextclade_qc_overallstatus = "nextclade_qc.overallStatus") %>%
-  as.data.frame()
-
-cecret_aggregate %>%
-  select(all_of(cecret_software_select)) %>%
-  unique() %>%
-  mutate_at(.cols = cecret_software_select[1:3],
-            .funs = function(x) sub(".*version.*? ", "", x, ignore.case = TRUE)) %>%
-  mutate_all(.funs = function(x) as.character(x)) %>%
-  pivot_longer(cols = everything(), names_to = "software", values_to = "version") %>%
-  filter(!is.na(version)) %>%
-  unique() %>%
-  mutate(software = case_when(grepl("^PUSHER-", version) ~ "PUSHER",
-                              grepl("^PANGO-", version) ~ "PANGO",
-                              grepl("^SCORPIO_", version) ~ "SCORPIO",
-                              TRUE ~ gsub("^pangolin_|.version$", "", software)),
-         version = gsub("^PUSHER-|^PANGO-|^SCORPIO_", "", version)) %>%
-  mutate(pipeline = "UPHL-BioNGS-Cecret") %>%
-  select(pipeline, software, version) %>%
-  write_csv(file = software_version_fp, append = TRUE)
-
-cecret_aggregate <- cecret_aggregate %>%
+  as.data.frame() %>%
   select(-all_of(cecret_software_select))
 
 ```
@@ -776,10 +734,6 @@ if(any(is.na(s$sample_type))) {
 
 ```{r upload filepaths}
 
-#path of seqsender config file
-seqsender_config_fp <- list.files(file.path(dirname(here()), "aux_files", "data_submission", "seqsender"), pattern = "seqsender_config.yaml", full.names = TRUE)
-seqsender_config_test_fp <- list.files(file.path(dirname(here()), "aux_files", "data_submission", "seqsender"), pattern = "seqsender_config_test.yaml", full.names = TRUE)
-
 epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
 seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload_orig.csv", sep = "_"))
 
@@ -824,15 +778,13 @@ seqsender <- s_toPlot %>%
          #GISAID fields
          `gs-covv_specimen` = "sample_type",
          `gs-covv_coverage` = "median_coverage",
-         `gs-covv_orig_lab` = "sample_collected_by",
-) %>%
+         `gs-covv_orig_lab` = "sample_collected_by") %>%
   mutate(collection_date = case_when(!(is.na(sample_collection_date) |
                                          as.character(sample_collection_date) == "Unknown") ~ as.character(sample_collection_date),
                                      !is.na(PHL_sample_received_date) ~ as.character(PHL_sample_received_date),
                                      TRUE ~ as.character(sequencing_date)),
          collection_date = as.Date(collection_date, tryFormats = c("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y")),
          collection_year = format(collection_date, format = "%Y"),
-         #GISAID fields
          #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/sample collection year (collection year may be different from sequence year)
          `gs-sample_name` = paste0("hCoV-19/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sequence_name), "/", collection_year),
          `gs-covv_gender` = ifelse(is.na(gender)|`gs-covv_orig_lab` == "Temple University", "Unknown", gender),
@@ -845,30 +797,55 @@ seqsender <- s_toPlot %>%
                                              `gs-covv_orig_lab` == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122, USA",
                                              TRUE ~ "Unknown"),
          `gs-covv_subm_sample_id` = sequence_name,
+         #the follow fields are from the metadata
+         #gs-covv_type
+         #gs-covv_passage
+         #gs-covv_location
+         #gs-covv_host
+         #gs-covv_subm_lab
+         #gs-covv_subm_lab_addr
+         #gs-covv_comment
+         #gs-comment_type
+         
          #BioSample fields
          #make BioSample name blank if it didn't pass vadr
          `bs1-sample_name` = ifelse(vadr_passfail == "PASS",
-                                   paste0("SARS-CoV-2/Human/USA/", sequence_name, "/", collection_year),
-                                   ""),
+                                    paste0("SARS-CoV-2/Human/USA/", sequence_name, "/", collection_year),
+                                    ""),
          `bs2-isolate` = `bs1-sample_name`,
          `bs3-isolation_source` = `gs-covv_specimen`,
          `bs4-host` = host_scientific_name,
          `bs5-host_sex` = ifelse(`gs-covv_gender` == "Unknown", "Not provided", `gs-covv_gender`),
          `bs6-host_age` = ifelse(`gs-covv_patient_age` == "Unknown", "Not provided", `gs-covv_patient_age`),
          `bs7-host_disease` = host_disease,
+         #bs8-geo_loc_name
          `bs9-collected_by` = `gs-covv_orig_lab`,
-         `bs13-lineage/clade name` = Nextclade_pango,
-         `bs14-gisaid_virus_name` = `gs-sample_name`,
+         #bs10-sequenced_by
+         #bs11-purpose_of_sequencing
+         `bs12-lineage/clade name` = Nextclade_pango,
+         `bs13-gisaid_virus_name` = `gs-sample_name`,
+         #bs14-gisaid_accession
+         #bs15-sample_title
          #SRA fields
          `sra1-sample_name` = paste0("SARS-CoV-2/Human/USA/", sequence_name),
-         `sra2-library_name` = paste0("ARTIC Network Protocol ", artic_primer_scheme),
+         `sra2-library_name` = paste0("PHL2-NS-COVIDSeq-", sequencing_date),
          `sra3-instrument_model` = gsub("^Illumina NextSeq", "NextSeq", `gs-covv_seq_technology`),
-         `sra10-design_description` = paste0("Genomic reads were enriched using a tiled amplicon strategy with the ARTIC Network Protocol ", artic_primer_scheme,
-                                           " primer scheme. Sequencing was performed on the ", `gs-covv_seq_technology`,
-                                           " with 2x", read_length,
-                                           " bp chemistry. Libraries were prepared using the Illumina COVIDSeq Assay."),
-         `sra13-file_1` = paste0(sequence_name, "_S", sample_number, "_filtered_R1.fastq.gz"),
-         `sra14-file_2` = paste0(sequence_name, "_S", sample_number, "_filtered_R2.fastq.gz"),
+         #sra4-library_strategy
+         #sra5-library_source
+         #sra6-library_selection
+         #sra7-library_layout
+         #sra8-platform
+         #sra9-enrichment_kit
+         `sra10-amplicon_PCR_primer_scheme` = paste0("SARS-CoV-2 ARTIC ", artic_primer_scheme),
+         #sra11-library_preparation_kit
+         `sra12-design_description` = paste0("Genomic reads were enriched using a tiled amplicon strategy with the ARTIC Network Protocol ",
+                                             artic_primer_scheme, " primer scheme. Sequencing was performed on the ", `gs-covv_seq_technology`,
+                                             " with 2x", read_length, " bp chemistry. Library was prepared using the Illumina COVIDSeq Assay."),
+         #sraX-sample_title #include when this works in the seqsender package
+         #sra13-file_location
+         #sra14-filetype
+         `sra15-file_1` = paste0(sequence_name, "_S", sample_number, "_filtered_R1.fastq.gz"),
+         `sra16-file_2` = paste0(sequence_name, "_S", sample_number, "_filtered_R2.fastq.gz"),
          #GenBank fields
          `gb-sample_name` = sequence_name,
          `gb-src-isolate` = `bs1-sample_name`,
@@ -881,8 +858,8 @@ seqsender <- s_toPlot %>%
   select(sequence_name, organism, collection_date,
          matches("^gs-", ignore.case = FALSE),
          #order the column names by the numbers 1 to 100
-         starts_with(paste0("bs", 1:100, "-"), ignore.case = FALSE),
-         starts_with(paste0("sra", 1:100, "-"), ignore.case = FALSE),
+         starts_with(paste0("bs", 1:1000, "-"), ignore.case = FALSE),
+         starts_with(paste0("sra", 1:1000, "-"), ignore.case = FALSE),
          matches("^gb-", ignore.case = FALSE)) %>%
   rename_at(vars(starts_with("bs")), ~ gsub("bs[0-9]+-", "bs-", .)) %>%
   rename_at(vars(starts_with("sra")), ~ gsub("sra[0-9]+-", "sra-", .)) %>%
