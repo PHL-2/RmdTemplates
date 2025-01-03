@@ -579,7 +579,7 @@ reupload_seqsender_file <- system2("scp", c(fastq_appended_seqsender_meta_fp, pa
 ssh_command_check(reupload_seqsender_file)
 
 ### can uncomment the below command to create the NCBI files to check manually before submission
-#ssh_seqsender_cmd("prep -bsn")
+#ssh_seqsender_cmd("prep -bs", metadata = fastq_ec2_seqsender_meta_fp)
 
 ### submit files to biosample and sra
 ssh_seqsender_cmd("submit --biosample --sra", metadata = fastq_ec2_seqsender_meta_fp)
