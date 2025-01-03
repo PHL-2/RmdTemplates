@@ -350,15 +350,18 @@ if(ncol(PHL_data) == 2) {
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     #make these columns character vectors
-    mutate(sample_name = as.character(sample_name))
+    mutate(sample_name = as.character(sample_name),
+           sample_collected_by = "Philadelphia Department of Public Health")
 
 } else if (ncol(PHL_data) > 2) {
 
   PHL_data <- PHL_data %>%
-    mutate(SPECIMEN_DATE = as.Date(SPECIMEN_DATE, format = "%m/%d/%Y"), BIRTH_DATE = as.Date(BIRTH_DATE, format = "%m/%d/%Y")) %>%
     rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
-    select(any_of(phi_info), sample_collection_date, DOB, age, gender, RLU) %>%
-    mutate(gender = ifelse(is.na(gender), "Unknown", gender)) %>%
+    mutate(sample_collection_date = as.Date(sample_collection_date, format = "%m/%d/%Y"),
+           DOB = as.Date(DOB, format = "%m/%d/%Y"),
+           gender = ifelse(is.na(gender), "Unknown", gender),
+           sample_collected_by = "Philadelphia Department of Public Health") %>%
+    select(any_of(phi_info), sample_collection_date, sample_collected_by, DOB, age, gender, RLU) %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     #make these columns character vectors
@@ -401,14 +404,18 @@ if(ncol(TU_data) == 2) {
     rename(sample_name = "SPECIMEN_NUMBER", CT = "ct value") %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
-    mutate(sample_name = as.character(sample_name))
+    mutate(sample_name = as.character(sample_name),
+           sample_collected_by = "Temple University")
 
 } else if(ncol(TU_data) > 2) {
 
   TU_data <- TU_data %>%
-    mutate(Collection_date = as.Date(Collection_date, format = "%m/%d/%Y")) %>%
-    rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "Collection_date", CT = "ct value", gender = "GENDER") %>%
-    select(any_of(phi_info), sample_collection_date, CT, age, gender) %>%
+    rename(sample_name = "SPECIMEN_NUMBER",
+           sample_collection_date = "Collection_date",
+           CT = "ct value", gender = "GENDER") %>%
+    mutate(sample_collection_date = as.Date(sample_collection_date, format = "%m/%d/%Y"),
+           sample_collected_by = "Temple University") %>%
+    select(any_of(phi_info), sample_collection_date, sample_collected_by, CT, age, gender) %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     #make these columns character vectors
@@ -441,8 +448,9 @@ if(!is.na(ENV_fp)) {
 
   ENV_data <- read_csv(ENV_fp) %>%
     #use the Tuesday day of the sequencing week as the sample_collection_date
-    mutate(sample_collection_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
-    select(sample_name, sample_collection_date, environmental_site) %>%
+    mutate(sample_collection_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1,
+           sample_collected_by = "Philadelphia Department of Public Health") %>%
+    select(sample_name, sample_collection_date, sample_collected_by, environmental_site) %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     #filter empty columns
@@ -522,18 +530,18 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
   #merge the metadata
   merge(PHL_TU_merge, by = "sample_name", all.x = TRUE, sort = FALSE) %>%
-  mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date)))) %>%
+  mutate(sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
+         sequencing_date = sequencing_date,
+         prj_descrip = prj_description,
+         instrument_type = instrument_type,
+         read_length = read_length,
+         index_length = index_length,
+         run_cd = run_cd,
+         run_q30 = run_q30,
+         run_pf = run_pf,
+         run_error = run_error) %>%
   select(sample_id, everything()) %>%
-  arrange(plate, plate_col, plate_row) %>%
-  mutate(sequencing_date = sequencing_date) %>%
-  mutate(prj_descrip = prj_description) %>%
-  mutate(instrument_type = instrument_type) %>%
-  mutate(read_length = read_length) %>%
-  mutate(index_length = index_length) %>%
-  mutate(run_cd = run_cd) %>%
-  mutate(run_q30 = run_q30) %>%
-  mutate(run_pf = run_pf) %>%
-  mutate(run_error = run_error)
+  arrange(plate, plate_col, plate_row)
 
 #####################################################################
 # Fill in these columns in the metadata sheet if they were left blank
@@ -588,8 +596,8 @@ metadata_sheet <- metadata_sheet %>%
                                  (is.na(sample_type) | sample_type == "") ~ multi_grep(named_sample_type, sample_name),
                                  TRUE ~ NA)) %>%
   mutate(sample_collected_by = case_when(!(is.na(sample_collected_by) | sample_collected_by == "") ~ sample_collected_by,
-                                         grepl("^8[0-9]*$|^9[0-9]*$", sample_name) ~ "Temple University",
-                                         TRUE ~ "Philadelphia Department of Public Health")) %>%
+                                         grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ "Philadelphia Department of Public Health",
+                                         TRUE ~ NA)) %>%
   mutate(PHL_sample_received_date = case_when(!(is.na(PHL_sample_received_date) | as.character(PHL_sample_received_date) == "") ~ as.Date(PHL_sample_received_date),
                                               #if it's a wastewater sample without a date, throw an error
                                               sample_type == "Wastewater" ~ NA,
