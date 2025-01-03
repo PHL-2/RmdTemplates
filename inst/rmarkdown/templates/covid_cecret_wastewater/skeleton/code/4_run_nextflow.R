@@ -98,6 +98,7 @@ submit_screen_job(message2display = "Demultiplexing with BCLConvert",
                                       "-profile", demux_profile,
                                       "-bucket-dir", paste0(s3_nextflow_work_bucket, "/demux_", sample_type_acronym, "_", sequencing_date),
                                       "-resume",
+                                      "-r 1.3.2",
                                       "--input", nf_demux_samplesheet_path,
                                       "--outdir", bclconvert_output_path)
                   )
