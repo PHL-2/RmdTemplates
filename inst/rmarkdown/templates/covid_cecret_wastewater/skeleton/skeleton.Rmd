@@ -560,8 +560,10 @@ gisaid_added_seqsender %>%
   write_csv(fasta_appended_seqsender_meta_fp)
 
 fastq_seqsender %>%
-  select(-c(`bs-gisaid_accession`)) %>%
-  left_join(select(gisaid_added_seqsender, seqsender_merge_check_cols, `bs-gisaid_accession`), by = seqsender_merge_check_cols) %>%
+  select(-c(`bs-gisaid_accession`, `bs-gisaid_virus_name`)) %>%
+  left_join(select(gisaid_added_seqsender, seqsender_merge_check_cols,
+                   `bs-gisaid_accession`, `bs-gisaid_virus_name`),
+            by = seqsender_merge_check_cols) %>%
   write_csv(fastq_appended_seqsender_meta_fp)
 
 reupload_seqsender_file <- system2("scp", c(fastq_appended_seqsender_meta_fp, paste0(ec2_hostname, ":", fastq_ec2_seqsender_meta_fp)))
