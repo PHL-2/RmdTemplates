@@ -1079,6 +1079,7 @@ if(nrow(seqsender) != 0) {
            #sra14-filetype
            `sra15-file_1` = paste0(sequence_name, "_S", sample_number, "_filtered_R1.fastq.gz"),
            `sra16-file_2` = paste0(sequence_name, "_S", sample_number, "_filtered_R2.fastq.gz")) %>%
+    arrange(sample_number) %>%
     cbind(data_submit_metadata) %>%
     select(sequence_name, organism, collection_date, ww_group,
            matches("^gs-", ignore.case = FALSE),
