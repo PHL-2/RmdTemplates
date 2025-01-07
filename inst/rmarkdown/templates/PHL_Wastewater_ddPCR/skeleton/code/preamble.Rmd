@@ -531,7 +531,7 @@ wwMeta <- cbind(ww_site_metadata, ww_nwss_metadata) %>%
                             (elution_vol_uL/extraction_vol_uL) *
                             (end_concentration_vol_uL/init_concentration_vol_uL) *
                             1000000, 2),
-         lod_ref = paste0("LLOD/1000mL = (0.5 cp/uL) * ",
+         lod_ref = paste0("LLOD/1L = (0.5 cp/uL) * ",
                           "(", rxn_vol_uL, " uL ddPCR rxn vol / ", input_vol_uL, " uL ddPCR input vol) * ",
                           "(", elution_vol_uL, " uL extraction output vol / ", extraction_vol_uL, " uL extraction input vol) * ",
                           "(", end_concentration_vol_uL, " uL concentration output vol / ", init_concentration_vol_uL, " uL concentration input vol) * ", 
