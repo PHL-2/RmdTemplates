@@ -525,7 +525,17 @@ ww_nwss_metadata <- generate_common_metadata_fields(ww_nwss_meta_fp) %>%
   select(starts_with("nwss-")) %>%
   rename_at(vars(starts_with("nwss-")), ~ gsub("nwss-", "", .))
 
-wwMeta <- cbind(ww_site_metadata, ww_nwss_metadata)
+wwMeta <- cbind(ww_site_metadata, ww_nwss_metadata) %>%
+  mutate(lod_sewage = round(0.5 *
+                            (rxn_vol_uL/input_vol_uL) *
+                            (elution_vol_uL/extraction_vol_uL) *
+                            (end_concentration_vol_uL/init_concentration_vol_uL) *
+                            1000000, 2),
+         lod_ref = paste0("LLOD/1L = (0.5 cp/uL) * ",
+                          "(", rxn_vol_uL, " uL ddPCR rxn vol / ", input_vol_uL, " uL ddPCR input vol) * ",
+                          "(", elution_vol_uL, " uL extraction output vol / ", extraction_vol_uL, " uL extraction input vol) * ",
+                          "(", end_concentration_vol_uL, " uL concentration output vol / ", init_concentration_vol_uL, " uL concentration input vol) * ", 
+                          "1000000 uL / 1 L"))
 
 towrite <- ww_SC2_conc_result_summarised %>%
   ungroup() %>%
@@ -553,15 +563,17 @@ sequencing_metadata <- d %>%
             ddpcr_replicates = n(),
             target_present = sum(Target_present)/ddpcr_replicates >= 0.5) %>%
   mutate(stock_conc = stock_concentration_calc(concentration = avg_conc, 
-                                               rxn_vol = rxn_vol_uL, 
-                                               input_vol = input_vol_uL, 
-                                               extraction_vol = extraction_vol_uL, 
+                                               rxn_vol = rxn_vol_uL,
+                                               input_vol = input_vol_uL,
                                                elution_vol = elution_vol_uL,
-                                               efficiency = 1, 
+                                               extraction_vol = extraction_vol_uL,
                                                end_concentration_vol = end_concentration_vol_uL,
-                                               initial_concentration_vol = init_concentration_vol_uL)*1000*1000) %>%
+                                               initial_concentration_vol = init_concentration_vol_uL,
+                                               efficiency = 1)*1000*1000) %>%
   ungroup() %>%
-  pivot_longer(cols = c(avg_conc, stock_conc, target_present), names_to = "concentration", values_to = "values") %>%
+  pivot_longer(cols = c(avg_conc, stock_conc, target_present),
+               names_to = "concentration",
+               values_to = "values") %>%
   mutate(Target = case_when(concentration == "avg_conc" ~ paste0(Target, "_gc/uL"),
                             concentration == "stock_conc" ~ paste0(Target, "_gc/L"),
                             concentration == "target_present" ~ paste0(Target, "_present"),
@@ -572,8 +584,16 @@ sequencing_metadata <- d %>%
          `bs-ww_surv_system_sample_id` = paste("WW",
                              format(sample_collect_date, format = "%y%m%d"),
                              format(run_date, format = "%y%m%d"),
-                             suffix, sep = "-")) %>%
-  select(uniq_sample_name, sample_group = "Type", sample_collect_date, sample_received_date = "Sample_date", Target, values, ddpcr_replicates, `bs-ww_surv_system_sample_id`) %>%
+                             suffix, sep = "-"),
+         ddpcr_rxn_vol_uL = rxn_vol_uL,
+         ddpcr_input_vol_uL = input_vol_uL,
+         ddpcr_elution_vol_uL = elution_vol_uL,
+         ddpcr_extraction_vol_uL = extraction_vol_uL,
+         ddpcr_end_concentration_vol_uL = end_concentration_vol_uL,
+         ddpcr_init_concentration_vol_uL = init_concentration_vol_uL) %>%
+  select(uniq_sample_name, `bs-ww_surv_system_sample_id`, sample_group = "Type",
+         sample_collect_date, sample_received_date = "Sample_date",
+         Target, values, starts_with("ddpcr_")) %>%
   pivot_wider(names_from = "Target", values_from = "values") %>%
   mutate(across(ends_with("_present"), ~as.logical(.))) %>%
   merge(ww_site_metadata, by.x = "sample_group", all.x = TRUE)
