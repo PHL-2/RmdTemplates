@@ -557,7 +557,7 @@ sequencing_metadata <- d %>%
   filter(grepl(pattern = "oldWW|ZeptoSC2|NorthEast|SouthEast|SouthWest", x = Type),
          (Process == "Concentrated" | grepl("oldWW", Type)),
          !(Well %in% wellsToRemove),
-         ) %>%
+         !is.na(`Conc(copies/uL)`)) %>%
   group_by(Type, Process, Spiked, Target, Sample_date) %>%
   summarise(avg_conc = mean(`Conc(copies/uL)`),
             ddpcr_replicates = n(),
