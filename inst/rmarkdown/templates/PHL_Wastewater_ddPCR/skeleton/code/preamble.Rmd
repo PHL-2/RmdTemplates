@@ -571,7 +571,9 @@ sequencing_metadata <- d %>%
                                                initial_concentration_vol = init_concentration_vol_uL,
                                                efficiency = 1)*1000*1000) %>%
   ungroup() %>%
-  pivot_longer(cols = c(avg_conc, stock_conc, target_present), names_to = "concentration", values_to = "values") %>%
+  pivot_longer(cols = c(avg_conc, stock_conc, target_present),
+               names_to = "concentration",
+               values_to = "values") %>%
   mutate(Target = case_when(concentration == "avg_conc" ~ paste0(Target, "_gc/uL"),
                             concentration == "stock_conc" ~ paste0(Target, "_gc/L"),
                             concentration == "target_present" ~ paste0(Target, "_present"),
@@ -589,7 +591,8 @@ sequencing_metadata <- d %>%
          ddpcr_extraction_vol_uL = extraction_vol_uL,
          ddpcr_end_concentration_vol_uL = end_concentration_vol_uL,
          ddpcr_init_concentration_vol_uL = init_concentration_vol_uL) %>%
-  select(uniq_sample_name, `bs-ww_surv_system_sample_id`, sample_group = "Type", sample_collect_date, sample_received_date = "Sample_date",
+  select(uniq_sample_name, `bs-ww_surv_system_sample_id`, sample_group = "Type",
+         sample_collect_date, sample_received_date = "Sample_date",
          Target, values, starts_with("ddpcr_")) %>%
   pivot_wider(names_from = "Target", values_from = "values") %>%
   mutate(across(ends_with("_present"), ~as.logical(.))) %>%
