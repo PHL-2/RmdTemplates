@@ -1176,8 +1176,8 @@ s %>%
     - Kraken2 database: `r software_version[["kraken2_db"]]`
     - Nextclade: `r software_version[["nextclade"]]`
       - Nextclade dataset: `r software_version[["nextclade-dataset"]]`
-    - Pangolin: `r software_version[["pangolin"]]`
-      - Pangolin dataset: `r software_version[["pangolin-data"]]`
+    - Freyja: `r software_version[["freyja"]]`
+      - Freyja dataset: `r software_version[["freyja-dataset"]]`
 
 \newpage
 
