@@ -312,27 +312,25 @@ if (nextclade_dataset_version != "") {
   nextclade_tag <- ""
 }
 
-  submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
-                    ec2_login = ec2_hostname,
-                    screen_session_name = paste("nextclade-dl", session_suffix, sep = "-"),
-                    screen_log_fp = tmp_screen_fp,
-                    command2run = paste("mkdir -p ~/.local/bin/;",
-                                        "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
-                                        "chmod +x ~/.local/bin/nextclade;",
-                                        "nextclade --version;",
-                                        "nextclade dataset get --name sars-cov-2", nextclade_tag, "--output-zip ~/sars.zip;",
-                                        "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
-                                        "rm ~/sars.zip")
-                    )
+submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = paste("nextclade-dl", session_suffix, sep = "-"),
+                  screen_log_fp = tmp_screen_fp,
+                  command2run = paste("mkdir -p ~/.local/bin/;",
+                                      "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
+                                      "chmod +x ~/.local/bin/nextclade;",
+                                      "nextclade --version;",
+                                      "nextclade dataset get --name sars-cov-2", nextclade_tag, "--output-zip ~/sars.zip;",
+                                      "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
+                                      "rm ~/sars.zip")
+                  )
 
-  check_screen_job(message2display = "Checking Nextclade download job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = paste("nextclade-dl", session_suffix, sep = "-"),
-                   screen_log_fp = tmp_screen_fp)
+check_screen_job(message2display = "Checking Nextclade download job",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = paste("nextclade-dl", session_suffix, sep = "-"),
+                 screen_log_fp = tmp_screen_fp)
 
-
-# Update the Cecret pipeline; this should be done as often as possible as it also updates the freyja data used for assignment
-# Big if-else statement; run code manually if TRUE
+# Update the Cecret pipeline? Not always necessary if usaing a stable version
 if(update_freyja_and_cecret_pipeline) {
   submit_screen_job(message2display = "Updating Cecret pipeline",
                     ec2_login = ec2_hostname,

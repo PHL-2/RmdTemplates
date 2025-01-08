@@ -1044,7 +1044,7 @@ if(nrow(seqsender) != 0) {
            `bs26-ww_surv_target_1_known_present` = ifelse(has_N2,
                                                           ifelse(N2_present & !is.na(N2_present), "Yes", "No"),
                                                           ""),
-           `bs27-ww_surv_target_1_conc` = ifelse(is.na(`N2_gc/L`), "", `N2_gc/L`),
+           `bs27-ww_surv_target_1_conc` = ifelse(is.na(`N2_gc/L`), "", round(`N2_gc/L`, 2)),
            #bs28-ww_surv_target_1_conc_unit
            #bs29-ww_surv_target_1_protocol
            #bs30-ww_surv_target_2
@@ -1052,7 +1052,7 @@ if(nrow(seqsender) != 0) {
            `bs32-ww_surv_target_2_known_present` = ifelse(has_N2,
                                                           ifelse(E_present & !is.na(E_present), "Yes", "No"),
                                                           ""),
-           `bs33-ww_surv_target_2_conc` = ifelse(is.na(`E_gc/L`), "", `E_gc/L`),
+           `bs33-ww_surv_target_2_conc` = ifelse(is.na(`E_gc/L`), "", round(`E_gc/L`, 2)),
            #bs34-ww_surv_target_2_conc_unit
            #bs35-ww_surv_target_2_protocol
            `bs36-gisaid_virus_name` = `gs-sample_name`,
@@ -1079,6 +1079,7 @@ if(nrow(seqsender) != 0) {
            #sra14-filetype
            `sra15-file_1` = paste0(sequence_name, "_S", sample_number, "_filtered_R1.fastq.gz"),
            `sra16-file_2` = paste0(sequence_name, "_S", sample_number, "_filtered_R2.fastq.gz")) %>%
+    arrange(sample_number) %>%
     cbind(data_submit_metadata) %>%
     select(sequence_name, organism, collection_date, ww_group,
            matches("^gs-", ignore.case = FALSE),
