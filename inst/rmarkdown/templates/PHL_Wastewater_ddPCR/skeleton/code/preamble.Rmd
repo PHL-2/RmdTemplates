@@ -596,7 +596,8 @@ sequencing_metadata <- d %>%
          Target, values, starts_with("ddpcr_")) %>%
   pivot_wider(names_from = "Target", values_from = "values") %>%
   mutate(across(ends_with("_present"), ~as.logical(.))) %>%
-  merge(ww_site_metadata, by.x = "sample_group", all.x = TRUE)
+  merge(ww_site_metadata, by.x = "sample_group", all.x = TRUE) %>%
+  arrange(sample_received_date, sample_group)
 
 dir.create(here("sequencing_metadata"), recursive = TRUE)
 
