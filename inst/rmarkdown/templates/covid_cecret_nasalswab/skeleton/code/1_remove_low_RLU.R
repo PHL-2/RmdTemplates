@@ -356,7 +356,6 @@ if(file.exists(shared_drive_fp)) {
 
 environmental_samples_fp <- list.files(here("metadata", "extra_metadata"), pattern = "*_Environmental_Swab.*.xlsx", full.names = TRUE)
 
-
 if(length(environmental_samples_fp) > 0) {
   enviro_samples <- environmental_samples_fp %>%
     data.frame(FileName = .) %>%
