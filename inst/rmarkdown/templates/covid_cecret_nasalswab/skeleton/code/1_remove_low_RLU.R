@@ -12,10 +12,6 @@ library(openxlsx)
 # Default variables
 ###################
 
-sample_type_acronym <- "NS" #use NS for nasal swabs
-
-prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
-
 # number of unspecified environmental swabs to add to plate
 enviro_number <- 10
 
