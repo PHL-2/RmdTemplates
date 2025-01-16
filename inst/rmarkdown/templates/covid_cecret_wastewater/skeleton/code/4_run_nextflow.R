@@ -214,7 +214,7 @@ if(!is_nf_concat_samplesheet_empty) {
 
   if(length(s3_cp_nf_concat_samplesheet) == 0) {
     mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
-                                   shQuote(paste("mkdir -p", ec2_tmp_fp))),
+                                   shQuote(paste0("mkdir -p ", ec2_tmp_fp, "/", sequencing_date))),
                           stdout = TRUE, stderr = TRUE)
 
     if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
@@ -223,7 +223,7 @@ if(!is_nf_concat_samplesheet_empty) {
 
     # Transfer sample sheet
     run_in_terminal(paste("scp", nf_concat_samplesheet_fp,
-                          paste0(ec2_hostname, ":", ec2_tmp_fp))
+                          paste0(ec2_hostname, ":", ec2_tmp_fp, "/", sequencing_date))
     )
 
     # Upload concat fastq samplesheet
@@ -232,7 +232,7 @@ if(!is_nf_concat_samplesheet_empty) {
                       screen_session_name = paste("upload-concat-samplesheet", session_suffix, sep = "-"),
                       screen_log_fp = tmp_screen_fp,
                       command2run = paste("aws s3 cp",
-                                          ec2_tmp_fp,
+                                          paste0(ec2_tmp_fp, "/", sequencing_date),
                                           paste0(bclconvert_output_path, "/nf_samplesheets/"),
                                           "--recursive",
                                           "--exclude '*'",
