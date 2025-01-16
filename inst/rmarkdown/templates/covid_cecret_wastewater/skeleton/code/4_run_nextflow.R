@@ -156,13 +156,37 @@ if(length(instrument_run_id) > 1) {
                             "Currently, you are pulling the sequencing run from the ", sequencer_type)))
 }
 
-undetermined_bytes <- fastq_file_sizes %>%
-  filter(grepl("Undetermined", filename)) %>%
-  select(bytes) %>%
-  pull()
+if(remove_undetermined_file) {
 
-if(undetermined_bytes/sum(fastq_file_sizes$bytes) > 0.5) {
-  stop(simpleError("Something might've went wrong with the demultiplexing!\nThe unassigned reads makes up more than 50% of the total reads!"))
+  # Move the Undetermined file to another bucket path
+  submit_screen_job(message2display = "Moving Undetermined files out of input filepath",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = paste("undetermined-mv", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
+                    command2run = paste("aws s3 mv",
+                                        paste(bclconvert_output_path, instrument_run_id, sep = "/"),
+                                        paste(bclconvert_output_path, "Undetermined", instrument_run_id, sep = "/"),
+                                        "--recursive",
+                                        "--exclude '*'",
+                                        "--include '*Undetermined_S0_*_001.fastq.gz'")
+  )
+
+  check_screen_job(message2display = "Checking Undetermined move job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = paste("undetermined-mv", session_suffix, sep = "-"),
+                   screen_log_fp = tmp_screen_fp)
+
+} else {
+  undetermined_bytes <- fastq_file_sizes %>%
+    filter(grepl("Undetermined", filename)) %>%
+    select(bytes) %>%
+    pull()
+
+  if(undetermined_bytes/sum(fastq_file_sizes$bytes) > 0.5) {
+    stop(simpleError(paste("Something might've went wrong with the demultiplexing!",
+                           "The unassigned reads makes up more than 50% of the total reads!",
+                           "To remove the Undetermined file from processing, set remove_undetermined_file to TRUE", sep = "\n")))
+  }
 }
 
 fastq_path <- paste(bclconvert_output_path, instrument_run_id, sep = "/")

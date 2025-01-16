@@ -67,6 +67,8 @@ update_freyja_and_cecret_pipeline <- FALSE
 
 cecret_version <- "3.15.24324"
 
+remove_undetermined_file <- FALSE
+
 ```
 
 ```{r select samples and ddpcr metadata, message = TRUE, include=FALSE, eval = FALSE}
