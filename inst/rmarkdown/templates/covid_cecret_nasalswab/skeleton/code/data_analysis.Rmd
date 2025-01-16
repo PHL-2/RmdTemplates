@@ -243,8 +243,8 @@ s %>%
   droplevels() %>%
   {
   ggplot(., aes(x = CT, y = read_counts, fill = sample_type)) +
-    geom_point(shape = 21, size = 3) +
     geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    geom_point(shape = 21, size = 3) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     scale_y_continuous(trans = "log10") +
@@ -261,8 +261,8 @@ s %>%
   droplevels() %>%
   {
   ggplot(., aes(x = RLU, y = read_counts, fill = sample_type)) +
-    geom_point(shape = 21, size = 3) +
     geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    geom_point(shape = 21, size = 3) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     scale_y_continuous(trans = "log10") +
@@ -279,8 +279,8 @@ s %>%
   droplevels() %>%
   {
   ggplot(., aes(x = qubit_conc_ng_ul, y = read_counts, fill = sample_type)) +
-    geom_point(shape = 21, size = 3) +
     geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    geom_point(shape = 21, size = 3) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     scale_y_continuous(trans = "log10") +
