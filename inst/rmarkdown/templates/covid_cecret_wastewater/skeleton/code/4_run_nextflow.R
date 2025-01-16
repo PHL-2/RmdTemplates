@@ -76,12 +76,12 @@ bclconvert_output_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_ac
 
 workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sequencer_type, sep = "/")
 
-data_output_fp <- paste0(ec2_tmp_fp, "/", sequencing_date, "/data")
-
 # temporary directory to hold the screen log files
 tmp_screen_fp <- paste("~", ".tmp_screen", sequencer_type, "WW_SC2", basename(here()), sep = "/")
 
 session_suffix <- tolower(paste(sequencer_type, "ww-sc2", basename(here()), sep = "-"))
+
+data_output_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/data")
 
 # Demultiplexing
 submit_screen_job(message2display = "Demultiplexing with BCLConvert",
@@ -214,7 +214,7 @@ if(!is_nf_concat_samplesheet_empty) {
 
   if(length(s3_cp_nf_concat_samplesheet) == 0) {
     mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
-                                   shQuote(paste0("mkdir -p ", ec2_tmp_fp, "/", sequencing_date))),
+                                   shQuote(paste0("mkdir -p ", ec2_tmp_fp, "/", session_suffix))),
                           stdout = TRUE, stderr = TRUE)
 
     if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
@@ -223,7 +223,7 @@ if(!is_nf_concat_samplesheet_empty) {
 
     # Transfer sample sheet
     run_in_terminal(paste("scp", nf_concat_samplesheet_fp,
-                          paste0(ec2_hostname, ":", ec2_tmp_fp, "/", sequencing_date))
+                          paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix))
     )
 
     # Upload concat fastq samplesheet
@@ -232,7 +232,7 @@ if(!is_nf_concat_samplesheet_empty) {
                       screen_session_name = paste("upload-concat-ss", session_suffix, sep = "-"),
                       screen_log_fp = tmp_screen_fp,
                       command2run = paste("aws s3 cp",
-                                          paste0(ec2_tmp_fp, "/", sequencing_date),
+                                          paste0(ec2_tmp_fp, "/", session_suffix),
                                           paste0(bclconvert_output_path, "/nf_samplesheets/"),
                                           "--recursive",
                                           "--exclude '*'",
@@ -476,9 +476,9 @@ run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
                       here("data", "processed_cecret", "nextflow.config")),
                 paste(" [On", ec2_hostname, "instance]\n",
                       "aws s3 cp ~/.nextflow/config",
-                      paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
+                      paste0("s3://test-environment/input/", session_suffix, "/"), "\n\n",
                       "[On local computer]\n",
-                      "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/config"),
+                      "aws s3 cp", paste0("s3://test-environment/input/", session_suffix, "/config"),
                       here("data", "processed_cecret", "nextflow.config"))
 )
 
@@ -488,7 +488,7 @@ submit_screen_job(message2display = "Cleaning up run from temporary folder",
                   screen_session_name = paste("delete-run", session_suffix, sep = "-"),
                   screen_log_fp = tmp_screen_fp,
                   command2run = paste("rm -rf",
-                                      paste0(ec2_tmp_fp, "/", sequencing_date, "/"),
+                                      paste0(ec2_tmp_fp, "/", session_suffix, "/"),
                                       paste0(ec2_tmp_fp, "/", instrument_run_id, "*;"),
                                       "echo 'Here are the files in the tmp directory:';",
                                       "ls", ec2_tmp_fp)

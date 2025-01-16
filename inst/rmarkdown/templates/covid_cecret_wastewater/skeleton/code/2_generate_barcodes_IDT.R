@@ -215,9 +215,9 @@ if(samplesheet_exists) {
                             run_samplesheet_fp),
                       command2print = paste(" [On", ec2_hostname, "instance]\n",
                                             "aws s3 cp", paste0(temporary_seq_run_fp, "SampleSheet.csv"),
-                                            paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
+                                            paste0("s3://test-environment/input/", session_suffix, "/"), "\n\n",
                                             "[On local computer]\n",
-                                            "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/SampleSheet.csv"),
+                                            "aws s3 cp", paste0("s3://test-environment/input/", session_suffix, "/SampleSheet.csv"),
                                             run_samplesheet_fp)
       )
     } else {
