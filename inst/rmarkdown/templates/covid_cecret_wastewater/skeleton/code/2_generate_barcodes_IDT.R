@@ -12,8 +12,6 @@ library(stringr)
 # Default variables
 ###################
 
-prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
-
 index_length <- "10"
 
 sequencer_type <- c("MiSeq", "NextSeq1k2k")[sequencer_select]
