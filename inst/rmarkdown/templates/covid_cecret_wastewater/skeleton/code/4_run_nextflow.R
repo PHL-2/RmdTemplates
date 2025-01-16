@@ -229,7 +229,7 @@ if(!is_nf_concat_samplesheet_empty) {
     # Upload concat fastq samplesheet
     submit_screen_job(message2display = "Uploading samplesheet to S3",
                       ec2_login = ec2_hostname,
-                      screen_session_name = paste("upload-concat-ss", session_suffix, sep = "-"),
+                      screen_session_name = paste("up-concat-ss", session_suffix, sep = "-"),
                       screen_log_fp = tmp_screen_fp,
                       command2run = paste("aws s3 cp",
                                           paste0(ec2_tmp_fp, "/", session_suffix),
@@ -241,7 +241,7 @@ if(!is_nf_concat_samplesheet_empty) {
 
     check_screen_job(message2display = "Checking samplesheet upload job",
                      ec2_login = ec2_hostname,
-                     screen_session_name = paste("upload-concat-ss", session_suffix, sep = "-"),
+                     screen_session_name = paste("up-concat-ss", session_suffix, sep = "-"),
                      screen_log_fp = tmp_screen_fp)
   }
 
