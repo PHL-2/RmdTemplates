@@ -36,11 +36,19 @@ output:
 # 1_remove_low_RLU.R (Cleaning up metadata sheet and making platemap)
 #####################################################################
 
+prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
+
+sample_type_acronym <- "NS" #use NS for nasal swabs
+
 # samples that are missing from the metadata sheet
 missing_samples <- c("")
 
 # set this to FALSE to not copy the platemap to the shared drive (such as when rerunning this script with updated extra metadata info)
 copy_platemap <- TRUE
+
+if(nchar(prj_description) > 25) {
+  stop(simpleError("prj_description is too long. Needs to be 25 chars or less"))
+}
 
 ###################################################################################
 # 2_generate_barcodes_IDT.R and 3_archive_upload_run.R (BaseSpace and AWS settings)

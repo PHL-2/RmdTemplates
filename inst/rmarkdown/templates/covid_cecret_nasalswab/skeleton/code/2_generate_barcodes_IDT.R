@@ -12,8 +12,6 @@ library(stringr)
 # Default variables
 ###################
 
-prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
-
 index_length <- "10"
 
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
