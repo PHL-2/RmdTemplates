@@ -762,6 +762,8 @@ for(x in c("qubit_conc_ng_ul", "sample_collection_date", "host_age_bin", "gender
 
 #check lowest date of sample collection
 if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-6 month')[2]){
+  message("Earliest sample collection date in this run:")
+  message(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])))
   stop(simpleError(paste0("\nSome samples have collection dates more than 6 months ago. Investigate!!")))
 }
 
