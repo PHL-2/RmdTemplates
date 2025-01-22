@@ -68,10 +68,6 @@ sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
 
 intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*")
 
-sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
-
-prj_description <- gsub(paste0("^[0-9-]*_.*", sample_type_acronym, "_|_.*"), "", sample_sheet_fn)
-
 nf_demux_samplesheet_path <- paste(s3_run_bucket, sequencing_date,
                                    tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_demux_samplesheet.csv", sep = "_")), sep = "/")
 
@@ -79,12 +75,12 @@ bclconvert_output_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_ac
 
 workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sequencer_type, sep = "/")
 
-data_output_fp <- paste0(ec2_tmp_fp, "/", sequencing_date, "/data")
-
 # temporary directory to hold the screen log files
 tmp_screen_fp <- paste("~", ".tmp_screen", sequencer_type, "NS_SC2", basename(here()), sep = "/")
 
 session_suffix <- tolower(paste(sequencer_type, "ns-sc2", basename(here()), sep = "-"))
+
+data_output_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/data")
 
 # Demultiplexing
 submit_screen_job(message2display = "Demultiplexing with BCLConvert",
@@ -97,6 +93,7 @@ submit_screen_job(message2display = "Demultiplexing with BCLConvert",
                                       "-profile", demux_profile,
                                       "-bucket-dir", paste0(s3_nextflow_work_bucket, "/demux_", sample_type_acronym, "_", sequencing_date),
                                       "-resume",
+                                      "-r 1.3.2",
                                       "--input", nf_demux_samplesheet_path,
                                       "--outdir", bclconvert_output_path)
 )
@@ -204,27 +201,25 @@ if (nextclade_dataset_version != "") {
   nextclade_tag <- ""
 }
 
-  submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
-                    ec2_login = ec2_hostname,
-                    screen_session_name = paste("nextclade-dl", session_suffix, sep = "-"),
-                    screen_log_fp = tmp_screen_fp,
-                    command2run = paste("mkdir -p ~/.local/bin/;",
-                                        "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
-                                        "chmod +x ~/.local/bin/nextclade;",
-                                        "nextclade --version;",
-                                        "nextclade dataset get --name sars-cov-2", nextclade_tag, "--output-zip ~/sars.zip;",
-                                        "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
-                                        "rm ~/sars.zip")
-  )
+submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = paste("nextclade-dl", session_suffix, sep = "-"),
+                  screen_log_fp = tmp_screen_fp,
+                  command2run = paste("mkdir -p ~/.local/bin/;",
+                                      "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
+                                      "chmod +x ~/.local/bin/nextclade;",
+                                      "nextclade --version;",
+                                      "nextclade dataset get --name sars-cov-2", nextclade_tag, "--output-zip ~/sars.zip;",
+                                      "aws s3 cp ~/sars.zip", paste0(s3_reference_bucket, "/nextclade/sars.zip;"),
+                                      "rm ~/sars.zip")
+)
 
-  check_screen_job(message2display = "Checking Nextclade download job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = paste("nextclade-dl", session_suffix, sep = "-"),
-                   screen_log_fp = tmp_screen_fp)
+check_screen_job(message2display = "Checking Nextclade download job",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = paste("nextclade-dl", session_suffix, sep = "-"),
+                 screen_log_fp = tmp_screen_fp)
 
-
-# Update the Cecret pipeline; this should be done as often as possible as it also updates the freyja data used for assignment
-# Big if-else statement; run code manually if TRUE
+# Update the Cecret pipeline? Not always necessary if usaing a stable version
 if (update_freyja_and_cecret_pipeline) {
   submit_screen_job(message2display = "Updating Cecret pipeline",
                     ec2_login = ec2_hostname,
@@ -351,9 +346,9 @@ run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
                       here("data", "processed_cecret", "nextflow.config")),
                 paste(" [On", ec2_hostname, "instance]\n",
                       "aws s3 cp ~/.nextflow/config",
-                      paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
+                      paste0("s3://test-environment/input/", session_suffix, "/"), "\n\n",
                       "[On local computer]\n",
-                      "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/config"),
+                      "aws s3 cp", paste0("s3://test-environment/input/", session_suffix, "/config"),
                       here("data", "processed_cecret", "nextflow.config"))
 )
 
@@ -363,7 +358,7 @@ submit_screen_job(message2display = "Cleaning up run from temporary folder",
                   screen_session_name = paste("delete-run", session_suffix, sep = "-"),
                   screen_log_fp = tmp_screen_fp,
                   command2run = paste("rm -rf",
-                                      paste0(ec2_tmp_fp, "/", sequencing_date, "/"),
+                                      paste0(ec2_tmp_fp, "/", session_suffix, "/"),
                                       paste0(ec2_tmp_fp, "/", instrument_run_id, "*;"),
                                       "echo 'Here are the files in the tmp directory:';",
                                       "ls", ec2_tmp_fp)
