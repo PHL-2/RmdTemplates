@@ -12,8 +12,6 @@ library(stringr)
 # Default variables
 ###################
 
-prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
-
 index_length <- "10"
 
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
@@ -219,9 +217,9 @@ if(samplesheet_exists) {
                             run_samplesheet_fp),
                       command2print = paste(" [On", ec2_hostname, "instance]\n",
                                             "aws s3 cp", paste0(temporary_seq_run_fp, "SampleSheet.csv"),
-                                            paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
+                                            paste0("s3://test-environment/input/", session_suffix, "/"), "\n\n",
                                             "[On local computer]\n",
-                                            "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/SampleSheet.csv"),
+                                            "aws s3 cp", paste0("s3://test-environment/input/", session_suffix, "/SampleSheet.csv"),
                                             run_samplesheet_fp)
       )
     } else {
@@ -763,8 +761,10 @@ for(x in c("qubit_conc_ng_ul", "sample_collection_date", "host_age_bin", "gender
 }
 
 #check lowest date of sample collection
-if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
-  stop(simpleError(paste0("\nSome samples have collection dates more than 2 months ago. Investigate!!")))
+if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-6 month')[2]){
+  message("Earliest sample collection date in this run:")
+  message(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])))
+  stop(simpleError(paste0("\nSome samples have collection dates more than 6 months ago. Investigate!!")))
 }
 
 print('What do the sample_id look like?')

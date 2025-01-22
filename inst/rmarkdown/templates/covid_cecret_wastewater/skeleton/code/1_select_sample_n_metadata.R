@@ -11,10 +11,6 @@ library(stringr)
 # Default variables
 ###################
 
-sample_type_acronym <- "WW" #use WW for wastewater samples
-
-prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
-
 # number of unspecified environmental swabs to add to plate
 #enviro_number <- 10
 
@@ -52,7 +48,7 @@ tryCatch(
 
 failed_regex <- "test|exclude"
 
-ddPCR_files <- list.files(ddPCR_run_fp, pattern = ".*_sc2_ww_sequencing_metadata.csv", full.names = TRUE, recursive = TRUE)
+ddPCR_files <- list.files(ddPCR_run_fp, pattern = ".*_ww_sequencing_metadata.csv", full.names = TRUE, recursive = TRUE)
 ddPCR_files <- tail(ddPCR_files[!grepl(failed_regex, ddPCR_files)], 100)
 
 ddPCR_data <- ddPCR_files %>%
@@ -257,7 +253,7 @@ if(copy_platemap) {
 
 message("\nNumber of samples to sequence:")
 message(nrow(selection_data))
-message("\nDate of samples to sequence:")
+message("\nDates of samples to sequence:")
 message(paste0(unique(selection_data$sample_received_date), collapse = "\n"))
 message("\nSample sites to sequence:")
 message(paste0(unique(selection_data$sample_group), collapse = "\n"))
@@ -267,3 +263,10 @@ if(length(older_samples_fp) > 0) {
 } else {
   message(0)
 }
+message("\nSamples without ddPCR data:")
+selection_data %>%
+  filter(is.na(sample_collect_date)) %>%
+  mutate(date_group = paste(sample_received_date, "-", sample_group, "\n")) %>%
+  select(date_group) %>%
+  pull() %>%
+  message()
