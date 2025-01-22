@@ -75,10 +75,6 @@ sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
 
 sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
 
-sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
-
-prj_description <- gsub(paste0("^[0-9-]*_.*", sample_type_acronym, "_|_.*"), "", sample_sheet_fn)
-
 s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
 # temporary directory to hold the screen log files

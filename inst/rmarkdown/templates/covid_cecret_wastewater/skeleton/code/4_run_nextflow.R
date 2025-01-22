@@ -69,10 +69,6 @@ sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
 
 intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*")
 
-sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
-
-prj_description <- gsub(paste0("^[0-9-]*_.*", sample_type_acronym, "_|_.*"), "", sample_sheet_fn)
-
 nf_demux_samplesheet_path <- paste(s3_run_bucket, sequencing_date,
                                    tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_demux_samplesheet.csv", sep = "_")), sep = "/")
 
@@ -156,13 +152,37 @@ if(length(instrument_run_id) > 1) {
                             "Currently, you are pulling the sequencing run from the ", sequencer_type)))
 }
 
-undetermined_bytes <- fastq_file_sizes %>%
-  filter(grepl("Undetermined", filename)) %>%
-  select(bytes) %>%
-  pull()
+if(remove_undetermined_file) {
 
-if(undetermined_bytes/sum(fastq_file_sizes$bytes) > 0.5) {
-  stop(simpleError("Something might've went wrong with the demultiplexing!\nThe unassigned reads makes up more than 50% of the total reads!"))
+  # Move the Undetermined file to another bucket path
+  submit_screen_job(message2display = "Moving Undetermined files out of input filepath",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = paste("undetermined-mv", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
+                    command2run = paste("aws s3 mv",
+                                        paste(bclconvert_output_path, instrument_run_id, sep = "/"),
+                                        paste(bclconvert_output_path, "Undetermined", instrument_run_id, sep = "/"),
+                                        "--recursive",
+                                        "--exclude '*'",
+                                        "--include '*Undetermined_S0_*_001.fastq.gz'")
+  )
+
+  check_screen_job(message2display = "Checking Undetermined move job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = paste("undetermined-mv", session_suffix, sep = "-"),
+                   screen_log_fp = tmp_screen_fp)
+
+} else {
+  undetermined_bytes <- fastq_file_sizes %>%
+    filter(grepl("Undetermined", filename)) %>%
+    select(bytes) %>%
+    pull()
+
+  if(undetermined_bytes/sum(fastq_file_sizes$bytes) > 0.5) {
+    stop(simpleError(paste("Something might've went wrong with the demultiplexing!",
+                           "The unassigned reads makes up more than 50% of the total reads!",
+                           "To remove the Undetermined file from processing, set remove_undetermined_file to TRUE", sep = "\n")))
+  }
 }
 
 fastq_path <- paste(bclconvert_output_path, instrument_run_id, sep = "/")
@@ -209,7 +229,7 @@ if(!is_nf_concat_samplesheet_empty) {
     # Upload concat fastq samplesheet
     submit_screen_job(message2display = "Uploading samplesheet to S3",
                       ec2_login = ec2_hostname,
-                      screen_session_name = paste("upload-concat-samplesheet", session_suffix, sep = "-"),
+                      screen_session_name = paste("up-concat-ss", session_suffix, sep = "-"),
                       screen_log_fp = tmp_screen_fp,
                       command2run = paste("aws s3 cp",
                                           paste0(ec2_tmp_fp, "/", session_suffix),
@@ -221,7 +241,7 @@ if(!is_nf_concat_samplesheet_empty) {
 
     check_screen_job(message2display = "Checking samplesheet upload job",
                      ec2_login = ec2_hostname,
-                     screen_session_name = paste("upload-concat-samplesheet", session_suffix, sep = "-"),
+                     screen_session_name = paste("up-concat-ss", session_suffix, sep = "-"),
                      screen_log_fp = tmp_screen_fp)
   }
 
@@ -456,9 +476,9 @@ run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
                       here("data", "processed_cecret", "nextflow.config")),
                 paste(" [On", ec2_hostname, "instance]\n",
                       "aws s3 cp ~/.nextflow/config",
-                      paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
+                      paste0("s3://test-environment/input/", session_suffix, "/"), "\n\n",
                       "[On local computer]\n",
-                      "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/config"),
+                      "aws s3 cp", paste0("s3://test-environment/input/", session_suffix, "/config"),
                       here("data", "processed_cecret", "nextflow.config"))
 )
 
