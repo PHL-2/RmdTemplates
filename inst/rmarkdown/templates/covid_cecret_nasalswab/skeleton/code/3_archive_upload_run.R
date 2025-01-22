@@ -273,7 +273,7 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
   if(length(s3_cp_md5) == 0 | length(s3_cp_run_tarball) == 0) {
 
     mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
-                                   shQuote(paste("mkdir -p", ec2_tmp_fp))),
+                                   shQuote(paste("mkdir -p", ec2_tmp_fp, "/", session_suffix))),
                           stdout = TRUE, stderr = TRUE)
 
     if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
@@ -281,11 +281,11 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
     }
 
     run_in_terminal(paste("scp", md5_fp,
-                          paste0(ec2_hostname, ":", ec2_tmp_fp))
+                          paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix))
     )
 
     run_in_terminal(paste("scp", paste0(run_folder, ".tar.gz"),
-                          paste0(ec2_hostname, ":", ec2_tmp_fp))
+                          paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix))
     )
   }
 }
@@ -315,11 +315,11 @@ s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samples
 if(length(s3_cp_samplesheet) == 0 | length(s3_cp_nf_demux_samplesheet) == 0) {
 
   run_in_terminal(paste("scp", sample_sheet_fp,
-                        paste0(ec2_hostname, ":", ec2_tmp_fp))
+                        paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix))
   )
 
   run_in_terminal(paste("scp", nf_demux_samplesheet_fp,
-                        paste0(ec2_hostname, ":", ec2_tmp_fp))
+                        paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix))
   )
 }
 
@@ -330,7 +330,7 @@ if(have_AWS_EC2_SSH_access) {
                     screen_session_name = paste("upload-run", session_suffix, sep = "-"),
                     screen_log_fp = tmp_screen_fp,
                     command2run = paste("aws s3 cp",
-                                        ec2_tmp_fp,
+                                        paste0(ec2_tmp_fp, "/", session_suffix),
                                         s3_run_bucket_fp,
                                         "--recursive",
                                         "--exclude '*'",
