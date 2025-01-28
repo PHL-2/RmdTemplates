@@ -339,7 +339,7 @@ read_sheet <- function(fp, sheet_name) {
         mutate(plate_coord = gsub("^0", "", plate_coord))
     },
     error = function(e) {
-      stop (simpleError("The sample metadata file from the wet lab scientists may be missing or mis-formatted"))
+      stop (simpleError("The sample index file from the wet lab scientists may be missing or mis-formatted"))
     }
   )
 }
