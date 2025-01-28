@@ -259,6 +259,7 @@ if(!read_length %in% c(76, 151)) {
   stop(simpleError("The read length is not 76 or 151 bp. Check the sample sheet from the sequencing run folder"))
 }
 
+<<<<<<< HEAD:inst/rmarkdown/templates/covid_cecret_wastewater/skeleton/code/2_generate_metadata_n_assign_barcodes.R
 #####################################
 # Load the latest 5 ddPCR run results
 #####################################
