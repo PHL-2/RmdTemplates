@@ -297,11 +297,11 @@ if(!read_length %in% c(76, 151)) {
   stop(simpleError("The read length is not 76 or 151 bp. Check the sample sheet from the sequencing run folder"))
 }
 
-#####################
-# Load metadata sheet
-#####################
+##################
+# Load index sheet
+##################
 
-metadata_input_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
+index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
 
 read_sheet <- function(fp, sheet_name) {
   tryCatch(
@@ -321,8 +321,8 @@ read_sheet <- function(fp, sheet_name) {
   )
 }
 
-index_sheet <- read_sheet(metadata_input_fp, "Index")
-sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
+index_sheet <- read_sheet(index_sheet_fp, "Index")
+sample_info_sheet <- read_sheet(index_sheet_fp, "Sample Info")
 
 #######################################################
 # Load the wastewater metadata sheet from the ddPCR run
