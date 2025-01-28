@@ -303,6 +303,27 @@ if(!read_length %in% c(76, 151)) {
 
 index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
 
+if(length(index_sheet_fp) == 0) {
+  shared_index_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "nasal_swabs", str_sub(sequencing_date, 1, 4)),
+                                    pattern = "sequencing_metadata_sheet", full.names = TRUE))
+
+  if(is.na(shared_index_fp)) {
+    stop(simpleError("Files in the shared drive could not be found\nAre you connected to the shared drive?"))
+  }
+
+  #get date of index sheet
+  sheet_date <- as.Date(str_extract(shared_index_fp, "[0-9-]{8}"), tryFormats = c("%y%m%d", "%m%d%y", "%m-%d-%y"))
+
+  if(abs(as.Date(sequencing_date) - sheet_date) > 5) {
+    stop(simpleError(paste0("The latest index sheet found is on ", sheet_date,
+                            "\nThis date is more than 5 days from the date of this RStudio project",
+                            "\nSomething must be wrong")))
+  }
+
+  file.copy(shared_index_fp, here("metadata", "munge"))
+  index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
+}
+
 read_sheet <- function(fp, sheet_name) {
   tryCatch(
     {
@@ -316,7 +337,7 @@ read_sheet <- function(fp, sheet_name) {
         mutate(plate_coord = gsub("^0", "", plate_coord))
     },
     error = function(e) {
-      stop (simpleError("The sample metadata file from the wet lab scientists may be missing or mis-formatted"))
+      stop (simpleError("The sample index file from the wet lab scientists may be missing or mis-formatted"))
     }
   )
 }
