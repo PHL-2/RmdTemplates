@@ -1281,7 +1281,7 @@ variant_list <- s %>%
   filter(variants!="Unassigned") %>%
   distinct() %>%
   arrange(nextclade_clade_who, variants) %>%
-  mutate(combined_list = gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", variants))
+  mutate(combined_list = gsub("\\..*", "", variants))
 
 if(length(unique(variant_list$combined_list)) > 20) {
   stop(simpleError("The number of variants to color is greater than 20. Increase the number of colors in variant_color below"))
