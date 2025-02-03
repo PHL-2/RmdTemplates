@@ -273,7 +273,7 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
   if(length(s3_cp_md5) == 0 | length(s3_cp_run_tarball) == 0) {
 
     mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
-                                   shQuote(paste("mkdir -p", ec2_tmp_fp, "/", session_suffix))),
+                                   shQuote(paste0("mkdir -p ", ec2_tmp_fp, "/", session_suffix))),
                           stdout = TRUE, stderr = TRUE)
 
     if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
