@@ -314,6 +314,14 @@ s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samples
 
 if(length(s3_cp_samplesheet) == 0 | length(s3_cp_nf_demux_samplesheet) == 0) {
 
+  mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
+                                 shQuote(paste0("mkdir -p ", ec2_tmp_fp, "/", session_suffix))),
+                        stdout = TRUE, stderr = TRUE)
+
+  if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
+    stop(simpleError("Failed to make temporary directory in EC2 instance"))
+  }
+
   run_in_terminal(paste("scp", sample_sheet_fp,
                         paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix))
   )
