@@ -192,7 +192,7 @@ if(samplesheet_exists) {
 
   if(run_uploaded_2_basespace) {
 
-    temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", sequencing_run, "/")
+    temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/", sequencing_run, "/")
     bs_dl_cmd <- paste("bs download runs --id", bs_run_id, "--output", temporary_seq_run_fp)
 
     if(have_AWS_EC2_SSH_access) {
