@@ -894,6 +894,7 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 #does not contain PHI and accession numbers
 metadata_sheet %>%
   filter(!sample_name %in% remove_sample_from_samplesheets) %>%
+  filter(!sample_id %in% sample_w_empty_reads) %>%
   select(-c(I7_Index_ID, I5_Index_ID, any_of(phi_info))) %>%
   # NextSeq runs have index2 sequences in the reverse complement of the ones listed in the reference barcode sheet
   # however, the sample sheet used for demultiplexing needs to be the same orientation as the reference barcode sheet
@@ -905,5 +906,6 @@ metadata_sheet %>%
 #contains PHI and accession numbers
 metadata_sheet %>%
   filter(!sample_name %in% remove_sample_from_samplesheets) %>%
+  filter(!sample_id %in% sample_w_empty_reads) %>%
   select(sample_id, any_of(phi_info)) %>%
   write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")))
