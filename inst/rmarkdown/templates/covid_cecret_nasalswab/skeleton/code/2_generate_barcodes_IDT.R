@@ -355,16 +355,16 @@ sample_info_sheet <- read_sheet(index_sheet_fp, "Sample Info")
 PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xlsx", full.names = TRUE, recursive = TRUE)
 
 PHL_data <- PHL_fp %>%
-  lapply(function(x) read_excel_safely(x, "PHL")) %>%
+  lapply(function(x) read_excel_safely(x, "PHL") %>%
+           mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens", "", x),
+                  PHL_sample_received_date = as.Date(PHL_sample_received_date, format = "%d%B%y"))) %>%
   bind_rows()
 
 #if PHL_data exists, do the following
 # if it's just a blank sheet, just save sample_name and RLU column names
-if(ncol(PHL_data) == 2) {
+if(ncol(PHL_data) == 3) {
 
-  PHL_data <- PHL_fp %>%
-    lapply(function(x) read_excel_safely(x, "PHL")) %>%
-    bind_rows() %>%
+  PHL_data <- PHL_data %>%
     rename(sample_name = "SPECIMEN_NUMBER") %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
@@ -372,7 +372,7 @@ if(ncol(PHL_data) == 2) {
     mutate(sample_name = as.character(sample_name),
            sample_collected_by = "Philadelphia Department of Public Health")
 
-} else if (ncol(PHL_data) > 2) {
+} else if (ncol(PHL_data) > 3) {
 
   PHL_data <- PHL_data %>%
     rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
@@ -380,7 +380,8 @@ if(ncol(PHL_data) == 2) {
            DOB = as.Date(DOB, format = "%m/%d/%Y"),
            gender = ifelse(is.na(gender), "Unknown", gender),
            sample_collected_by = "Philadelphia Department of Public Health") %>%
-    select(any_of(phi_info), sample_collection_date, sample_collected_by, DOB, age, gender, RLU) %>%
+    select(any_of(phi_info), sample_collection_date, sample_collected_by, PHL_sample_received_date,
+           DOB, age, gender, RLU) %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     #make these columns character vectors
@@ -411,22 +412,22 @@ if(nrow(PHL_data) > 0) {
 ###################################################################################
 
 TU_data <- PHL_fp %>%
-  lapply(function(x) read_excel_safely(x, "Temple")) %>%
-  lapply(function(x) mutate(x, SPECIMEN_NUMBER = as.character(SPECIMEN_NUMBER))) %>%
+  lapply(function(x) read_excel_safely(x, "Temple") %>%
+           mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens", "", x),
+                  PHL_sample_received_date = as.Date(PHL_sample_received_date, format = "%d%B%y"),
+                  SPECIMEN_NUMBER = as.character(SPECIMEN_NUMBER))) %>%
   bind_rows()
 
-if(ncol(TU_data) == 2) {
+if(ncol(TU_data) == 3) {
 
-  TU_data <- PHL_fp %>%
-    lapply(function(x) read_excel_safely(x, "Temple")) %>%
-    bind_rows() %>%
+  TU_data <- TU_data
     rename(sample_name = "SPECIMEN_NUMBER", CT = "ct value") %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     mutate(sample_name = as.character(sample_name),
            sample_collected_by = "Temple University")
 
-} else if(ncol(TU_data) > 2) {
+} else if(ncol(TU_data) > 3) {
 
   TU_data <- TU_data %>%
     rename(sample_name = "SPECIMEN_NUMBER",
@@ -434,7 +435,8 @@ if(ncol(TU_data) == 2) {
            CT = "ct value", gender = "GENDER") %>%
     mutate(sample_collection_date = as.Date(sample_collection_date, format = "%m/%d/%Y"),
            sample_collected_by = "Temple University") %>%
-    select(any_of(phi_info), sample_collection_date, sample_collected_by, CT, age, gender) %>%
+    select(any_of(phi_info), sample_collection_date, sample_collected_by, PHL_sample_received_date,
+           CT, age, gender) %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     #make these columns character vectors
@@ -508,7 +510,9 @@ for(sheet_name in other_sheets) {
   possible_ct_value <- "ct_value"
 
   other_sheet <- PHL_fp %>%
-    lapply(function(x) read_excel_safely(x, sheet_name)) %>%
+    lapply(function(x) read_excel_safely(x, sheet_name) %>%
+             mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens", "", x),
+                    PHL_sample_received_date = as.Date(PHL_sample_received_date, format = "%d%B%y"))) %>%
     bind_rows() %>%
     rename_at(vars(contains(possible_sample_names)),
               ~gsub(possible_sample_names, "sample_name", ., ignore.case = TRUE)) %>%
@@ -606,8 +610,7 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^NC-" = "Water control",
                        "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
                        "^PC[0-9]*$" = "Mock DNA positive control",
-                       "^[A-Z0-9][0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
-                       "^WW-" = "Wastewater")
+                       "^[A-Z0-9][0-9]*$" = "Nasal swab") #allow the Temple specimen IDs to be any number, once it passes 9
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
@@ -618,18 +621,13 @@ metadata_sheet <- metadata_sheet %>%
                                          grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ "Philadelphia Department of Public Health",
                                          TRUE ~ NA)) %>%
   mutate(PHL_sample_received_date = case_when(!(is.na(PHL_sample_received_date) | as.character(PHL_sample_received_date) == "") ~ as.Date(PHL_sample_received_date),
-                                              #if it's a wastewater sample without a date, throw an error
-                                              sample_type == "Wastewater" ~ NA,
-                                              #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet
-                                              TRUE ~ as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1)) %>%
+                                              #if it's a control, use Tuesday of the sequencing week if no date specified
+                                              grepl("control$", sample_type) ~ as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1,
+                                              TRUE ~ NA)) %>%
   mutate(sample_collection_date = case_when(!(is.na(sample_collection_date) | as.character(sample_collection_date) == "") ~ as.Date(sample_collection_date),
-                                            #if it's a wastewater sample without a date, use the PHL sample received date
-                                            sample_type == "Wastewater" ~ PHL_sample_received_date,
                                             TRUE ~ NA)) %>%
   mutate(organism = case_when(!(is.na(organism) | organism == "") ~ organism,
                               sample_type == "Nasal swab" ~ "Severe acute respiratory syndrome coronavirus 2",
-                              #WW sample has to be listed as metagenome even if targeted sequencing was used
-                              sample_type == "Wastewater" ~ "Wastewater metagenome",
                               !is.na(sample_type) ~ sample_type,
                               TRUE ~ NA)) %>%
   mutate(host_scientific_name = case_when(!(is.na(host_scientific_name) | host_scientific_name == "") ~ host_scientific_name,
@@ -642,7 +640,6 @@ metadata_sheet <- metadata_sheet %>%
                                   TRUE ~ NA)) %>%
   mutate(isolation_source = case_when(!(is.na(isolation_source) | isolation_source == "") ~ isolation_source,
                                       sample_type == "Nasal swab" ~ "Clinical",
-                                      sample_type == "Wastewater" ~ "Wastewater",
                                       grepl("control$", sample_type) ~ "Environmental",
                                       grepl("test", sample_type, ignore.case = TRUE) ~ "Test sample",
                                       TRUE ~ NA)) %>%
@@ -669,8 +666,7 @@ if(!grepl("Nasal swab|Testing sample type", main_sample_type)) {
 }
 
 sample_type_acronym <- case_when(main_sample_type == "Testing sample type" ~ "Test",
-                                 main_sample_type == "Nasal swab" ~ "NS",
-                                 main_sample_type == "Wastewater" ~ "WW")
+                                 main_sample_type == "Nasal swab" ~ "NS")
 
 if(is.na(sample_type_acronym)) {
   stop(simpleError("There's a new or misformatted sample type in the metadata sheet!"))
