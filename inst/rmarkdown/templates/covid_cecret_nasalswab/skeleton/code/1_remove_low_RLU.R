@@ -142,10 +142,13 @@ MEO_samples <- harvest_data %>%
 PHL_all_fp <- list.files(here("metadata", "extra_metadata"), pattern = "PHLspecimens.*.xlsx", full.names = TRUE)
 PHL_fp <- PHL_all_fp[!grepl("_filtered.xlsx$", PHL_all_fp)]
 
-PHL_data <- lapply(PHL_fp, read_excel_safely, sheet = "PHL", skip_row = 1) %>%
+PHL_data <- PHL_fp %>%
+  lapply(function(x) read_excel_safely(x, sheet = "PHL", skip_row = 1) %>%
+           #have to use cbind here to add new column because sometimes the sheet doesn't exist, therefore giving a null object
+           cbind(filename = x)) %>%
   do.call(rbind, .)
 
-if(is.null(PHL_data)) {
+if(ncol(PHL_data) == 1) {
   PHL_data <- data.frame(SPECIMEN_NUMBER = "", RLU = "")
 } else {
   PHL_data <- PHL_data %>%
@@ -154,7 +157,7 @@ if(is.null(PHL_data)) {
     merge(RLU_data, by = c("SPECIMEN_NUMBER", "BIRTH_DATE", "SPECIMEN_DATE"), all.x = TRUE) %>%
     select(SPECIMEN_DATE, FacCode, agecoll, case_id, SPECIMEN_NUMBER,
            FIRST_NAME, LAST_NAME, BIRTH_DATE, age, zip_char, GENDER,
-           breakthrough_case, death, hospitalized, outbreak, priority, RLU) %>%
+           breakthrough_case, death, hospitalized, outbreak, priority, RLU, filename) %>%
     mutate(SPECIMEN_DATE = format(SPECIMEN_DATE, "%m/%d/%Y"), BIRTH_DATE = format(BIRTH_DATE, "%m/%d/%Y"))
 }
 
@@ -226,10 +229,12 @@ if(length(epi_sample_not_found) > 0) {
 potential_ct_col_names <- c("ct value", "CT value", "CT values", "CTvalue", "CTvalues",
                             "ct values", "ctvalue", "ctvalues")
 
-TU_data <- lapply(PHL_fp, read_excel_safely, sheet = "Temple") %>%
+TU_data <- PHL_fp %>%
+  lapply(function(x) read_excel_safely(x, sheet = "Temple") %>%
+           cbind(filename = x)) %>%
   do.call(rbind, .)
 
-if(is.null(TU_data)) {
+if(ncol(TU_data) == 1) {
   TU_data <- data.frame(SPECIMEN_NUMBER = "") %>%
     mutate(`ct value` = "")
 } else {
@@ -286,7 +291,8 @@ for(sheet_name in other_sheets) {
   possible_sample_names <- "SPECIMEN_NUMBER"
 
   other_data <- PHL_fp %>%
-    lapply(function(x) read_excel_safely(x, sheet_name)) %>%
+    lapply(function(x) read_excel_safely(x, sheet_name) %>%
+             cbind(filename = x)) %>%
     bind_rows() %>%
     mutate_at(vars(contains(possible_sample_names)), ~gsub("\\s", "", .)) %>%
     as.data.frame()
@@ -307,7 +313,17 @@ for(sheet_name in other_sheets) {
 
 }
 
-write.xlsx(excel_data, file = gsub(".xlsx$", "_filtered.xlsx", PHL_fp[1]))
+for(file in PHL_fp) {
+
+  filtered_fp <- gsub(".xlsx$", "_filtered.xlsx", file)
+
+  filtered_excel <- excel_data %>%
+    lapply(function(y) filter(y, if_any(matches("filename"), ~.x == file)) %>%
+             select(-one_of("filename")))
+
+  message(paste("Writing to"), filtered_fp)
+  write.xlsx(filtered_excel, file = filtered_fp)
+}
 
 #########################################################################################
 # Make a preliminary platemap for scientists with environmental samples and rerun samples
