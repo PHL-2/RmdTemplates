@@ -304,7 +304,7 @@ if(!read_length %in% c(76, 151)) {
 index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
 
 if(length(index_sheet_fp) == 0) {
-  shared_index_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "nasal_swabs", str_sub(sequencing_date, 1, 4)),
+  shared_index_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "wastewater", str_sub(sequencing_date, 1, 4)),
                                     pattern = "sequencing_metadata_sheet", full.names = TRUE))
 
   if(is.na(shared_index_fp)) {
