@@ -420,7 +420,7 @@ TU_data <- PHL_fp %>%
 
 if(ncol(TU_data) == 3) {
 
-  TU_data <- TU_data
+  TU_data <- TU_data %>%
     rename(sample_name = "SPECIMEN_NUMBER", CT = "ct value") %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
