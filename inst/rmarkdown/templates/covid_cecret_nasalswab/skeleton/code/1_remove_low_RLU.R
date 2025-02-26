@@ -319,7 +319,7 @@ for(file in PHL_fp) {
 
   filtered_excel <- excel_data %>%
     lapply(function(y) filter(y, if_any(matches("filename"), ~.x == file)) %>%
-             select(-one_of("filename")))
+             select(-any_of("filename")))
 
   message(paste("Writing to"), filtered_fp)
   write.xlsx(filtered_excel, file = filtered_fp)
