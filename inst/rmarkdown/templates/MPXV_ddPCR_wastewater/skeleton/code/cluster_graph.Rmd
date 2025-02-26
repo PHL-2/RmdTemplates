@@ -1,0 +1,16 @@
+## Amplitude Data
+
+```{r}
+
+clusterAssignment %>%
+  #left_join(clusterAssignment, by = c("Well", "type", "process", "Extra", "Sample_received", "channel", "SampleType", "cluster")) %>%
+  #group_by(Well) %>%
+  #mutate(droplet_num = row_number()) %>%
+  #filter(channel == "NVO") %>%
+  ggplot(aes(y = amplitude, x = channel, fill = clusterAssignment, color = clusterAssignment)) +
+  geom_boxplot() +
+  #geom_point(position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(plate_col ~ plate_row, scales = "free") +
+  theme_light()
+
+```

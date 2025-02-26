@@ -6,21 +6,13 @@
 
 dat_fp = "//Volumes/Export"
 
-##### Target names #####
-
-## Targets
-targetsInfo = c("NVO", "MPox")
-
-## Internal control (IC) name
-icInfo = "MHV"
-
 ###### Volumes used in experiment ######
 
 ## Wastewater volume (mL)
 ww_vol_mL = 40
 
-## IC added to waste water (uL)
-ic_ww_input_uL = 8
+## MHV added to waste water (uL)
+mhv_ww_input_uL = 8
 
 ## Control matrix volume (mL)
 control_vol_mL = 20
@@ -29,17 +21,17 @@ control_vol_mL = 20
 control_matrix_info = "202212XX Wastewater"
 
 ## MHV added to control matrix (uL)
-ic_to_control_uL = 2
+mhv_to_control_uL = 2
 
 ## Sc2 added to control matrix (uL)
-posCtrl_to_control_uL = 40
+sc2_to_control_uL = 40
 
 
 
 #### Concentration step ####
 
 ## Concentration: Sample volume used (uL)
-init_concentration_vol_uL = 9600
+init_concentration_vol_uL = 34375
 
 ## Concentration: Elution volume (uL)
 end_concentration_vol_uL = 400
@@ -74,4 +66,17 @@ SC2_stock_name = "ZeptoSC2"
 SC2_concentration_copiesuL = 739.3
 
 
+## Filepath to wastewater metadata in aux folder
+wwMeta_fp = file.path(dirname(here::here()), "aux_files")
+
+## Filepath to wastewater metadata in aux folder
+ww_site_meta_fp = list.files(path = file.path(dirname(here()), "aux_files"),
+                             pattern = "wastewater_specific_metadata.csv",
+                             full.names = TRUE,
+                             recursive = TRUE)
+
+ww_nwss_meta_fp = list.files(path = file.path(dirname(here()), "aux_files"),
+                             pattern = "wastewater_data_submission_metadata.csv",
+                             full.names = TRUE,
+                             recursive = TRUE)
 
