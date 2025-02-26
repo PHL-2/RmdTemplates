@@ -653,11 +653,21 @@ metadata_sheet <- metadata_sheet %>%
 
 main_sample_type <- unique(metadata_sheet$sample_type)[!grepl("control", unique(metadata_sheet$sample_type))]
 
+if(any(is.na(main_sample_type))) {
+  message("")
+  stop(simpleError(paste0("This metadata sheet has NA in the sample type column!\n",
+                          "Probably something went wrong with the merge of the index sheet and the epi's metadata sheet\n",
+                          "Here are the samples with NA as its sample type:\n",
+                          paste0(metadata_sheet[is.na(metadata_sheet$sample_type), "sample_name"], collapse = ", "),
+                          "\n\nIf these samples are environmental samples, make sure the [YYYY-MM-DD]_environmental_samples.csv file\n",
+                          "is present in the metadata/extra_metadata folder. If not, just grab the appropriate one from a previous run")))
+}
+
 if(length(main_sample_type) > 1) {
+  message("")
   stop(simpleError(paste0("This metadata sheet has more than one non-control sample type!\n",
                           "You may need to separate the metadata sheet and use the appropriate workflow for these samples types:\n",
                           paste0(main_sample_type, collapse = ", "))))
-  sample_type_acronym <- "Mix"
 }
 
 if(!grepl("Nasal swab|Testing sample type", main_sample_type)) {
