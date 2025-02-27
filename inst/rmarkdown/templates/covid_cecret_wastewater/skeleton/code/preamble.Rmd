@@ -1330,6 +1330,8 @@ names(ann_geom_values[["variants"]]) <- c(NA, "Unassigned", names(ann_geom_value
 
 ```{r save coverage png, eval=import_data}
 
+dir.create("data", "figures", recursive = TRUE)
+
 SC2_annotation <- data.frame(ORF1a = "266-13468",
                              ORF1b = "13468-21555",
                              S = "21563-25384",
