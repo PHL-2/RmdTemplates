@@ -74,7 +74,7 @@ s %>%
 
 ```
 
-\newpage
+\blandscape
 
 <!-- QC section -->
 
@@ -91,7 +91,7 @@ Run error rate `r unique(s_toPlot$run_error)*100`%
 
 ### Number of reads per sample type
 
-```{r reads per sample type}
+```{r reads per sample type, fig.height=4, fig.width=10}
 
 total_count <- s %>%
   filter(!grepl("Merged", sample_id)) %>%
@@ -111,18 +111,16 @@ s %>%
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     theme(panel.grid = element_blank(),
-          axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)) +
+          axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5),
+          legend.key.size = unit(1,"line")) +
     labs(
       title = paste0("Total number of reads: ", round(total_count/1000000, digits = 2), "M"),
       y="Read counts",
       x="",
-      fill = "Samples and Sites",
-      size = "Samples and Sites"
+      fill = "Sample Type"
     )
 
 ```
-
-\blandscape
 
 ### Number of reads per control
 
@@ -187,7 +185,7 @@ s %>%
     labs(
       x="",
       y="",
-      fill = "Samples and Sites"
+      fill = "Sample Type"
     )
   }
 
@@ -219,7 +217,9 @@ fastqc %>%
     geom_line() +
     geom_point() +
     theme_bw() + 
-    labs(x='Position in sequence read', y='Average quality score per sample type', color = 'Samples and Sites')
+    labs(x="Position in sequence read",
+         y="Average quality score per sample type",
+         color = "Sample Type")
   }
 
 ```
@@ -274,7 +274,7 @@ s %>%
     theme_bw() + 
     scale_y_continuous(trans = "log10") +
     guides(fill = guide_legend(override.aes = list(shape = 21))) +
-    labs(y = "Read Counts", x = "N2 cp/uL", fill = "Site")
+    labs(y = "Read Counts", x = "N2 cp/uL", fill = "Sample Type")
   }
 
 ```
@@ -292,7 +292,7 @@ s %>%
     theme_bw() + 
     scale_y_continuous(labels = percent) +
     guides(fill = guide_legend(override.aes = list(shape = 21))) +
-    labs(y = "Percentage of genome\nwith >= 10X coverage", x = "N2 cp/uL", fill = "Site")
+    labs(y = "Percentage of genome\nwith >= 10X coverage", x = "N2 cp/uL", fill = "Sample Type")
   }
 
 ```
@@ -459,7 +459,7 @@ top_taxon <- rbind(abund_taxon, sars_taxon) %>%
   as.character() %>%
   unique()
 
-k2_axis_size <- 11 - length(top_taxon)/10
+k2_axis_size <- 11 - length(top_taxon)/4
 
 k2 %>%
   merge(select(s, sample_id), by = "sample_id", all.y = TRUE) %>%
@@ -500,7 +500,7 @@ k2 %>%
          title = "Only the top 3 most abundant taxa within each sample are shown")
     } /
   sample_group_legend +
-    theme(axis.text.x.bottom = element_text(size = convert_sample_size_2_font_size(nrow(s), max_font = 20)))
+    theme(axis.text.x.bottom = element_text(size = convert_sample_size_2_font_size(nrow(s)/2, max_font = 10)))
 
 ```
 
