@@ -724,10 +724,10 @@ s <- s_meta %>%
          sample_group = case_when(grepl("^Undetermined$", sample_id) ~ "Unassigned reads",
                                   TRUE ~ sample_group),
          sample_group = factor(sample_group, levels = unique(sample_group[order(ww_group)])),
-         #order the sample_id by sample type then by plate position
-         sample_id = factor(sample_id, levels = unique(sample_id[str_order(as.numeric(sample_group), decreasing = FALSE, numeric = TRUE)])),
          date_facet = ifelse(grepl("Unassigned reads|control", ww_group), "Control", as.character(sample_collect_date)),
-         date_facet = factor(date_facet, levels = c("Control", sort(unique(date_facet[!grepl("Control", date_facet)]))))) %>%
+         date_facet = factor(date_facet, levels = c("Control", sort(unique(date_facet[!grepl("Control", date_facet)])))),
+         #order the sample_id by sample type then by plate position
+         sample_id = factor(sample_id, levels = unique(sample_id[str_order(paste0(as.numeric(sample_group), "-", grepl("Merged", sample_id), "-", sample_collect_date), decreasing = FALSE, numeric = TRUE)]))) %>%
   arrange(sample_id) %>%
   droplevels() %>%
   filter(!is.na(sample_group))
