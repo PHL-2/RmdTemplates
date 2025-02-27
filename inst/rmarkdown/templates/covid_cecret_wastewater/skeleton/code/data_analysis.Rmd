@@ -1132,7 +1132,7 @@ Number of samples to upload to GISAID database: `r nrow(all_reported_samples[all
 Number of samples to upload to BioSample: `r nrow(all_reported_samples[all_reported_samples$db == "biosample", "sample_name"])` \newline
 Number of samples to upload to SRA: `r nrow(all_reported_samples[all_reported_samples$db == "sra", "sample_name"])` \newline
 
-`r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge These non-control samples that didn't go through the pipeline correctly!! Try rerunning them through the pipeline again!}")}`
+`r if(length(rerun_samples) > 0) { paste0("\\textcolor{orange}{Some non-control samples didn't have results from the pipeline. Possible that these samples also had low reads}")}`
 
 `r if(has_pos_ctrl == 0 | is.na(has_pos_ctrl)){paste0("\\textcolor{red}{\\huge None of the spiked positive controls are the A lineage!}")}`
 
@@ -1149,7 +1149,7 @@ s %>%
   { if(use_kable) 
     mutate(., SampleID = gsub("_", "-", sample_id)) %>%
     mutate(SampleID = cell_spec(SampleID, "latex",
-                               color = case_when((grepl(paste0(rerun_samples, collapse = "|"), sample_id) & length(rerun_samples) > 0) ~ "yellow",
+                               color = case_when((grepl(paste0(rerun_samples, collapse = "|"), sample_id) & length(rerun_samples) > 0) ~ "#FFD700",
                                                  ((grepl("control|Unassigned reads", `sample/site`)) | (!(sample_id %in% s_toPlot$sample_id))) ~ "red",
                                                  TRUE ~ "black"))) %>%
       select(SampleID,
