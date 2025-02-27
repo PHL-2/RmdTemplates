@@ -1029,8 +1029,8 @@ freyja_average %>%
     mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
       mutate(`Sample group` = cell_spec(`Sample group`, "latex",
                                         color = case_when((grepl("Merged", `Sample group`) &
-                                                             !grepl("^A$|^B$", Lineage) &
-                                                             good_cov) ~ "#4CBB17",
+                                                           !grepl("^A$|^B$|^Other lineages$", Lineage) &
+                                                           good_cov) ~ "#4CBB17",
                                                           TRUE ~ "black"))) %>%
       select(-good_cov) %>%
       select_all(~gsub(" ", "\n", .)) %>%
