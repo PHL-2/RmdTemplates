@@ -263,7 +263,7 @@ if(!is_nf_concat_samplesheet_empty) {
                     screen_log_fp = tmp_screen_fp,
                     command2run = paste("cd", paste0(tmp_screen_fp, ";"),
                                         "nextflow run concat_fastq.nf",
-                                        "-profile Bfx_profile_batch",
+                                        "-profile", cecret_profile,
                                         "-bucket-dir", paste0(s3_nextflow_work_bucket, "/concat_fastq_", sample_type_acronym, "_", sequencing_date),
                                         "-resume",
                                         "--concat_samplesheet", paste0(bclconvert_output_path, "/nf_samplesheets/", basename(nf_concat_samplesheet_fp)),
