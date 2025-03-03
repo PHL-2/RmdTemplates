@@ -16,6 +16,7 @@ sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
 # temporary directory to hold the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl"
+local_tmp_fp <- "~/tmp_data_transfer"
 
 if(sequencing_date == "") {
   stop (simpleError(paste0("Please fill in the correct sequencing date or short project description in ", here("code"), "/3_archive_upload_run.R")))
@@ -81,6 +82,8 @@ s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 tmp_screen_fp <- paste("~", ".tmp_screen", sequencer_type, "NS_SC2", basename(here()), sep = "/")
 
 session_suffix <- tolower(paste(sequencer_type, "ns-sc2", basename(here()), sep = "-"))
+
+ec2_tmp_session_dir <- paste0(ec2_tmp_fp, "/", session_suffix)
 
 tar_command_function <- function(input_fp, output_fp = input_fp, bars = 99, use_checkpoint = TRUE) {
 
@@ -155,7 +158,7 @@ if(run_uploaded_2_basespace) {
     select(Name) %>%
     pull()
 
-  temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", sequencing_run)
+  temporary_seq_run_fp <- paste(ec2_tmp_session_dir, sequencing_run, sep = "/")
 
 }
 
@@ -179,9 +182,9 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
                     ec2_login = ec2_hostname,
                     screen_session_name = paste("sequencing-checksum", session_suffix, sep = "-"),
                     screen_log_fp = tmp_screen_fp,
-                    command2run = paste0("cd ", ec2_tmp_fp, ";",
-                                         "md5sum ", sequencing_run, ".tar.gz > ", ec2_tmp_fp, "/", sequencing_run, ".md5;",
-                                         "cat ", ec2_tmp_fp, "/", sequencing_run, ".md5")
+                    command2run = paste0("cd ", ec2_tmp_session_dir, ";",
+                                         "md5sum ", sequencing_run, ".tar.gz > ", temporary_seq_run_fp, ".md5;",
+                                         "cat ", temporary_seq_run_fp, ".md5")
   )
 
   check_screen_job(message2display = "Checking md5 job",
@@ -191,7 +194,7 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
 
 } else {
 
-  dir.create(ec2_tmp_fp, recursive = TRUE)
+  dir.create(local_tmp_fp, recursive = TRUE)
 
   # Run the following commands if BaseSpace is available but not SSH (or if the run is MiSeq)
   if(sequencer_type == "MiSeq" | run_uploaded_2_basespace) {
@@ -206,16 +209,16 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
 
       scp_command <- paste("scp -r",
                            paste0(miseq_hostname, ":", intended_miseq_folder_regex, "/"),
-                           paste0(ec2_tmp_fp, ";"),
+                           paste0(local_tmp_fp, ";"),
                            "sleep 2")
 
       run_in_terminal(scp_command)
 
-      sequencing_run <- data.frame(run_folders = list.files(ec2_tmp_fp)) %>%
+      sequencing_run <- data.frame(run_folders = list.files(local_tmp_fp)) %>%
         filter(grepl(paste0(intended_miseq_folder_regex, "$"), run_folders)) %>%
         pull()
 
-      run_folder <- paste0(ec2_tmp_fp, "/", sequencing_run)
+      run_folder <- paste0(local_tmp_fp, "/", sequencing_run)
     }
 
     #tar the run folder
@@ -242,12 +245,12 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
 
     scp_command <- paste("scp -r",
                          paste0(nextseq_hostname, ":", nextseq_run_fp, sequencing_run, "/", sequencing_run, ".tar.gz"),
-                         paste0(ec2_tmp_fp, ";"),
+                         paste0(local_tmp_fp, ";"),
                          "sleep 2")
 
     run_in_terminal(scp_command)
 
-    run_folder <- paste0(ec2_tmp_fp, "/", sequencing_run)
+    run_folder <- paste0(local_tmp_fp, "/", sequencing_run)
 
   }
   rstudioapi::executeCommand("activateConsole")
@@ -273,7 +276,7 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
   if(length(s3_cp_md5) == 0 | length(s3_cp_run_tarball) == 0) {
 
     mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
-                                   shQuote(paste("mkdir -p", ec2_tmp_fp, "/", session_suffix))),
+                                   shQuote(paste0("mkdir -p ", ec2_tmp_session_dir))),
                           stdout = TRUE, stderr = TRUE)
 
     if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
@@ -281,11 +284,11 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
     }
 
     run_in_terminal(paste("scp", md5_fp,
-                          paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix))
+                          paste0(ec2_hostname, ":", ec2_tmp_session_dir))
     )
 
     run_in_terminal(paste("scp", paste0(run_folder, ".tar.gz"),
-                          paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix))
+                          paste0(ec2_hostname, ":", ec2_tmp_session_dir))
     )
   }
 }
@@ -314,12 +317,20 @@ s3_cp_nf_demux_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_demux_samples
 
 if(length(s3_cp_samplesheet) == 0 | length(s3_cp_nf_demux_samplesheet) == 0) {
 
+  mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
+                                 shQuote(paste0("mkdir -p ", ec2_tmp_session_dir))),
+                        stdout = TRUE, stderr = TRUE)
+
+  if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
+    stop(simpleError("Failed to make temporary directory in EC2 instance"))
+  }
+
   run_in_terminal(paste("scp", sample_sheet_fp,
-                        paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix))
+                        paste0(ec2_hostname, ":", ec2_tmp_session_dir))
   )
 
   run_in_terminal(paste("scp", nf_demux_samplesheet_fp,
-                        paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix))
+                        paste0(ec2_hostname, ":", ec2_tmp_session_dir))
   )
 }
 
@@ -330,7 +341,7 @@ if(have_AWS_EC2_SSH_access) {
                     screen_session_name = paste("upload-run", session_suffix, sep = "-"),
                     screen_log_fp = tmp_screen_fp,
                     command2run = paste("aws s3 cp",
-                                        paste0(ec2_tmp_fp, "/", session_suffix),
+                                        ec2_tmp_session_dir,
                                         s3_run_bucket_fp,
                                         "--recursive",
                                         "--exclude '*'",
