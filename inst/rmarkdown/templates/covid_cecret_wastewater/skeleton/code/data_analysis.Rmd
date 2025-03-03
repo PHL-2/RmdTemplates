@@ -74,7 +74,7 @@ s %>%
 
 ```
 
-\newpage
+\blandscape
 
 <!-- QC section -->
 
@@ -91,7 +91,7 @@ Run error rate `r unique(s_toPlot$run_error)*100`%
 
 ### Number of reads per sample type
 
-```{r reads per sample type}
+```{r reads per sample type, fig.height=4, fig.width=10}
 
 total_count <- s %>%
   filter(!grepl("Merged", sample_id)) %>%
@@ -111,18 +111,16 @@ s %>%
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(s$ww_group), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     theme(panel.grid = element_blank(),
-          axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)) +
+          axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5),
+          legend.key.size = unit(1,"line")) +
     labs(
       title = paste0("Total number of reads: ", round(total_count/1000000, digits = 2), "M"),
       y="Read counts",
       x="",
-      fill = "Samples and Sites",
-      size = "Samples and Sites"
+      fill = "Sample Type"
     )
 
 ```
-
-\blandscape
 
 ### Number of reads per control
 
@@ -187,7 +185,7 @@ s %>%
     labs(
       x="",
       y="",
-      fill = "Samples and Sites"
+      fill = "Sample Type"
     )
   }
 
@@ -219,7 +217,9 @@ fastqc %>%
     geom_line() +
     geom_point() +
     theme_bw() + 
-    labs(x='Position in sequence read', y='Average quality score per sample type', color = 'Samples and Sites')
+    labs(x="Position in sequence read",
+         y="Average quality score per sample type",
+         color = "Sample Type")
   }
 
 ```
@@ -274,7 +274,7 @@ s %>%
     theme_bw() + 
     scale_y_continuous(trans = "log10") +
     guides(fill = guide_legend(override.aes = list(shape = 21))) +
-    labs(y = "Read Counts", x = "N2 cp/uL", fill = "Site")
+    labs(y = "Read Counts", x = "N2 cp/uL", fill = "Sample Type")
   }
 
 ```
@@ -292,7 +292,7 @@ s %>%
     theme_bw() + 
     scale_y_continuous(labels = percent) +
     guides(fill = guide_legend(override.aes = list(shape = 21))) +
-    labs(y = "Percentage of genome\nwith >= 10X coverage", x = "N2 cp/uL", fill = "Site")
+    labs(y = "Percentage of genome\nwith >= 10X coverage", x = "N2 cp/uL", fill = "Sample Type")
   }
 
 ```
@@ -459,7 +459,7 @@ top_taxon <- rbind(abund_taxon, sars_taxon) %>%
   as.character() %>%
   unique()
 
-k2_axis_size <- 11 - length(top_taxon)/10
+k2_axis_size <- 11 - length(top_taxon)/4
 
 k2 %>%
   merge(select(s, sample_id), by = "sample_id", all.y = TRUE) %>%
@@ -500,7 +500,7 @@ k2 %>%
          title = "Only the top 3 most abundant taxa within each sample are shown")
     } /
   sample_group_legend +
-    theme(axis.text.x.bottom = element_text(size = convert_sample_size_2_font_size(nrow(s), max_font = 20)))
+    theme(axis.text.x.bottom = element_text(size = convert_sample_size_2_font_size(nrow(s)/2, max_font = 10)))
 
 ```
 
@@ -1013,23 +1013,24 @@ freyja_average %>%
             total_sd = sum(total_sd)) %>%
   ungroup() %>%
   filter(avg_rel_abund >= 0.01) %>%
-  mutate(relative_abundance = ifelse(!is.na(total_sd),
-                                  paste0(round(avg_rel_abund*100, 2), "% +/- ",
-                                         round(total_sd*100, 2), "%"),
-                                  paste0(round(avg_rel_abund*100, 2), "%")),
+  left_join(select(s_meta, sample_group, sample_collect_date, `N2_gc/L`),
+            by = c("sample_group", "sample_collect_date")) %>%
+  mutate(relative_abundance = paste0(round(avg_rel_abund*100, 2), "%"),
+         isMerged = gsub(" .*", "", isMerged),
+         sample_group = factor(sample_group, levels = levels(freyja_average$sample_group)),
          sample_group_label = paste0(sample_collect_date, " ", sample_group, "\n<", isMerged, ">"),
          good_cov = mean_cov >= 0.6,
          mean_cov = paste0(round(mean_cov*100, 2), "%")) %>%
   arrange(sample_collect_date, sample_group, sample_group_label, CDC_lineages) %>%
   select(`Sample group` = sample_group_label, `Mean coverage` = "mean_cov",
-         Lineage = "CDC_lineages", `Relative abundance` = "relative_abundance", good_cov) %>%
+         Lineage = "CDC_lineages", `Relative abundance` = "relative_abundance", `N2_gc/L`, good_cov) %>%
   unique() %>%
   { if(use_kable)
     mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
       mutate(`Sample group` = cell_spec(`Sample group`, "latex",
-                                        color = case_when((grepl("Merged sample", `Sample group`) &
-                                                             !grepl("^A$|^B$", Lineage) &
-                                                             good_cov) ~ "#4CBB17",
+                                        color = case_when((grepl("Merged", `Sample group`) &
+                                                           !grepl("^A$|^B$|^Other lineages$", Lineage) &
+                                                           good_cov) ~ "#4CBB17",
                                                           TRUE ~ "black"))) %>%
       select(-good_cov) %>%
       select_all(~gsub(" ", "\n", .)) %>%
@@ -1079,15 +1080,16 @@ freyja_average %>%
   filter(lineages != "Unresolved",
          CDC_lineages == "Other lineages",
          avg_rel_abund >= 0.01) %>%
-  mutate(relative_abundance = ifelse(!is.na(total_sd),
-                                  paste0(round(avg_rel_abund*100, 2), "% +/- ",
-                                         round(total_sd*100, 2), "%"),
-                                  paste0(round(avg_rel_abund*100, 2), "%")),
+  left_join(select(s_meta, sample_group, sample_collect_date, `N2_gc/L`),
+            by = c("sample_group", "sample_collect_date")) %>%
+  mutate(relative_abundance = paste0(round(avg_rel_abund*100, 2), "%"),
+         isMerged = gsub(" .*", "", isMerged),
+         sample_group = factor(sample_group, levels = levels(freyja_average$sample_group)),
          sample_group_label = paste0(sample_collect_date, " ", sample_group, " <", isMerged, ">"),
          mean_cov = paste0(round(mean_cov*100, 2), "%")) %>%
   arrange(sample_collect_date, sample_group, sample_group_label, lineages) %>%
   select(`Sample group` = sample_group_label, `Mean coverage` = "mean_cov",
-         Lineage = "lineages", `Relative abundance` = "relative_abundance") %>%
+         Lineage = "lineages", `Relative abundance` = "relative_abundance", `N2_gc/L`) %>%
   unique() %>%
   { if(use_kable)
     mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
@@ -1130,7 +1132,7 @@ Number of samples to upload to GISAID database: `r nrow(all_reported_samples[all
 Number of samples to upload to BioSample: `r nrow(all_reported_samples[all_reported_samples$db == "biosample", "sample_name"])` \newline
 Number of samples to upload to SRA: `r nrow(all_reported_samples[all_reported_samples$db == "sra", "sample_name"])` \newline
 
-`r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge These non-control samples that didn't go through the pipeline correctly!! Try rerunning them through the pipeline again!}")}`
+`r if(length(rerun_samples) > 0) { paste0("\\textcolor{orange}{Some non-control samples didn't have results from the pipeline. Possible that these samples also had low reads}")}`
 
 `r if(has_pos_ctrl == 0 | is.na(has_pos_ctrl)){paste0("\\textcolor{red}{\\huge None of the spiked positive controls are the A lineage!}")}`
 
@@ -1147,7 +1149,7 @@ s %>%
   { if(use_kable) 
     mutate(., SampleID = gsub("_", "-", sample_id)) %>%
     mutate(SampleID = cell_spec(SampleID, "latex",
-                               color = case_when((grepl(paste0(rerun_samples, collapse = "|"), sample_id) & length(rerun_samples) > 0) ~ "yellow",
+                               color = case_when((grepl(paste0(rerun_samples, collapse = "|"), sample_id) & length(rerun_samples) > 0) ~ "#FFD700",
                                                  ((grepl("control|Unassigned reads", `sample/site`)) | (!(sample_id %in% s_toPlot$sample_id))) ~ "red",
                                                  TRUE ~ "black"))) %>%
       select(SampleID,

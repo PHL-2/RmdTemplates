@@ -192,7 +192,7 @@ if(samplesheet_exists) {
 
   if(run_uploaded_2_basespace) {
 
-    temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", sequencing_run, "/")
+    temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/", sequencing_run, "/")
     bs_dl_cmd <- paste("bs download runs --id", bs_run_id, "--output", temporary_seq_run_fp)
 
     if(have_AWS_EC2_SSH_access) {
@@ -297,11 +297,32 @@ if(!read_length %in% c(76, 151)) {
   stop(simpleError("The read length is not 76 or 151 bp. Check the sample sheet from the sequencing run folder"))
 }
 
-#####################
-# Load metadata sheet
-#####################
+##################
+# Load index sheet
+##################
 
-metadata_input_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
+index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
+
+if(length(index_sheet_fp) == 0) {
+  shared_index_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "wastewater", str_sub(sequencing_date, 1, 4)),
+                                    pattern = "sequencing_metadata_sheet", full.names = TRUE))
+
+  if(is.na(shared_index_fp)) {
+    stop(simpleError("Files in the shared drive could not be found\nAre you connected to the shared drive?"))
+  }
+
+  #get date of index sheet
+  sheet_date <- as.Date(str_extract(shared_index_fp, "[0-9-]{8}"), tryFormats = c("%y%m%d", "%m%d%y", "%m-%d-%y"))
+
+  if(abs(as.Date(sequencing_date) - sheet_date) > 5) {
+    stop(simpleError(paste0("The latest index sheet found is on ", sheet_date,
+                            "\nThis date is more than 5 days from the date of this RStudio project",
+                            "\nSomething must be wrong")))
+  }
+
+  file.copy(shared_index_fp, here("metadata", "munge"))
+  index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
+}
 
 read_sheet <- function(fp, sheet_name) {
   tryCatch(
@@ -316,13 +337,13 @@ read_sheet <- function(fp, sheet_name) {
         mutate(plate_coord = gsub("^0", "", plate_coord))
     },
     error = function(e) {
-      stop (simpleError("The sample metadata file from the wet lab scientists may be missing or mis-formatted"))
+      stop (simpleError("The sample index file from the wet lab scientists may be missing or mis-formatted"))
     }
   )
 }
 
-index_sheet <- read_sheet(metadata_input_fp, "Index")
-sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
+index_sheet <- read_sheet(index_sheet_fp, "Index")
+sample_info_sheet <- read_sheet(index_sheet_fp, "Sample Info")
 
 #######################################################
 # Load the wastewater metadata sheet from the ddPCR run
@@ -527,11 +548,19 @@ metadata_sheet <- metadata_sheet %>%
 
 main_sample_type <- unique(metadata_sheet$sample_type)[!grepl("control", unique(metadata_sheet$sample_type))]
 
+if(any(is.na(main_sample_type))) {
+  message("")
+  stop(simpleError(paste0("This metadata sheet has NA in the sample type column!\n",
+                          "Probably something went wrong with the merge of the index sheet and the epi's metadata sheet\n",
+                          "Here are the samples with NA as its sample type:\n",
+                          paste0(metadata_sheet[is.na(metadata_sheet$sample_type), "sample_name"], collapse = ", "))))
+}
+
 if(length(main_sample_type) > 1) {
+  message("")
   stop(simpleError(paste0("This metadata sheet has more than one non-control sample type!\n",
                           "You may need to separate the metadata sheet and use the appropriate workflow for these samples types:\n",
                           paste0(main_sample_type, collapse = ", "))))
-  sample_type_acronym <- "Mix"
 }
 
 if(!grepl("Wastewater|Testing sample type", main_sample_type)) {
@@ -784,25 +813,17 @@ metadata_sheet %>%
   rbind(merged_samples_metadata_sheet) %>%
   write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")))
 
-if(samplesheet_exists) {
-  message("\n*****")
-  message("nf_concat_fastq_samplesheet.csv sheet not generated")
-  message("Delete the existing SampleSheet.csv or SampleSheet_v2.csv in the metadata/munge directory to regenerate")
-  message("*****")
-} else {
+bclconvert_output_final_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sequencing_run, sep = "/")
 
-  bclconvert_output_final_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sequencing_run, sep = "/")
-
-  #write the sample sheet for merging nextflow script
-  metadata_sheet %>%
-    filter(!sample_id %in% sample_w_empty_reads) %>%
-    select(fastq = sample_id, uniq_sample_name) %>%
-    mutate(fastq_1 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R1_001.fastq.gz"),
-           fastq_2 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R2_001.fastq.gz")) %>%
-    merge(select(merged_samples_metadata_sheet, sample_id, uniq_sample_name), by = "uniq_sample_name", all = TRUE) %>%
-    filter(!is.na(sample_id)) %>%
-    select(sample_id, fastq_1, fastq_2) %>%
-    write_csv(file = here("metadata", "munge",
-                          tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, "nf_concat_fastq_samplesheet.csv", sep = "_"))))
-
-}
+#write the sample sheet for merging nextflow script
+metadata_sheet %>%
+  filter(!sample_name %in% remove_sample_from_bcl_samplesheet) %>%
+  filter(!sample_id %in% sample_w_empty_reads) %>%
+  select(fastq = sample_id, uniq_sample_name) %>%
+  mutate(fastq_1 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R1_001.fastq.gz"),
+         fastq_2 = paste0(bclconvert_output_final_path, "/", fastq, "_S", row_number(), "_R2_001.fastq.gz")) %>%
+  merge(select(merged_samples_metadata_sheet, sample_id, uniq_sample_name), by = "uniq_sample_name", all = TRUE) %>%
+  filter(!is.na(sample_id)) %>%
+  select(sample_id, fastq_1, fastq_2) %>%
+  write_csv(file = here("metadata", "munge",
+                        tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, "nf_concat_fastq_samplesheet.csv", sep = "_"))))
