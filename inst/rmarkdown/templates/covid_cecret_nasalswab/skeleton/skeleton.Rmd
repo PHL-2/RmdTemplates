@@ -60,7 +60,7 @@ sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
 
 have_AWS_EC2_SSH_access <- TRUE
 
-remove_sample_from_samplesheets <- c("") #add sample names to remove from demultiplexing
+remove_sample_from_samplesheets <- c("") #add sample names (accessions) to remove from processing
 
 sample_w_empty_reads <- c("") #add sample ids that have empty fastq files
 

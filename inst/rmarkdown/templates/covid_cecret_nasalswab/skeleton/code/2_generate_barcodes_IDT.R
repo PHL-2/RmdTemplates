@@ -710,8 +710,10 @@ if(ncol(epi_sample_not_found > 0)) {
 
     message("\n*****")
     message("These samples were found in the epidemiologists metadata sheet but not in our sample sheet. Something might be wrong!")
-    message("Check email to see if these samples could not be located by the receiving department")
-    message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check:")
+    message("Check Teams/email to see if these samples were not found by the receiving department")
+    message("Otherwise, these samples may have had an issue during extraction")
+    message("If these samples are okay to be removed from the analysis, add them to remove_sample_from_samplesheets defined above and rerun this script")
+    message("Sample(s) in question:")
     message("*****")
 
     stop(simpleError(paste0(epi_sample_not_found, collapse = ", ")))
