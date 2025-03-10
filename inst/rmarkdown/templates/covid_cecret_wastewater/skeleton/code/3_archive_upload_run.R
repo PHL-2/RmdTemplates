@@ -68,20 +68,20 @@ if(length(sample_sheet_fn) > 1) {
   stop(simpleError("There are more than 2 SampleSheet_v2.csv files detected!! Please delete the incorrect one"))
 }
 
-sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq1k2k)_.*", "\\1", sample_sheet_fn)
+instrument_type <- gsub("^[0-9-]*_(MiSeq|NextSeq2000)_.*", "\\1", sample_sheet_fn)
 
 #these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
-sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
-                             sequencer_type == "NextSeq1k2k" ~ "VH")
+sequencer_regex <- case_when(instrument_type == "MiSeq" ~ "M",
+                             instrument_type == "NextSeq2000" ~ "VH")
 
 sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
 
 s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
 # temporary directory to hold the screen log files
-tmp_screen_fp <- paste("~", ".tmp_screen", sequencer_type, "WW_SC2", basename(here()), sep = "/")
+tmp_screen_fp <- paste("~", ".tmp_screen", instrument_type, "WW_SC2", basename(here()), sep = "/")
 
-session_suffix <- tolower(paste(sequencer_type, "ww-sc2", basename(here()), sep = "-"))
+session_suffix <- tolower(paste(instrument_type, "ww-sc2", basename(here()), sep = "-"))
 
 ec2_tmp_session_dir <- paste0(ec2_tmp_fp, "/", session_suffix)
 
@@ -146,7 +146,7 @@ if(run_uploaded_2_basespace) {
   if (nrow(bs_run) != 1) {
     stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace for this date: ", sequencing_date,
                             "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
-                            "\nThe sequencer type could also be wrong: ", sequencer_type,
+                            "\nThe sequencer type could also be wrong: ", instrument_type,
                             "\nOtherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
   }
 
@@ -197,7 +197,7 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
   dir.create(local_tmp_fp, recursive = TRUE)
 
   # Run the following commands if BaseSpace is available but not SSH (or if the run is MiSeq)
-  if(sequencer_type == "MiSeq" | run_uploaded_2_basespace) {
+  if(instrument_type == "MiSeq" | run_uploaded_2_basespace) {
 
     if(run_uploaded_2_basespace) {
 
@@ -225,7 +225,7 @@ if(run_uploaded_2_basespace & have_AWS_EC2_SSH_access) {
     run_in_terminal(paste("echo 'Creating tarball of the sequencing run folder';",
                           tar_command_function(run_folder, use_checkpoint = FALSE)))
 
-  } else if (sequencer_type == "NextSeq1k2k") {
+  } else if (instrument_type == "NextSeq2000") {
 
     intended_nextseq_folder_regex <- paste0(yymmdd, "_VH", seq_folder_pattern)
     nextseq_run_fp <- "/usr/local/illumina/runs/"
@@ -306,7 +306,7 @@ nf_demux_samplesheet <- data.frame(
 nfcore_demux_sample_sheet_pattern <- "nf_demux_samplesheet.csv"
 
 nf_demux_samplesheet_fp <- here("metadata", "munge",
-                                tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, nfcore_demux_sample_sheet_pattern, sep = "_")))
+                                tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, nfcore_demux_sample_sheet_pattern, sep = "_")))
 
 nf_demux_samplesheet %>%
   write_csv(file = nf_demux_samplesheet_fp)

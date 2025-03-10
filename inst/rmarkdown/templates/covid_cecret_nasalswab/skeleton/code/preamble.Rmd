@@ -790,7 +790,7 @@ seqsender <- s_toPlot %>%
          `gs-covv_gender` = ifelse(is.na(gender)|`gs-covv_orig_lab` == "Temple University", "Unknown", gender),
          `gs-covv_patient_age` = ifelse(is.na(host_age_bin)|`gs-covv_orig_lab` == "Temple University", "Unknown", host_age_bin),
          `gs-covv_seq_technology` = case_when(instrument_type == "MiSeq" ~ "Illumina MiSeq",
-                                              instrument_type == "NextSeq1k2k" ~ "Illumina NextSeq 2000",
+                                              instrument_type == "NextSeq2000" ~ "Illumina NextSeq 2000",
                                               TRUE ~ NA_character_),
          `gs-covv_assembly_method` = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
          `gs-covv_orig_lab_addr` = case_when(`gs-covv_orig_lab` == "Philadelphia Department of Public Health" ~ "1930 South Broad Street, Philadelphia, PA 19145, USA",

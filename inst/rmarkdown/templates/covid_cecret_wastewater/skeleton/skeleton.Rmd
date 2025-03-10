@@ -346,10 +346,10 @@ sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = "SampleSheet_v2.csv")
 
 #get sequencer of the run
-sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq1k2k)_.*", "\\1", sample_sheet_fn)
+instrument_type <- gsub("^[0-9-]*_(MiSeq|NextSeq2000)_.*", "\\1", sample_sheet_fn)
 
 #get sample type
-sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
+sample_type_acronym <- gsub(paste0("^[0-9-]*_", instrument_type, "_|_.*"), "", sample_sheet_fn)
 
 authors <- gsub(", .*|,.*", "", bioinformatician_name)
 
@@ -377,7 +377,7 @@ if(bioinformatician_name == "") {
 #path of where the seqsender repo was cloned, do not use tilde (~) in path
 seqsender_fp <- "/home/ec2-user/git/seqsender"
 seqsender_upload_tmp_fp <- "/home/ec2-user/tmp_data_ul"
-workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, project_name, sequencer_type, sep = "/")
+workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, project_name, instrument_type, sep = "/")
 submission_path <- paste(seqsender_upload_tmp_fp, sample_type_acronym, sep = "/")
 input_submission_name <- paste(project_name, sample_type_acronym, sep = "_")
 ec2_upload_tmp_fp <- paste(submission_path, input_submission_name, sep = "/")

@@ -16,15 +16,15 @@ index_length <- "10"
 
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
 
-sequencer_type <- c("MiSeq", "NextSeq1k2k")[sequencer_select]
+selected_sequencer_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
 # temporary directory to hold the screen log files
-tmp_screen_fp <- paste("~", ".tmp_screen", sequencer_type, "NS_SC2", basename(here()), sep = "/")
+tmp_screen_fp <- paste("~", ".tmp_screen", selected_sequencer_type, "NS_SC2", basename(here()), sep = "/")
 
-session_suffix <- tolower(paste(sequencer_type, "ns-sc2", basename(here()), sep = "-"))
+session_suffix <- tolower(paste(selected_sequencer_type, "ns-sc2", basename(here()), sep = "-"))
 
 # temporary directory to hold the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl"
@@ -113,11 +113,11 @@ if(run_uploaded_2_basespace) {
 
   if(nrow(bs_run) > 1) {
     warning(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
-                                 "Currently, you are pulling the sequencing run from the ", sequencer_type, "\n\n")))
+                                 "Currently, you are pulling the sequencing run from the ", selected_sequencer_type, "\n\n")))
 
     #these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
-    sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
-                                 sequencer_type == "NextSeq1k2k" ~ "VH")
+    sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
+                                 selected_sequencer_type == "NextSeq2000" ~ "VH")
 
     intended_sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
 
@@ -128,7 +128,7 @@ if(run_uploaded_2_basespace) {
   if (nrow(bs_run) == 0) {
     stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace for this date: ", sequencing_date,
                             "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
-                            "\nThe sequencer type could also be wrong: ", sequencer_type,
+                            "\nThe sequencer type could also be wrong: ", selected_sequencer_type,
                             "\nOtherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
   }
 
@@ -231,13 +231,13 @@ if(samplesheet_exists) {
 
   } else if (!run_uploaded_2_basespace) {
 
-    if(sequencer_type == "MiSeq"){
+    if(selected_sequencer_type == "MiSeq"){
 
       intended_miseq_folder_regex <- paste0(yymmdd, "_M", seq_folder_pattern)
 
       host_samplesheet_fp <- paste0(miseq_hostname, ":", intended_miseq_folder_regex, "/SampleSheet.csv")
 
-    } else if (sequencer_type == "NextSeq1k2k") {
+    } else if (selected_sequencer_type == "NextSeq2000") {
 
       intended_nextseq_folder_regex <- paste0(yymmdd, "_VH", seq_folder_pattern)
       nextseq_run_fp <- "/usr/local/illumina/runs/"
@@ -282,18 +282,18 @@ read_length <- data.frame(values = unlist(run_sample_sheet$Reads)) %>%
   pull() %>%
   unique()
 
-if(instrument_type != sequencer_type) {
+if(instrument_type != selected_sequencer_type) {
   message("\n*****")
   message("The SampleSheet.csv for this ", sequencing_date, " run has the instrument set as ", instrument_type)
   message("The rest of this script will continue and processing this project as a ", instrument_type, " run")
-  message("If this was not the correct sequencer used for this project, double check the sequencing date or select the appropriate sequencer_type in this Rscript")
+  message("If this was not the correct sequencer used for this project, double check the sequencing date or select the appropriate selected_sequencer_type in this Rscript")
   message("*****")
 
   Sys.sleep(10)
 }
 
 instrument_regex <- case_when(instrument_type == "MiSeq" ~ "M",
-                              instrument_type == "NextSeq1k2k" ~ "VH")
+                              instrument_type == "NextSeq2000" ~ "VH")
 
 if(!read_length %in% c(76, 151)) {
   stop(simpleError("The read length is not 76 or 151 bp. Check the sample sheet from the sequencing run folder"))
@@ -906,7 +906,7 @@ metadata_sheet %>%
   # however, the sample sheet used for demultiplexing needs to be the same orientation as the reference barcode sheet
   # when BCLConvert demultiplexes a NextSeq run, it will automatically reverse complement index2
   # results from the pipeline will refer to the reverse complement of index2, so this should be updated in the metadata sheet
-  mutate(index2 = ifelse(instrument_type == "NextSeq1k2k", reverse_complement(index2), index2)) %>%
+  mutate(index2 = ifelse(instrument_type == "NextSeq2000", reverse_complement(index2), index2)) %>%
   write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")))
 
 #contains PHI and accession numbers
