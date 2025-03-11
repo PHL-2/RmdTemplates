@@ -1,5 +1,6 @@
 [Header],
 FileFormatVersion,2
+RunName,NextSeq2000_YYYY-MM-DD
 Date,YYYY-MM-DD
 InstrumentType,NextSeq2000
 
