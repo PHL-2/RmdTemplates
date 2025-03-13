@@ -31,7 +31,7 @@ tar_w_progress() {
 
   cd "$input_fp" || exit 1
   
-  files_to_tar=$(find . \( -name "SampleSheet.csv" -o -name "*.xml" -o -path "./Data" -o -path "./InterOp" \) \
+  files_to_tar=$(find . \( -name "./*SampleSheet*.csv" -o -name "*.xml" -o -path "./Data" -o -path "./InterOp" \) \
                  ! -path "./Alignment_*" ! -path "./Analysis/*")
 
   checkpoint_N=$(du -akc --apparent-size $files_to_tar | tail -n 1 | cut -f1 | xargs printf "%d/$((bars-1))" | xargs echo | bc)
@@ -229,7 +229,8 @@ else
   num_entries=$(echo "$sequencing_run" | grep -o ' ' | wc -l)
     
   if [[ "$sftp_error_code" -ne 0 ]]; then
-    echo -e "\nError:\n'sftp' command to look for the run on ${hostname}:${hostname_path} failed with exit status ${sftp_error_code}\n"
+    echo -e "\nError:\n'sftp' command to look for the ${date_string} run on ${hostname}:${hostname_path} failed with exit status ${sftp_error_code}\n"
+    echo -e "Was there a run loaded on this date?\n"
     exit 1 
   elif [[ -z "$sequencing_run" ]]; then
     echo -e "\nError:\nNo run loaded on ${date_string} could be found on the ${instrument}\n"
@@ -248,17 +249,14 @@ else
     echo -e "\nDownloading ${instrument} run ${full_hostname_path} to: ${extend_tmp_dir}"
     mkdir -p "$actual_temp_dir"
     
-    scp -rB "${full_hostname_path}/SampleSheet.csv" "$actual_temp_dir"
-    sleep 2
-    scp -rB "${full_hostname_path}/*.xml" "$actual_temp_dir"
-    sleep 2
-    scp -rB "${full_hostname_path}/InterOp/" "$actual_temp_dir"
-    sleep 2
-    scp -rB "${full_hostname_path}/Logs/" "$actual_temp_dir"
-    sleep 2
-    scp -rB "${full_hostname_path}/Data/" "$actual_temp_dir"
-    sleep 2
-    
+    scp -rB \
+      "${full_hostname_path}/*SampleSheet*.csv" \
+      "${full_hostname_path}/*.xml" \
+      "${full_hostname_path}/InterOp/" \
+      "${full_hostname_path}/Logs/" \
+      "${full_hostname_path}/Data/" \
+      "$actual_temp_dir"
+          
     echo -e "\nCreating tarball of ${sequencing_run} in ${extend_tmp_dir}:\n"
     tar_w_progress "${extend_tmp_dir}${sequencing_run}" "${extend_tmp_dir}${sequencing_run}"
 
@@ -276,10 +274,10 @@ else
 fi
 
 # Generate md5sum
-echo -e "\nGenerating md5sum files..."
+echo -e "\nGenerating md5sum file..."
 cd "$extend_tmp_dir" && \
   md5sum "${sequencing_run}.tar.gz" > "${extend_tmp_dir}${sequencing_run}.md5"
-echo -e "\nArchiving complete! Local files are stored at ${extend_tmp_dir}\n"
+echo -e "\nArchiving complete! Local files can be found at ${extend_tmp_dir}\n"
 
 # Upload to S3 if -s option provided
 if [[ -n "$s3_path" ]]; then
@@ -299,14 +297,15 @@ fi
 
 # Record the run to BaseSpace
 if [[ -n "$record_prefix" ]]; then
-  echo -e "-r option provided. Proceeding to record the sequencing run to BaseSpace"
-
+  echo -e "\n-r option provided. Proceeding to record the sequencing run to BaseSpace"
+  echo -e "\nCleaning any old record files..."
   bs_ul_fp="${extend_tmp_dir}bs_record/${sequencing_run}/"
+  rm -rf "$bs_ul_fp"
   mkdir -p "$bs_ul_fp"
 
   if [[ "$instrument" == "MiSeq" || "$basespace" == "true" ]]; then
     cp -r \
-      "${actual_temp_dir}SampleSheet.csv" \
+      "${actual_temp_dir}"*"SampleSheet"*".csv" \
       "${actual_temp_dir}"*".xml" \
       "${actual_temp_dir}InterOp/" \
       "$bs_ul_fp"
@@ -317,7 +316,7 @@ if [[ -n "$record_prefix" ]]; then
     
     tar -xzf "${extend_tmp_dir}${sequencing_run}.tar.gz" \
       --directory "$bs_ul_fp" \
-      "./SampleSheet.csv" \
+      "./*SampleSheet*.csv" \
       "./InterOp/" \
       "./*.xml" \
       --exclude "./InterOp/C[0-9]*" \
@@ -326,24 +325,27 @@ if [[ -n "$record_prefix" ]]; then
       --exclude "./Recipe" \
       --checkpoint=1000 \
       --checkpoint-action=ttyout='%{%Y-%m-%d %H:%M:%S}t (%d sec): #%u, %T%*\r'
-
   fi
 
   # If the -o option is used, create a new SampleSheet.csv to upload to BaseSpace
-  # This option may be needed for MiSeq runs which use version 1 sample sheets causing a 'Failed' status on BaseSpace
+  # Uploaded runs will have a 'Failed' or 'Needs Attention' status without the BCLConvert and Cloud sections
   if [[ "$overwrite" == "true" ]]; then
+
+    if [[ -f "${bs_ul_fp}SampleSheet.csv" ]]; then
+      mv "${bs_ul_fp}SampleSheet.csv" "${bs_ul_fp}SampleSheet_original.csv"
+    fi
+
     echo -e "A dummy SampleSheet.csv will be created for recording in BaseSpace\n"
-    mv "${bs_ul_fp}/SampleSheet.csv" "${bs_ul_fp}/SampleSheet_original.csv"
-    echo "[Header]," > "${bs_ul_fp}/SampleSheet.csv"
-    echo "FileFormatVersion,2" >> "${bs_ul_fp}/SampleSheet.csv"
-    echo "" >> "${bs_ul_fp}/SampleSheet.csv"
-    echo "[BCLConvert_Data]" >> "${bs_ul_fp}/SampleSheet.csv"
-    echo "Sample_ID" >> "${bs_ul_fp}/SampleSheet.csv"
-    echo "GenericSampleID" >> "${bs_ul_fp}/SampleSheet.csv"
-    echo "" >> "${bs_ul_fp}/SampleSheet.csv"
-    echo "[Cloud_Data]" >> "${bs_ul_fp}/SampleSheet.csv"
-    echo "Sample_ID" >> "${bs_ul_fp}/SampleSheet.csv"
-    echo "GenericSampleID" >> "${bs_ul_fp}/SampleSheet.csv"
+    echo "[Header]," > "${bs_ul_fp}SampleSheet.csv"
+    echo "FileFormatVersion,2" >> "${bs_ul_fp}SampleSheet.csv"
+    echo "" >> "${bs_ul_fp}SampleSheet.csv"
+    echo "[BCLConvert_Data]" >> "${bs_ul_fp}SampleSheet.csv"
+    echo "Sample_ID" >> "${bs_ul_fp}SampleSheet.csv"
+    echo "GenericSampleID" >> "${bs_ul_fp}SampleSheet.csv"
+    echo "" >> "${bs_ul_fp}SampleSheet.csv"
+    echo "[Cloud_Data]" >> "${bs_ul_fp}SampleSheet.csv"
+    echo "Sample_ID" >> "${bs_ul_fp}SampleSheet.csv"
+    echo "GenericSampleID" >> "${bs_ul_fp}SampleSheet.csv"
   fi
 
   bs run upload \
@@ -356,5 +358,7 @@ fi
 
 # Cleanup
 if [[ "$clean_up_local" == "true" ]]; then
+  echo -e "-c option provided. Deleting the locally downloaded files..."
+  sleep 20
   rm -rf "$extend_tmp_dir"
 fi
