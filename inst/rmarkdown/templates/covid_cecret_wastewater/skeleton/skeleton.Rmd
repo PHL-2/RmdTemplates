@@ -374,6 +374,8 @@ if(bioinformatician_name == "") {
 # Define AWS variables and filepaths
 ####################################
 
+validated_seqsender_version <- "1.2.3"
+
 #path of where the seqsender repo was cloned, do not use tilde (~) in path
 seqsender_fp <- "/home/ec2-user/git/seqsender"
 seqsender_upload_tmp_fp <- "/home/ec2-user/tmp_data_ul"
@@ -454,6 +456,21 @@ fastq_seqsender %>%
 ######################
 # Run seqsender on EC2
 ######################
+
+# Check seqsender version first
+installed_seqsender_version <- system2("ssh", c("-tt", ec2_hostname,
+                                                shQuote(paste("conda activate seqsender;",
+                                                              "python", seqsender_py, "version"),
+                                                        type = "sh")),
+                                       stdout = TRUE, stderr = TRUE) %>%
+  paste0(., collapse = " ") %>%
+  gsub(".*Version: ", "", .) %>%
+  gsub(" .*", "", .)
+
+if(validated_seqsender_version != installed_seqsender_version) {
+  stop(simpleError(paste0("Your installed version of seqsender (", installed_seqsender_version,
+                          ") does not match the validated seqsender version (", validated_seqsender_version , ") for this workflow\n", "Please install the validated version before continuing.")))
+}
 
 cecret_file_download_command <- c("aws s3 cp", workflow_output_fp)
 cecret_file_download_param <- c("--recursive",
