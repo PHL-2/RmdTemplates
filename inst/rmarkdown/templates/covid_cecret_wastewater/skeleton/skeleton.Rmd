@@ -429,7 +429,7 @@ seqsender_check <- fasta_seqsender %>%
   merge(select(fastq_seqsender,
                fastq_name = "sequence_name",
                fastq_processing = "bs-specimen_processing_id",
-               seqsender_merge_check_cols),
+               all_of(seqsender_merge_check_cols)),
         by = seqsender_merge_check_cols, all = TRUE)
 
 if(nrow(fasta_seqsender) < 1) {
