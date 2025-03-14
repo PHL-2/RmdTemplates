@@ -32,39 +32,34 @@ output:
 
 ```{r settings for processing the sequencing run, include=FALSE, eval=FALSE}
 
-#####################################################################
-# 1_remove_low_RLU.R (Cleaning up metadata sheet and making platemap)
-#####################################################################
+#############################################################
+# 1_archive_n_upload_run.R (Sequencer and BaseSpace settings) 
+#############################################################
 
-prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
+sequencer_select <- 2 # set variable as 1 for MiSeq or 2 for NextSeq
 
-sample_type_acronym <- "WW" #use WW for wastewater samples
+run_uploaded_2_basespace <- FALSE # set this to TRUE if the run was uploaded to BaseSpace from the sequencer directly
+
+sample_type_acronym <- "WW"
 
 pathogen_acronym <- "SC2"
 
-create_sample_replicates <- 4 #enter a positive integer for the number of biological replicates created during concentration and extraction
-
-# set this to TRUE to copy the platemap to the shared drive
-copy_platemap <- FALSE
-
-if(nchar(prj_description) > 25) {
-  stop(simpleError("prj_description is too long. Needs to be 25 chars or less"))
-}
-
-###################################################################################
-# 2_generate_barcodes_IDT.R and 3_archive_upload_run.R (BaseSpace and AWS settings)
-###################################################################################
-
-run_uploaded_2_basespace <- FALSE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
-
-sequencer_select <- 2 # set variable as 1 for MiSeq or 2 for NextSeq
+#################################################################
+# 2_generate_metadata_n_assign_barcodes.R (Sample sheet settings)
+#################################################################
 
 remove_sample_from_bcl_samplesheet <- c("") #add in sample names to remove from demultiplexing
 
 sample_w_empty_reads <- c("") #add in sample ids that have empty fastq files
 
+prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
+
+if(nchar(prj_description) > 25) {
+  stop(simpleError("prj_description is too long. Needs to be 25 chars or less"))
+}
+
 ####################################
-# 4_run_nextflow.R (Cecret settings)
+# 3_run_nextflow.R (Cecret settings)
 ####################################
 
 #tag of nextclade dataset to use for lineage assignment
@@ -79,37 +74,26 @@ remove_undetermined_file <- FALSE
 
 ```
 
-```{r select samples and ddpcr metadata, message = TRUE, include=FALSE, eval = FALSE}
-
-#this script uses a wastewater sample selection sheet to create a sequencing plate map for the wet lab
-#a metadata sheet with the ddPCR values for the selected samples will also be generated
-#the selection sheet should be placed in the extra_metadata folder
-#any samples from previous runs included should be placed in the prev_run folder
-source("code/1_select_sample_n_metadata.R")
-
-```
-
-```{r generate sequencing metadata and sample barcodes, message = TRUE, include=FALSE, eval = FALSE}
-
-#this script generates the SampleSheet.csv file required for demultiplexing the sequencing run
-#the required file to include is the sequencing_metadata_sheet.xlsx filled out by the sequencing wet lab scientists, pertaining to the barcodes assigned to the samples
-source("code/2_generate_barcodes_IDT.R")
-
-```
-
 ```{r archive and upload sequencing run data, message = TRUE, include=FALSE, eval = FALSE}
 
-#this script compresses the sequencing run folder and uploads it to S3, along with auxiliary files
+#this script compresses the sequencing run folder and uploads it to S3
+source("code/1_archive_n_upload.R")
 
-source("code/3_archive_upload_run.R")
+```
+
+```{r generate sequencing metadata and sample sheets, message = TRUE, include=FALSE, eval = FALSE}
+
+#this script generates the SampleSheet.csv file required for demultiplexing the sequencing run
+#the required file is a sequencing_metadata_sheet.xlsx file filled out by the sequencing wet lab scientists with the sample barcode information
+#this file should be placed in metadata/munge
+source("code/2_generate_metadata_n_assign_barcodes.R")
 
 ```
 
 ```{r run nextflow, message = TRUE, include=FALSE, eval = FALSE}
 
-#this script submits the nextflow jobs for demultiplexing and running the cecret pipeline to the ec2 instance
-
-source("code/4_run_nextflow.R")
+#this script submits the nextflow jobs for demultiplexing and running the cecret pipeline on the ec2 instance
+source("code/3_run_nextflow.R")
 
 ```
 

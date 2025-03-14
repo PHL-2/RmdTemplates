@@ -481,7 +481,7 @@ if(copy_platemap) {
   if(file.exists(shared_drive_fp)) {
 
     plate_map_cp_fp <- file.path(shared_drive_fp, "Sequencing_files", "1_Plate_Maps", "nasal_swabs", format(Sys.Date(), "%Y"),
-                                 paste(format(Sys.time(), "%Y-%m-%d"), sample_type_acronym, prj_description, "Plate_Map.csv", sep = "_"))
+                                 paste(format(Sys.time(), "%Y-%m-%d"), sample_type_acronym, pathogen_acronym, "Plate_Map.csv", sep = "_"))
     dir.create(dirname(plate_map_cp_fp), showWarnings = FALSE)
     file.copy(plate_map_local_fp, plate_map_cp_fp, overwrite = TRUE)
 

@@ -742,54 +742,54 @@ for(x in c("qubit_conc_ng_ul", "sample_collection_date", "host_age_bin", "gender
 }
 
 #check lowest date of sample collection
-if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-6 month')[2]){
+if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by="-6 month")[2]){
   message("Earliest sample collection date in this run:")
   message(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])))
   stop(simpleError(paste0("\nSome samples have collection dates more than 6 months ago. Investigate!!")))
 }
 
-print('What do the sample_id look like?')
+print("What do the sample_id look like?")
 print(unique(metadata_sheet$sample_id))
 
-print('Which lanes are sequenced?')
+print("Which lanes are sequenced?")
 print(unique(metadata_sheet$lane))
 
-print('Are the barcode columns unique?')
+print("Are the barcode columns unique?")
 if(length(unique(metadata_sheet$idt_plate_coord)) != dim(metadata_sheet)[1]) {
   stop(simpleError("Barcode positions are not unique!"))
 }
 print(length(unique(metadata_sheet$idt_plate_coord)) == dim(metadata_sheet)[1])
 
-print('Number of barcodes?')
+print("Number of barcodes?")
 print(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))))
-print('Number of samples?')
+print("Number of samples?")
 print(length(unique(metadata_sheet$sample_id)))
 if(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))) != length(unique(metadata_sheet$sample_id))) {
   stop(simpleError("Differing number of samples and barcodes!"))
 }
 
-print('Are the barcodes unique?')
+print("Are the barcodes unique?")
 print(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))) == dim(metadata_sheet)[1])
 
-print('Are the sample names unique?')
+print("Are the sample names unique?")
 print(length(unique(metadata_sheet$sample_id)) == dim(metadata_sheet)[1])
 
-print('Are all the forward primers found?')
+print("Are all the forward primers found?")
 print(sum(is.na(metadata_sheet$index)) == 0)
 
-print('Are all the reverse primers found?')
+print("Are all the reverse primers found?")
 print(sum(is.na(metadata_sheet$index2)) == 0)
 if(sum(is.na(c(metadata_sheet$index, metadata_sheet$index2))) != 0) {
   stop(simpleError("Either the forward or reverse primers are NA!"))
 }
 
-print('Do all the sampleIDs start with a letter?')
+print("Do all the sampleIDs start with a letter?")
 print(all(grepl("^[A-Za-z]", metadata_sheet$sample_id)))
 if(!all(grepl("^[A-Za-z]", metadata_sheet$sample_id))) {
   stop(simpleError("Some Sample IDs do not start with a letter!"))
 }
 
-print('Are there periods, underscores, or space characters in the SampleID?')
+print("Are there periods, underscores, or space characters in the SampleID?")
 print(any(grepl(" |_|\\.", metadata_sheet$sample_id)))
 if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
   stop(simpleError("There are spaces, underscores, or periods in the Sample IDs! Please fix"))
