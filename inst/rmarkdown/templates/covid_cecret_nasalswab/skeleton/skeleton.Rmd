@@ -60,7 +60,7 @@ run_uploaded_2_basespace <- FALSE # set this to TRUE if the run was uploaded to 
 
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
-remove_sample_from_samplesheets <- c("") #add sample names to remove from demultiplexing
+remove_sample_from_samplesheets <- c("") #add sample names (accessions) to remove from processing
 
 sample_w_empty_reads <- c("") #add sample ids that have empty fastq files
 

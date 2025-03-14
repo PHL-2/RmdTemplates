@@ -1196,6 +1196,7 @@ Number of samples to send to epidemiologists: `r ifelse(have_phi, nrow(epi_repor
 Number of samples to upload to GISAID database: `r report_gisaid` \newline
 Number of samples to upload to SRA: `r report_sra` \newline
 Number of samples to upload to Genbank: `r report_gisaid`\newline
+
 `r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge These non-control samples that didn't go through the pipeline correctly!! Try rerunning them through the pipeline again!}")}`
 
 `r if(!has_pos_ctrl | is.na(has_pos_ctrl)){paste0("\\textcolor{red}{\\huge Positive control is not correct lineage}")}`
