@@ -40,6 +40,8 @@ prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
 sample_type_acronym <- "NS" #use NS for nasal swabs
 
+pathogen_acronym <- "SC2" #use NS for nasal swabs
+
 # samples that are missing from the metadata sheet
 missing_samples <- c("")
 
@@ -57,8 +59,6 @@ if(nchar(prj_description) > 25) {
 run_uploaded_2_basespace <- FALSE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
-
-have_AWS_EC2_SSH_access <- TRUE
 
 remove_sample_from_samplesheets <- c("") #add sample names to remove from demultiplexing
 

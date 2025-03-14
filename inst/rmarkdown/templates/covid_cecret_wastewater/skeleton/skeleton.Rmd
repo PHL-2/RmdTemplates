@@ -40,6 +40,8 @@ prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
 sample_type_acronym <- "WW" #use WW for wastewater samples
 
+pathogen_acronym <- "SC2"
+
 create_sample_replicates <- 4 #enter a positive integer for the number of biological replicates created during concentration and extraction
 
 # set this to TRUE to copy the platemap to the shared drive
@@ -56,8 +58,6 @@ if(nchar(prj_description) > 25) {
 run_uploaded_2_basespace <- FALSE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
 
 sequencer_select <- 2 # set variable as 1 for MiSeq or 2 for NextSeq
-
-have_AWS_EC2_SSH_access <- TRUE
 
 remove_sample_from_bcl_samplesheet <- c("") #add in sample names to remove from demultiplexing
 

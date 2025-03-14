@@ -3,7 +3,6 @@ library(dplyr)
 library(tidyr)
 library(stringr)
 library(readr)
-system2("aws", c("sso login"))
 
 #This Rscript submits the relevant jobs to Nextflow once the sequencing run has been uploaded
 
@@ -77,9 +76,10 @@ bclconvert_output_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_ac
 workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), instrument_type, sep = "/")
 
 # temporary directory to hold the screen log files
-tmp_screen_fp <- paste("~", ".tmp_screen", instrument_type, "WW_SC2", basename(here()), sep = "/")
+tmp_screen_fp <- paste("~", ".tmp_screen", instrument_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
 
-session_suffix <- tolower(paste(instrument_type, "ww-sc2", basename(here()), sep = "-"))
+session_suffix <- tolower(paste(instrument_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
+
 
 data_output_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/data")
 
@@ -488,8 +488,7 @@ submit_screen_job(message2display = "Cleaning up run from temporary folder",
                   screen_session_name = paste("delete-run", session_suffix, sep = "-"),
                   screen_log_fp = tmp_screen_fp,
                   command2run = paste("rm -rf",
-                                      paste0(ec2_tmp_fp, "/", session_suffix, "/"),
-                                      paste0(ec2_tmp_fp, "/", instrument_run_id, "*;"),
+                                      paste0(ec2_tmp_fp, "/", session_suffix, "/;"),
                                       "echo 'Here are the files in the tmp directory:';",
                                       "ls", ec2_tmp_fp)
 )

@@ -1,46 +1,5 @@
-library(here)
-library(dplyr)
-library(tidyverse)
-library(readxl)
-library(readr)
-library(stringr)
 
-#This Rscript adds the relevant metadata fields to wastewater samples for sequencing
 
-###################
-# Default variables
-###################
-
-# number of unspecified environmental swabs to add to plate
-#enviro_number <- 10
-
-################
-# Load functions
-################
-
-#this file needs to sit in a [aux_files/functions] directory path above this project directory
-tryCatch(
-  {
-    source(file.path(dirname(here()), "aux_files", "r_scripts", "functions", "R_all_functions_v3.R"))
-  },
-  error = function(e) {
-    stop (simpleError("The R_all_functions_v3.R file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory"))
-  }
-)
-
-#############
-# Load config
-#############
-
-#this file needs to sit in a [aux_files/config] directory path above this project directory
-tryCatch(
-  {
-    source(file.path(dirname(here()), "aux_files", "r_scripts", "config", "config_variables.R"))
-  },
-  error = function(e) {
-    stop (simpleError("The config_variables.R file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory"))
-  }
-)
 
 #####################################
 # Load the latest 5 ddPCR run results
@@ -98,7 +57,7 @@ selection_data <- select_fp %>%
          !matches("^\\.\\.\\.")) %>%
   merge(ddPCR_data, by = c("sample_group", "sample_received_date"), all.x = TRUE, sort = FALSE) %>%
   mutate(uniq_sample_name = ifelse((is.na(uniq_sample_name) | uniq_sample_name == ""),
-                                   paste("WW", sample_received_date, sample_group, sep = "-"),
+                                   paste(sample_type_acronym, sample_received_date, sample_group, sep = "-"),
                                    uniq_sample_name)) %>%
   filter(!is.na(sample_group))
 
