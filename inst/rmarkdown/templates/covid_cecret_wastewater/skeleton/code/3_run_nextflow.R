@@ -3,7 +3,6 @@ library(dplyr)
 library(tidyr)
 library(stringr)
 library(readr)
-system2("aws", c("sso login"))
 
 #This Rscript submits the relevant jobs to Nextflow once the sequencing run has been uploaded
 
@@ -62,24 +61,25 @@ if(length(sample_sheet_fn) > 1) {
   stop(simpleError("There are more than 2 sample sheets detected!! Please delete the incorrect one"))
 }
 
-sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq1k2k)_.*", "\\1", sample_sheet_fn)
+instrument_type <- gsub("^[0-9-]*_(MiSeq|NextSeq2000)_.*", "\\1", sample_sheet_fn)
 
-sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
-                             sequencer_type == "NextSeq1k2k" ~ "VH")
+sequencer_regex <- case_when(instrument_type == "MiSeq" ~ "M",
+                             instrument_type == "NextSeq2000" ~ "VH")
 
 intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*")
 
 nf_demux_samplesheet_path <- paste(s3_run_bucket, sequencing_date,
-                                   tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, "nf_demux_samplesheet.csv", sep = "_")), sep = "/")
+                                   tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, "nf_demux_samplesheet.csv", sep = "_")), sep = "/")
 
 bclconvert_output_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sep = "/")
 
-workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), sequencer_type, sep = "/")
+workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), instrument_type, sep = "/")
 
 # temporary directory to hold the screen log files
-tmp_screen_fp <- paste("~", ".tmp_screen", sequencer_type, "WW_SC2", basename(here()), sep = "/")
+tmp_screen_fp <- paste("~", ".tmp_screen", instrument_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
 
-session_suffix <- tolower(paste(sequencer_type, "ww-sc2", basename(here()), sep = "-"))
+session_suffix <- tolower(paste(instrument_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
+
 
 data_output_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/data")
 
@@ -149,7 +149,7 @@ instrument_run_id <- unique(fastq_file_sizes$sequencing_folder)
 
 if(length(instrument_run_id) > 1) {
   stop(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
-                            "Currently, you are pulling the sequencing run from the ", sequencer_type)))
+                            "Currently, you are pulling the sequencing run from the ", instrument_type)))
 }
 
 if(remove_undetermined_file) {
@@ -201,7 +201,7 @@ fastq_path <- paste(bclconvert_output_path, instrument_run_id, sep = "/")
 nf_concat_sample_sheet_pattern <- "nf_concat_fastq_samplesheet.csv"
 
 nf_concat_samplesheet_fp <- here("metadata", "munge",
-                                 tolower(paste(sequencing_date, sequencer_type, sample_type_acronym, prj_description, nf_concat_sample_sheet_pattern, sep = "_")))
+                                 tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, nf_concat_sample_sheet_pattern, sep = "_")))
 
 is_nf_concat_samplesheet_empty <- read_csv(nf_concat_samplesheet_fp, show_col_types = FALSE) %>%
   nrow() == 0
@@ -488,8 +488,7 @@ submit_screen_job(message2display = "Cleaning up run from temporary folder",
                   screen_session_name = paste("delete-run", session_suffix, sep = "-"),
                   screen_log_fp = tmp_screen_fp,
                   command2run = paste("rm -rf",
-                                      paste0(ec2_tmp_fp, "/", session_suffix, "/"),
-                                      paste0(ec2_tmp_fp, "/", instrument_run_id, "*;"),
+                                      paste0(ec2_tmp_fp, "/", session_suffix, "/;"),
                                       "echo 'Here are the files in the tmp directory:';",
                                       "ls", ec2_tmp_fp)
 )

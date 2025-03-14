@@ -1,0 +1,17 @@
+[Header]
+Experiment Name,MiSeq_YYYY-MM-DD
+Date,YYYY-MM-DD
+Workflow,GenerateFASTQ
+Chemistry,Amplicon
+Instrument type,MiSeq
+
+[Reads]
+76
+76
+
+[Settings]
+adapter,CTGTCTCTTATACACATCT
+
+[Data]
+Sample_ID,index,index2
+Undetermined,NNNNNNNNNN,NNNNNNNNNN

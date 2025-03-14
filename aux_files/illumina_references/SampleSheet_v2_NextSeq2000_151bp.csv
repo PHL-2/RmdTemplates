@@ -1,8 +1,8 @@
 [Header],
 FileFormatVersion,2
-RunName,COVIDSeq_YYYY-MM-DD
-InstrumentPlatform,NextSeq1k2k
-IndexOrientation,Forward
+RunName,NextSeq2000_YYYY-MM-DD
+Date,YYYY-MM-DD
+InstrumentType,NextSeq2000
 
 [Reads]
 Read1Cycles,151
@@ -13,7 +13,6 @@ Index2Cycles,10
 [BCLConvert_Settings]
 SoftwareVersion,4.2.7
 NoLaneSplitting,true
-OverrideCycles,Y151;I10;I10;Y151
 FastqCompressionFormat,gzip
 
 [BCLConvert_Data]

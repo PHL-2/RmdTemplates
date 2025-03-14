@@ -979,7 +979,7 @@ if(nrow(seqsender) != 0) {
            #GISAID name format for WW samples needs to be hCoV-19/env/[country]/[state]-[sample_id without a year]/sample collection year (collection year may be different from sequence year)
            `gs-sample_name` = paste0("hCoV-19/env/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sequence_name), "/", collection_year),
            `gs-covv_seq_technology` = case_when(instrument_type == "MiSeq" ~ "Illumina MiSeq",
-                                                instrument_type == "NextSeq1k2k" ~ "Illumina NextSeq 2000",
+                                                instrument_type == "NextSeq2000" ~ "Illumina NextSeq 2000",
                                                 TRUE ~ NA_character_),
            `gs-covv_assembly_method` = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
            `gs-covv_subm_sample_id` = `bs17-ww_surv_system_sample_id`,
