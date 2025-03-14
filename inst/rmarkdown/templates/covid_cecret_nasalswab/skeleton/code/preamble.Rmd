@@ -762,7 +762,7 @@ epi_report %>%
 
 ```
 
-```{r export data to upload to NCBI}
+```{r export data to upload to NCBI, eval = (nrow(s_toPlot) > 0)}
 
 data2submit_metadata_fp <- file.path(dirname(here()), "aux_files", "data_submission", "ns", "nasalswab_data_submission_metadata.csv")
 
@@ -871,7 +871,7 @@ seqsender %>%
 
 ```
 
-```{r reported numbers}
+```{r reported numbers, eval = (nrow(s_toPlot) > 0)}
 
 #double checking to see if number of samples match
 n_samples_report <- s %>%

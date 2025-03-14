@@ -921,7 +921,7 @@ s %>%
 
 ### Variant assignments from Nextclade
 
-```{r variant assignments, fig.height=9, fig.width=7}
+```{r variant assignments, fig.height=9, fig.width=7, eval = (nrow(s_toPlot) > 0)}
 
 s_toPlot %>%
   select(sample_id, Nextclade_pango, sample_type, nextclade_clade_who) %>%
@@ -959,7 +959,7 @@ s_toPlot %>%
 
 ### Figure showing different USHER placements through Pangolin
 
-```{r multiple variant assignments, fig.height=9, fig.width=8}
+```{r multiple variant assignments, fig.height=9, fig.width=8, eval = (nrow(s_toPlot) > 0)}
 
 s_toPlot %>%
   select(sample_id, pangolin_note, sample_type, nextclade_qc_overallstatus) %>%
@@ -1007,7 +1007,7 @@ Stars in boxes mean that the variants/sub-variants from different software agree
 Only the top Freyja result for each sample was used here \newline
 White boxes indicate variants that are not assigned a color
 
-```{r conflicting assignments, fig.height=9, fig.width=8}
+```{r conflicting assignments, fig.height=9, fig.width=8, eval = (nrow(s_toPlot) > 0)}
 
 freyja_grouping %>%
   select(sample_id, sample_type, lineages, relative_abundances) %>%
@@ -1161,7 +1161,7 @@ s_toPlot %>%
 
 ```
 
-```{r pc check}
+```{r pc and samples check}
 
 has_pos_ctrl <- s %>%
   filter(grepl("Mock DNA", sample_type)) %>%
@@ -1172,6 +1172,14 @@ has_pos_ctrl <- s %>%
 
 if(length(has_pos_ctrl) == 0) {
   has_pos_ctrl <- FALSE
+}
+
+if(nrow(s_toPlot) > 0) {
+  report_gisaid <- nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "gisaid_name", "sample_id"])
+  report_sra <- nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])
+  report_genbank <- nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])
+} else {
+  n_samples_report <- report_gisaid <- report_sra <- report_genbank <- 0
 }
 
 ```
@@ -1185,10 +1193,9 @@ Red samples will not be reported (controls or no lineage results) \newline
 Orange samples also will not be reported due to low quality (bad or mediocre NextClade QC with <80% 30X coverage) \newline
 The total number of samples with acceptable results for reporting is `r n_samples_report` out of `r sum(!s$isControl, na.rm = TRUE)` non-control samples sequenced. \newline
 Number of samples to send to epidemiologists: `r ifelse(have_phi, nrow(epi_report), 0)` \newline
-Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "gisaid_name", "sample_id"])` \newline
-Number of samples to upload to SRA: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])` \newline
-Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])`\newline
-
+Number of samples to upload to GISAID database: `r report_gisaid` \newline
+Number of samples to upload to SRA: `r report_sra` \newline
+Number of samples to upload to Genbank: `r report_gisaid`\newline
 `r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge These non-control samples that didn't go through the pipeline correctly!! Try rerunning them through the pipeline again!}")}`
 
 `r if(!has_pos_ctrl | is.na(has_pos_ctrl)){paste0("\\textcolor{red}{\\huge Positive control is not correct lineage}")}`

@@ -259,7 +259,7 @@ if(!read_length %in% c(76, 151)) {
 
 index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
 
-if(length(index_sheet_fp) == 0) {
+if(identical(index_sheet_fp, character(0))) {
   shared_index_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "nasal_swabs", str_sub(sequencing_date, 1, 4)),
                                     pattern = "sequencing_metadata_sheet", full.names = TRUE))
 
@@ -608,8 +608,7 @@ metadata_sheet <- metadata_sheet %>%
 main_sample_type <- unique(metadata_sheet$sample_type)[!grepl("control", unique(metadata_sheet$sample_type))]
 
 if(any(is.na(main_sample_type))) {
-  message("")
-  stop(simpleError(paste0("This metadata sheet has NA in the sample type column!\n",
+  stop(simpleError(paste0("\nThis metadata sheet has NA in the sample type column!\n",
                           "Probably something went wrong with the merge of the index sheet and the epi's metadata sheet\n",
                           "Here are the samples with NA as its sample type:\n",
                           paste0(metadata_sheet[is.na(metadata_sheet$sample_type), "sample_name"], collapse = ", "),
@@ -618,8 +617,7 @@ if(any(is.na(main_sample_type))) {
 }
 
 if(length(main_sample_type) > 1) {
-  message("")
-  stop(simpleError(paste0("This metadata sheet has more than one non-control sample type!\n",
+  stop(simpleError(paste0("\nThis metadata sheet has more than one non-control sample type!\n",
                           "You may need to separate the metadata sheet and use the appropriate workflow for these samples types:\n",
                           paste0(main_sample_type, collapse = ", "))))
 }
@@ -664,8 +662,10 @@ if(ncol(epi_sample_not_found > 0)) {
 
     message("\n*****")
     message("These samples were found in the epidemiologists metadata sheet but not in our sample sheet. Something might be wrong!")
-    message("Check email to see if these samples could not be located by the receiving department")
-    message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check:")
+    message("Check Teams/email to see if these samples were not found by the receiving department")
+    message("Otherwise, these samples may have had an issue during extraction")
+    message("If these samples are okay to be removed from the analysis, add them to remove_sample_from_samplesheets defined above and rerun this script")
+    message("Sample(s) in question:")
     message("*****")
 
     stop(simpleError(paste0(epi_sample_not_found, collapse = ", ")))
