@@ -32,13 +32,13 @@ output:
 
 ```{r settings for processing the sequencing run, include=FALSE, eval=FALSE}
 
-#####################################################################
-# 1_remove_low_RLU.R (Cleaning up metadata sheet and making platemap)
-#####################################################################
-
-prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
+#########################################################################################
+# 1_filter_samples_n_generate_platemap.R (Cleaning up metadata sheet and making platemap)
+#########################################################################################
 
 sample_type_acronym <- "NS" #use NS for nasal swabs
+
+pathogen_acronym <- "SC2" #use NS for nasal swabs
 
 # samples that are missing from the metadata sheet
 missing_samples <- c("")
@@ -46,23 +46,27 @@ missing_samples <- c("")
 # set this to FALSE to not copy the platemap to the shared drive (such as when rerunning this script with updated extra metadata info)
 copy_platemap <- TRUE
 
-if(nchar(prj_description) > 25) {
-  stop(simpleError("prj_description is too long. Needs to be 25 chars or less"))
-}
-
-###################################################################################
-# 2_generate_barcodes_IDT.R and 3_archive_upload_run.R (BaseSpace and AWS settings)
-###################################################################################
-
-run_uploaded_2_basespace <- FALSE # set this to true if the run was uploaded to BaseSpace and the data was not manually transferred to a local folder
+#############################################################
+# 2_archive_n_upload_run.R (Sequencer and BaseSpace settings) 
+#############################################################
 
 sequencer_select <- 1 # set variable as 1 for MiSeq or 2 for NextSeq
 
-have_AWS_EC2_SSH_access <- TRUE
+run_uploaded_2_basespace <- FALSE # set this to TRUE if the run was uploaded to BaseSpace from the sequencer directly
+
+#################################################################
+# 3_generate_metadata_n_assign_barcodes.R (Sample sheet settings)
+#################################################################
+
+prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
 remove_sample_from_samplesheets <- c("") #add sample names (accessions) to remove from processing
 
 sample_w_empty_reads <- c("") #add sample ids that have empty fastq files
+
+if(nchar(prj_description) > 25) {
+  stop(simpleError("prj_description is too long. Needs to be 25 chars or less"))
+}
 
 ####################################
 # 4_run_nextflow.R (Cecret settings)
@@ -85,30 +89,29 @@ remove_undetermined_file <- FALSE
 #this script filters the Excel file provided by the epidemiologist by excluding low RLU samples and samples received by the Health Centers
 #the Excel file should be placed in the extra_metadata folder along with the environmental swabs file
 #any samples from previous runs included should be placed in the prev_run folder, using the filtered Excel file
-source("code/1_remove_low_RLU.R")
-
-```
-
-```{r generate SampleSheet and metadata, message = TRUE, include=FALSE, eval = FALSE}
-
-#this script generates the SampleSheet.csv file required for demultiplexing the sequencing run
-#the required file to include is the sequencing_metadata_sheet.xlsx filled out by the sequencing wet lab scientists, pertaining to the barcodes assigned to the samples
-source("code/2_generate_barcodes_IDT.R")
+source("code/1_filter_samples_n_generate_platemap.R")
 
 ```
 
 ```{r upload sequencing run data, message = TRUE, include=FALSE, eval = FALSE}
 
-#this script compresses the sequencing run folder and uploads it to S3, along with auxiliary files
+#this script compresses the sequencing run folder and uploads it to S3
+source("code/2_archive_n_upload.R")
 
-source("code/3_archive_upload_run.R")
+```
+
+```{r generate sequencing metadata and sample sheets, message = TRUE, include=FALSE, eval = FALSE}
+
+#this script generates the SampleSheet.csv file required for demultiplexing the sequencing run
+#the required file is a sequencing_metadata_sheet.xlsx file filled out by the sequencing wet lab scientists with the sample barcode information
+#this file should be placed in metadata/munge
+source("code/3_generate_metadata_n_assign_barcodes.R")
 
 ```
 
 ```{r run nextflow, message = TRUE, include=FALSE, eval = FALSE}
 
 #this script submits the nextflow jobs for demultiplexing and running the cecret pipeline to the ec2 instance
-
 source("code/4_run_nextflow.R")
 
 ```
@@ -349,10 +352,10 @@ sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = "SampleSheet_v2.csv")
 
 #get sequencer of the run
-sequencer_type <- gsub("^[0-9-]*_(MiSeq|NextSeq1k2k)_.*", "\\1", sample_sheet_fn)
+instrument_type <- gsub("^[0-9-]*_(MiSeq|NextSeq2000)_.*", "\\1", sample_sheet_fn)
 
 #get sample type
-sample_type_acronym <- gsub(paste0("^[0-9-]*_", sequencer_type, "_|_.*"), "", sample_sheet_fn)
+sample_type_acronym <- gsub(paste0("^[0-9-]*_", instrument_type, "_|_.*"), "", sample_sheet_fn)
 
 authors <- gsub(", .*|,.*", "", bioinformatician_name)
 
@@ -377,10 +380,12 @@ if(bioinformatician_name == "") {
 # Define AWS variables and filepaths
 ####################################
 
+validated_seqsender_version <- "1.2.3"
+
 #path of where the seqsender repo was cloned, do not use tilde (~) in path
 seqsender_fp <- "/home/ec2-user/git/seqsender"
 seqsender_upload_tmp_fp <- "/home/ec2-user/tmp_data_ul"
-workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, project_name, sequencer_type, sep = "/")
+workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, project_name, instrument_type, sep = "/")
 submission_path <- paste(seqsender_upload_tmp_fp, sample_type_acronym, sep = "/")
 input_submission_name <- paste(project_name, sample_type_acronym, sep = "_")
 ec2_upload_tmp_fp <- paste(submission_path, input_submission_name, sep = "/")
@@ -431,6 +436,21 @@ if(nrow(seqsender) < 1) {
 ######################
 # Run seqsender on EC2
 ######################
+
+# Check seqsender version first
+installed_seqsender_version <- system2("ssh", c("-tt", ec2_hostname,
+                                                shQuote(paste("conda activate seqsender;",
+                                                              "python", seqsender_py, "version"),
+                                                        type = "sh")),
+                                       stdout = TRUE, stderr = TRUE) %>%
+  paste0(., collapse = " ") %>%
+  gsub(".*Version: ", "", .) %>%
+  gsub(" .*", "", .)
+
+if(validated_seqsender_version != installed_seqsender_version) {
+  stop(simpleError(paste0("Your installed version of seqsender (", installed_seqsender_version,
+                          ") does not match the validated seqsender version (", validated_seqsender_version , ") for this workflow\n", "Please install the validated version before continuing.")))
+}
 
 cecret_file_download_command <- c("aws s3 cp", workflow_output_fp)
 cecret_file_download_param <- c("--recursive",
