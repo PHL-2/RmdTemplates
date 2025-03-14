@@ -169,7 +169,7 @@ dir.create(here("output"))
 project_name <- basename(here())
 
 qc_report_fp <- paste0(project_name, "_QC_Report.Rmd")
-qc_output_fp <- here("output", paste0(project_name, '.QC.report_gen.on.', Sys.Date(), '.pdf'))
+qc_output_fp <- here("output", paste0(project_name, ".QC.report_gen.on.", Sys.Date(), ".pdf"))
 
 # load preamble the first time?
 load_preamble <- TRUE
