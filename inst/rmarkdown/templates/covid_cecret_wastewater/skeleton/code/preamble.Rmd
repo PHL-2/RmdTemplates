@@ -1291,10 +1291,6 @@ if(length(unique(variant_list$combined_list)) > 20) {
   stop(simpleError("The number of variants to color is greater than 20. Increase the number of colors in variant_color below"))
 }
 
-if(length(unique(variant_list$combined_list)) > 20) {
-  stop(simpleError("The number of variants to color is greater than 20. Increase the number of colors in variant_color below"))
-}
-
 variant_color <- data.frame(colors = c(calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)],
                                        few_pal(palette = "Light")(8))) %>%
   slice_head(n=length(unique(variant_list$combined_list))) %>%
