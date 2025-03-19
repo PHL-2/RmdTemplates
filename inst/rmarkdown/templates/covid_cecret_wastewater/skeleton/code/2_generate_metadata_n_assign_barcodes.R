@@ -97,16 +97,18 @@ barcodes <- tryCatch(
 # Get run stats
 ###############
 
-record_prefix <- "Record__"
 yymmdd <- gsub("^..|-", "", sequencing_date)
+sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
+                             selected_sequencer_type == "NextSeq2000" ~ "VH")
 seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
+intended_sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
+
+record_prefix <- "Record__"
 
 run_cd <- NA
 run_q30 <- NA
 run_pf <- NA
 run_error <- NA
-
-unknown_sequencer_regex <- paste0(record_prefix, yymmdd, "_([M]{1}|[VH]{2})", seq_folder_pattern, "$")
 
 # Get the run id from BaseSpace
 bs_run <- cli_submit("bs", "list", c("runs", "-f csv")) %>%
@@ -115,23 +117,12 @@ bs_run <- cli_submit("bs", "list", c("runs", "-f csv")) %>%
   as.data.frame() %>%
   `colnames<-`(.[1, ]) %>%
   slice(-1) %>%
-  filter(grepl(paste0("^", unknown_sequencer_regex), Name))
+  filter(grepl(paste0("^", intended_sequencing_folder_regex), Name)) %>%
+  filter(grepl(paste0("^", record_prefix, selected_sequencer_type, "_", sequencing_date), ExperimentName))
 
 if(nrow(bs_run) > 1) {
-  warning(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you are selecting the correct sequencer!!!\n",
-                               "Currently, you are pulling the sequencing run from the ", selected_sequencer_type, "\n\n")))
-
-  #runs that have the same sample types, processed on the same date, and on the same sequencing instrument type may throw an error
-  sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
-                               selected_sequencer_type == "NextSeq2000" ~ "VH")
-
-  intended_sequencing_folder_regex <- paste0(record_prefix, yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
-
-  bs_run <- bs_run %>%
-    filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
-
-}
-if (nrow(bs_run) == 0) {
+  stop(simpleError("\nThere are two sequencing runs that matched this date on the same sequencer!!!\n"))
+} else if (nrow(bs_run) == 0) {
   stop(simpleError(paste0("\nThere is no record on BaseSpace for this date: ", sequencing_date,
                           "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
                           "\nThe sequencer type could also be wrong: ", selected_sequencer_type)))
