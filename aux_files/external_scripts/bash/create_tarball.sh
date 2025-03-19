@@ -30,8 +30,8 @@ tar_w_progress() {
   local bars=100
 
   cd "$input_fp" || exit 1
-  
-  files_to_tar=$(find . \( -name "./*SampleSheet*.csv" -o -name "*.xml" -o -path "./Data" -o -path "./InterOp" \) \
+
+  files_to_tar=$(find . \( -wholename "./*SampleSheet*.csv" -o -name "*.xml" -o -path "./Data" -o -path "./InterOp" \) \
                  ! -path "./Alignment_*" ! -path "./Analysis/*")
 
   checkpoint_N=$(du -akc --apparent-size $files_to_tar | tail -n 1 | cut -f1 | xargs printf "%d/$((bars-1))" | xargs echo | bc)
@@ -161,10 +161,10 @@ fi
 if [[ "$basespace" == "true" || -n "$record_prefix" ]]; then
   echo -e "\nChecking if bs cli is available and working..."
   invisible_whoami=$(bs whoami) || bs_error_code=$?
-  
-  if [[ "$bs_error_code" -ne 0 ]];then 
+
+  if [[ "$bs_error_code" -ne 0 ]];then
     echo -e "\nError:\n'bs whoami' command failed with exit status ${bs_error_code}\n"
-    exit 1 
+    exit 1
   fi
 fi
 
@@ -172,11 +172,11 @@ if [[ -n "$s3_path" ]]; then
   echo -e "\nChecking if aws cli is available and working..."
   invisible_bucket=$(aws s3 ls "${s3_path}") || s3_error_code=$?
 
-  if [[ "$s3_error_code" -ne 0 ]];then 
+  if [[ "$s3_error_code" -ne 0 ]];then
     echo -e "\nError:\n'aws s3 ls ${s3_path}' command failed with exit status ${s3_error_code}"
     echo -e "If the provided S3 bucket path does not exist yet, upload an empty file to create it first\n"
     echo -e "Example:\n$ touch file.txt\n$ aws s3 cp file.txt ${s3_path}\n"
-    exit 1 
+    exit 1
   fi
 fi
 
@@ -227,11 +227,11 @@ else
 
   sequencing_run=$(echo "ls -l ${hostname_path}" | sftp "$hostname" | rev | cut -f1 -d' ' | rev | grep "$run_regex") || sftp_error_code=$?
   num_entries=$(echo "$sequencing_run" | grep -o ' ' | wc -l)
-    
+
   if [[ "$sftp_error_code" -ne 0 ]]; then
     echo -e "\nError:\n'sftp' command to look for the ${date_string} run on ${hostname}:${hostname_path} failed with exit status ${sftp_error_code}\n"
     echo -e "Was there a run loaded on this date?\n"
-    exit 1 
+    exit 1
   elif [[ -z "$sequencing_run" ]]; then
     echo -e "\nError:\nNo run loaded on ${date_string} could be found on the ${instrument}\n"
     exit 1
@@ -248,7 +248,7 @@ else
     actual_temp_dir="${extend_tmp_dir}${sequencing_run}/"
     echo -e "\nDownloading ${instrument} run ${full_hostname_path} to: ${extend_tmp_dir}"
     mkdir -p "$actual_temp_dir"
-    
+
     scp -rB \
       "${full_hostname_path}/*SampleSheet*.csv" \
       "${full_hostname_path}/*.xml" \
@@ -256,12 +256,12 @@ else
       "${full_hostname_path}/Logs/" \
       "${full_hostname_path}/Data/" \
       "$actual_temp_dir"
-          
+
     echo -e "\nCreating tarball of ${sequencing_run} in ${extend_tmp_dir}:\n"
     tar_w_progress "${extend_tmp_dir}${sequencing_run}" "${extend_tmp_dir}${sequencing_run}"
 
   elif [[ "$instrument" == "NextSeq2000" ]]; then
-  
+
   echo -e "\nCreating the tarball in directory - ${full_hostname_path}/"
   ssh -t "$hostname" "$(typeset -f tar_w_progress); tar_w_progress '${hostname_path}/${sequencing_run}' '${hostname_path}/${sequencing_run}/${sequencing_run}'"
   sleep 2
@@ -285,10 +285,10 @@ if [[ -n "$s3_path" ]]; then
   echo -e "\nChecking if the run has already been uploaded..."
   existing_run=$(aws s3 ls "${s3_path}${date_string}/${sequencing_run}.tar.gz") || existing_run_code=$?
 
-  if [[ "$existing_run_code" -eq 0 ]];then 
+  if [[ "$existing_run_code" -eq 0 ]];then
     echo -e "\nError:\nThe run already exists at ${s3_path}${date_string}/${sequencing_run}.tar.gz"
     echo -e "To reupload, manually delete this run first\n"
-    exit 1 
+    exit 1
   fi
 
   aws s3 cp "${extend_tmp_dir}${sequencing_run}.tar.gz" "${s3_path}${date_string}/"
@@ -309,11 +309,11 @@ if [[ -n "$record_prefix" ]]; then
       "${actual_temp_dir}"*".xml" \
       "${actual_temp_dir}InterOp/" \
       "$bs_ul_fp"
-    
+
   # If run is from NextSeq, extract the relevant files from tarball
   elif [[ "$instrument" == "NextSeq2000" ]]; then
     echo -e "\nExtracting the necessary files from ${extend_tmp_dir}${sequencing_run}.tar.gz..."
-    
+
     tar -xzf "${extend_tmp_dir}${sequencing_run}.tar.gz" \
       --directory "$bs_ul_fp" \
       "./*SampleSheet*.csv" \
@@ -353,7 +353,7 @@ if [[ -n "$record_prefix" ]]; then
     --instrument "$instrument" \
     --concurrency "low" \
     --no-progress-bars \
-    "$bs_ul_fp" 
+    "$bs_ul_fp"
 fi
 
 # Cleanup
