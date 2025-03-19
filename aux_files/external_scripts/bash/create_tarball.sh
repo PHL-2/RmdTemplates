@@ -225,17 +225,19 @@ else
     hostname_path="/usr/local/illumina/runs"
   fi
 
-  sequencing_run=$(echo "ls -l ${hostname_path}" | sftp "$hostname" | rev | cut -f1 -d' ' | rev | grep "$run_regex") || sftp_error_code=$?
-  num_entries=$(echo "$sequencing_run" | grep -o ' ' | wc -l)
+  completed_run=$(echo "ls ${hostname_path}/*/RunCompletionStatus.xml" | sftp "$hostname" | grep "$run_regex") || sftp_error_code=$?
+  sequencing_run=$(echo "$completed_run" | sed "s/ /\n/g" | rev | cut -f2 -d"/" | rev)
+  num_entries=$(echo "$sequencing_run" | wc -l)
 
   if [[ "$sftp_error_code" -ne 0 ]]; then
     echo -e "\nError:\n'sftp' command to look for the ${date_string} run on ${hostname}:${hostname_path} failed with exit status ${sftp_error_code}\n"
-    echo -e "Was there a run loaded on this date?\n"
     exit 1
   elif [[ -z "$sequencing_run" ]]; then
-    echo -e "\nError:\nNo run loaded on ${date_string} could be found on the ${instrument}\n"
+    echo -e "\nError:\nRun loaded on ${date_string} could not be found on the ${instrument}\n"
+    echo -e "Was there a run loaded on this date?\n"
+    echo -e "Otherwise, the sequencer may still be running...\n"
     exit 1
-  elif [[ "$num_entries" -gt 0 ]]; then
+  elif [[ "$num_entries" -gt 1 ]]; then
     echo -e "\nError:\nThis script cannot handle multiple runs on the same sequencer\n"
     echo "$sequencing_run"
     exit 1
