@@ -96,7 +96,7 @@ source("code/1_filter_samples_n_generate_platemap.R")
 ```{r upload sequencing run data, message = TRUE, include=FALSE, eval = FALSE}
 
 #this script compresses the sequencing run folder and uploads it to S3
-source("code/2_archive_n_upload.R")
+source("code/2_archive_n_upload_run.R")
 
 ```
 
