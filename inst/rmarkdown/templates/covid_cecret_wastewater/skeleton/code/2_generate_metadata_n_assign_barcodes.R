@@ -292,7 +292,8 @@ if(!is.na(env_fp)) {
   env_data <- read_csv(env_fp) %>%
     #use the Tuesday of the sequencing week as the sample_received_date
     mutate(sample_received_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
-    select(sample_group = sample_name, sample_received_date, environmental_site) %>%
+    select(uniq_sample_name = sample_name, sample_group = sample_name,
+           sample_received_date, environmental_site) %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_group)) %>%
     #filter empty columns
@@ -300,7 +301,10 @@ if(!is.na(env_fp)) {
            !matches("^\\.\\.\\."))
 } else{
 
-  env_data <- data.frame(environmental_site = NA_character_)
+  env_data <- data.frame(uniq_sample_name = NA_character_,
+                         sample_group = NA_character_,
+                         sample_received_date = NA_character_,
+                         environmental_site = NA_character_)
 }
 
 ###################################
@@ -477,8 +481,7 @@ metadata_sheet <- metadata_sheet %>%
                                   TRUE ~ gsub(".*-", "", uniq_sample_name)),
          ww_group = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ sample_type,
                               grepl(paste0(sample_group_controls, collapse = "|"), sample_name) ~ "Wastewater control",
-                              TRUE ~ "Wastewater sample")
-  ) %>%
+                              TRUE ~ "Wastewater sample")) %>%
   merge(ddPCR_data, by = extra_cols2merge, all.x = TRUE, sort = FALSE) %>%
 
   merge(env_data, by = extra_cols2merge, all.x = TRUE, sort = FALSE) %>%
