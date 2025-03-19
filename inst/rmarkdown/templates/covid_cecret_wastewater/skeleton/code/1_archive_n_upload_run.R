@@ -17,9 +17,9 @@ if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(s
   stop(simpleError(paste0("Please use the 'YYYY-MM-DD' format for this RStudio project date. This date should correspond to the sequencing run date")))
 }
 
-###################################################
+################
 # Load functions
-###################################################
+################
 
 #this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(
@@ -31,9 +31,9 @@ tryCatch(
   }
 )
 
-###################################################
+#############
 # Load config
-###################################################
+#############
 
 #this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
