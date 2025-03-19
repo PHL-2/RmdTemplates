@@ -95,7 +95,7 @@ if(is.null(check_run_on_s3)) {
   stop(simpleError(paste(selected_sequencer_type, "run detected in", s3_run_bucket_fp,
                          "\nTo create a new tarball, manually delete the old file in", s3_run_bucket_fp)))
 }
-message("Run on S3 not found. Continuing to create tarball")
+message("\nRun on S3 not found. Continuing to create tarball")
 
 system2("ssh", c(ec2_hostname,
                  shQuote(
