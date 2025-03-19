@@ -102,6 +102,8 @@ check_screen_job(message2display = "Checking BCLConvert job",
                  screen_session_name = paste("demux", session_suffix, sep = "-"),
                  screen_log_fp = tmp_screen_fp)
 
+rstudioapi::executeCommand("activateConsole")
+
 # Checking the demultiplexing results
 aws_s3_fastq_files <- system2("aws", c("s3 ls", bclconvert_output_path,
                                        "--recursive",
@@ -253,7 +255,7 @@ check_screen_job(message2display = "Checking Cecret job",
                  screen_session_name = paste("cecret", session_suffix, sep = "-"),
                  screen_log_fp = tmp_screen_fp)
 
-rstudioapi::executeCommand('activateConsole')
+rstudioapi::executeCommand("activateConsole")
 
 # Download BCLConvert files
 bcl_file_download_command <- c("s3 cp", paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, sep = "/"))
@@ -367,4 +369,4 @@ check_screen_job(message2display = "Checking delete job",
                  screen_session_name = paste("delete-run", session_suffix, sep = "-"),
                  screen_log_fp = tmp_screen_fp)
 
-rstudioapi::executeCommand('activateConsole')
+rstudioapi::executeCommand("activateConsole")
