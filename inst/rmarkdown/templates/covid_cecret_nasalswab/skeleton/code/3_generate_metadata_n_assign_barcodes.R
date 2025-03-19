@@ -195,6 +195,8 @@ if(samplesheet_exists) {
                    screen_session_name = paste("bs-dl-sheet", session_suffix, sep = "-"),
                    screen_log_fp = tmp_screen_fp)
 
+  rstudioapi::executeCommand("activateConsole")
+
   # Get name of the final SampleSheet if there is more than 1
   list_sample_sheets <- system2("ssh", c(ec2_hostname,
                                          shQuote(
@@ -738,48 +740,48 @@ if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sampl
   stop(simpleError(paste0("\nSome samples have collection dates more than 6 months ago. Investigate!!")))
 }
 
-print("What do the sample_id look like?")
+message("What do the sample_id look like?")
 print(unique(metadata_sheet$sample_id))
 
-print("Which lanes are sequenced?")
+message("Which lanes are sequenced?")
 print(unique(metadata_sheet$lane))
 
-print("Are the barcode columns unique?")
+message("Are the barcode columns unique?")
 if(length(unique(metadata_sheet$idt_plate_coord)) != dim(metadata_sheet)[1]) {
   stop(simpleError("Barcode positions are not unique!"))
 }
 print(length(unique(metadata_sheet$idt_plate_coord)) == dim(metadata_sheet)[1])
 
-print("Number of barcodes?")
+message("Number of barcodes?")
 print(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))))
-print("Number of samples?")
+message("Number of samples?")
 print(length(unique(metadata_sheet$sample_id)))
 if(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))) != length(unique(metadata_sheet$sample_id))) {
   stop(simpleError("Differing number of samples and barcodes!"))
 }
 
-print("Are the barcodes unique?")
+message("Are the barcodes unique?")
 print(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))) == dim(metadata_sheet)[1])
 
-print("Are the sample names unique?")
+message("Are the sample names unique?")
 print(length(unique(metadata_sheet$sample_id)) == dim(metadata_sheet)[1])
 
-print("Are all the forward primers found?")
+message("Are all the forward primers found?")
 print(sum(is.na(metadata_sheet$index)) == 0)
 
-print("Are all the reverse primers found?")
+message("Are all the reverse primers found?")
 print(sum(is.na(metadata_sheet$index2)) == 0)
 if(sum(is.na(c(metadata_sheet$index, metadata_sheet$index2))) != 0) {
   stop(simpleError("Either the forward or reverse primers are NA!"))
 }
 
-print("Do all the sampleIDs start with a letter?")
+message("Do all the sampleIDs start with a letter?")
 print(all(grepl("^[A-Za-z]", metadata_sheet$sample_id)))
 if(!all(grepl("^[A-Za-z]", metadata_sheet$sample_id))) {
   stop(simpleError("Some Sample IDs do not start with a letter!"))
 }
 
-print("Are there periods, underscores, or space characters in the SampleID?")
+message("Are there periods, underscores, or space characters in the SampleID?")
 print(any(grepl(" |_|\\.", metadata_sheet$sample_id)))
 if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
   stop(simpleError("There are spaces, underscores, or periods in the Sample IDs! Please fix"))
@@ -876,11 +878,25 @@ run_in_terminal(paste("scp", sample_sheet_fp, nf_demux_samplesheet_fp,
                       paste0(ec2_hostname, ":", ec2_tmp_session_dir))
 )
 
-run_in_terminal(paste("aws s3 cp", ec2_tmp_session_dir, s3_run_bucket_fp,
-                      "--recursive", "--exclude '*'",
-                      paste0("--include '", sample_sheet_fn, "'"),
-                      paste0("--include '", basename(nf_demux_samplesheet_fp), "'"))
+submit_screen_job(message2display = "Uploading sample sheets to S3",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = paste("upload-sheets", session_suffix, sep = "-"),
+                  screen_log_fp = tmp_screen_fp,
+                  command2run = paste("aws s3 cp",
+                                      ec2_tmp_session_dir,
+                                      s3_run_bucket_fp,
+                                      "--recursive",
+                                      "--exclude '*'",
+                                      paste0("--include '", sample_sheet_fn, "'"),
+                                      paste0("--include '", basename(nf_demux_samplesheet_fp), "'"))
 )
+
+check_screen_job(message2display = "Checking sample sheet upload job",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = paste("upload-sheets", session_suffix, sep = "-"),
+                 screen_log_fp = tmp_screen_fp)
+
+rstudioapi::executeCommand("activateConsole")
 
 ################################
 # Write sheet to metadata folder

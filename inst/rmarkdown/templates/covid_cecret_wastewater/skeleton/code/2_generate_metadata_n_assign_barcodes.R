@@ -202,6 +202,8 @@ if(samplesheet_exists) {
                    screen_session_name = paste("bs-dl-sheet", session_suffix, sep = "-"),
                    screen_log_fp = tmp_screen_fp)
 
+  rstudioapi::executeCommand("activateConsole")
+
   # Get name of the final SampleSheet if there is more than 1
   list_sample_sheets <- system2("ssh", c(ec2_hostname,
                                          shQuote(
