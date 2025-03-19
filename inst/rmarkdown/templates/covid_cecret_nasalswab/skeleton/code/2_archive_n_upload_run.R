@@ -1,5 +1,5 @@
 library(here)
-library(magrittr)
+library(dplyr)
 
 #This Rscript uploads the sequencing run folder and related files to S3 and makes a record of the run on BaseSpace
 
