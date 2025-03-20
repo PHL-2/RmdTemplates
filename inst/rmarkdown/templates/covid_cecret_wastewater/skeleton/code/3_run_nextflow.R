@@ -106,21 +106,13 @@ check_screen_job(message2display = "Checking BCLConvert job",
 
 rstudioapi::executeCommand("activateConsole")
 
-# Checking the demultiplexing results
-aws_s3_fastq_files <- system2("aws", c("s3 ls", bclconvert_output_path,
-                                       "--recursive",
-                                       "| grep 'R1_001.fastq.gz$'",
-                                       "| grep -v 'Merged'"), stdout = TRUE)
-
 # If the aws-cli provides an SSL error on local machine, run the command through the instance
-if(length(aws_s3_fastq_files) == 0) {
-  aws_s3_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
-                                         shQuote(paste("aws s3 ls", bclconvert_output_path, "--recursive",
-                                                       "| grep 'R1_001.fastq.gz$'",
-                                                       "| grep -v 'Merged'"), type = "sh")),
-                                stdout = TRUE, stderr = TRUE) %>%
-    head(-1)
-}
+aws_s3_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
+                                       shQuote(paste("aws s3 ls", bclconvert_output_path, "--recursive",
+                                                     "| grep 'R1_001.fastq.gz$'",
+                                                     "| grep -v 'Merged'"), type = "sh")),
+                              stdout = TRUE, stderr = TRUE) %>%
+  head(-1)
 
 fastq_file_sizes <- aws_s3_fastq_files %>%
   str_split("\\s+") %>%
@@ -189,16 +181,6 @@ if(remove_undetermined_file) {
 
 fastq_path <- paste(bclconvert_output_path, instrument_run_id, sep = "/")
 
-# If samples for the same project are split across two different runs, move the fastq files to a new bucket path before running the workflow
-# system2("aws", c("s3 mv",
-#                  fastq_path,
-#                  paste(bclconvert_output_path, "fastq-files", sep = "/"),
-#                  "--recursive",
-#                  "--exclude '*'",
-#                  "--include '*_R[12]_001.fastq.gz'"))
-#
-# fastq_path <- paste(bclconvert_output_path, "fastq-files", sep = "/")
-
 # Upload nextflow concat fastq files
 nf_concat_sample_sheet_pattern <- "nf_concat_fastq_samplesheet.csv"
 
@@ -212,50 +194,40 @@ is_nf_concat_samplesheet_empty <- read_csv(nf_concat_samplesheet_fp, show_col_ty
 if(!is_nf_concat_samplesheet_empty) {
 
   message("Uploading nextflow concat samplesheet to AWS S3")
-  s3_cp_nf_concat_samplesheet <- system2("aws", c("s3 cp", shQuote(nf_concat_samplesheet_fp, type = "cmd"), paste0(bclconvert_output_path, "/nf_samplesheets/")), stdout = TRUE)
+  mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
+                                 shQuote(paste0("mkdir -p ", ec2_tmp_fp, "/", session_suffix))),
+                        stdout = TRUE, stderr = TRUE)
 
-  if(length(s3_cp_nf_concat_samplesheet) == 0) {
-    mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
-                                   shQuote(paste0("mkdir -p ", ec2_tmp_fp, "/", session_suffix))),
-                          stdout = TRUE, stderr = TRUE)
-
-    if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
-      stop(simpleError("Failed to make temporary directory in EC2 instance"))
-    }
-
-    # Transfer sample sheet
-    run_in_terminal(paste("scp", nf_concat_samplesheet_fp,
-                          paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix))
-    )
-
-    # Upload concat fastq samplesheet
-    submit_screen_job(message2display = "Uploading samplesheet to S3",
-                      ec2_login = ec2_hostname,
-                      screen_session_name = paste("up-concat-ss", session_suffix, sep = "-"),
-                      screen_log_fp = tmp_screen_fp,
-                      command2run = paste("aws s3 cp",
-                                          paste0(ec2_tmp_fp, "/", session_suffix),
-                                          paste0(bclconvert_output_path, "/nf_samplesheets/"),
-                                          "--recursive",
-                                          "--exclude '*'",
-                                          paste0("--include '", basename(nf_concat_samplesheet_fp), "'"))
-    )
-
-    check_screen_job(message2display = "Checking samplesheet upload job",
-                     ec2_login = ec2_hostname,
-                     screen_session_name = paste("up-concat-ss", session_suffix, sep = "-"),
-                     screen_log_fp = tmp_screen_fp)
+  if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
+    stop(simpleError("Failed to make temporary directory in EC2 instance"))
   }
+
+  # Transfer sample sheet
+  run_in_terminal(paste("scp", nf_concat_samplesheet_fp,
+                        paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix))
+  )
+
+  # Upload concat fastq samplesheet
+  submit_screen_job(message2display = "Uploading samplesheet to S3",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = paste("up-concat-ss", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
+                    command2run = paste("aws s3 cp",
+                                        paste0(ec2_tmp_fp, "/", session_suffix),
+                                        paste0(bclconvert_output_path, "/nf_samplesheets/"),
+                                        "--recursive",
+                                        "--exclude '*'",
+                                        paste0("--include '", basename(nf_concat_samplesheet_fp), "'"))
+  )
+
+  check_screen_job(message2display = "Checking samplesheet upload job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = paste("up-concat-ss", session_suffix, sep = "-"),
+                   screen_log_fp = tmp_screen_fp)
 
   # Copy the concat nextflow pipeline to EC2 if its not already there
   run_in_terminal(paste("scp", file.path(dirname(here()), "aux_files", "external_scripts", "nextflow", "concat_fastq.nf"),
-                        paste0(ec2_hostname, ":", tmp_screen_fp)),
-                  paste(" [On local computer]\n",
-                        "aws s3 cp", file.path(dirname(here()), "aux_files", "external_scripts", "nextflow", "concat_fastq.nf"),
-                        paste0("s3://test-environment/input/", as.character(Sys.Date()), "/"), "\n\n",
-                        "[On", ec2_hostname, "instance]\n",
-                        "aws s3 cp", paste0("s3://test-environment/input/", as.character(Sys.Date()), "/concat_fastq.nf"),
-                        tmp_screen_fp)
+                        paste0(ec2_hostname, ":", tmp_screen_fp))
   )
 
   # Run nextflow merge fastq file pipeline
@@ -280,22 +252,14 @@ if(!is_nf_concat_samplesheet_empty) {
   rstudioapi::executeCommand("activateConsole")
 
   # Checking the merged file sizes
-  aws_s3_merged_fastq_files <- system2("aws", c("s3 ls", bclconvert_output_path,
-                                                "--recursive",
-                                                "| grep 'R1_001.fastq.gz$'",
-                                                "| grep 'Merged'"), stdout = TRUE)
+  aws_s3_merged_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
+                                                shQuote(paste("aws s3 ls", bclconvert_output_path, "--recursive",
+                                                              "| grep 'R1_001.fastq.gz$'",
+                                                              "| grep 'Merged'"),
+                                                        type = "sh")),
+                                       stdout = TRUE, stderr = TRUE) %>%
+    head(-1)
 
-  # If the aws-cli provides an SSL error on local machine, run the command through the instance
-  if(length(aws_s3_merged_fastq_files) == 0) {
-
-    aws_s3_merged_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
-                                                  shQuote(paste("aws s3 ls", bclconvert_output_path, "--recursive",
-                                                                "| grep 'R1_001.fastq.gz$'",
-                                                                "| grep 'Merged'"),
-                                                          type = "sh")),
-                                         stdout = TRUE, stderr = TRUE) %>%
-      head(-1)
-  }
 
   merged_fastq_file_sizes <- aws_s3_merged_fastq_files %>%
     str_split("\\s+") %>%
@@ -391,7 +355,7 @@ check_screen_job(message2display = "Checking Cecret job",
 
 rstudioapi::executeCommand("activateConsole")
 
-# Download BCLConvert files
+# Download BCLConvert options
 bcl_file_download_command <- c("s3 cp", paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, sep = "/"))
 bcl_file_download_param <- c("--recursive",
                              "--exclude '*'",
@@ -404,12 +368,7 @@ bcl_file_download_param <- c("--recursive",
                                     collapse = " ",
                                     "'"))
 
-aws_s3_bcl_download <- system2("aws", c(bcl_file_download_command,
-                                        here("data"),
-                                        bcl_file_download_param),
-                               stdout = TRUE, stderr = TRUE)
-
-# Download Cecret files
+# Download Cecret options
 cecret_file_download_command <- c("s3 cp", workflow_output_fp)
 cecret_file_download_param <- c("--recursive",
                                 "--exclude '*'",
@@ -426,63 +385,50 @@ cecret_file_download_param <- c("--recursive",
                                          "cecret_results.csv"),
                                        collapse = " ",
                                        "'"))
-aws_s3_cecret_download <- system2("aws", c(cecret_file_download_command,
-                                           here("data"),
-                                           cecret_file_download_param),
-                                  stdout = TRUE, stderr = TRUE)
 
-# If the aws-cli provides an SSL error on local machine, run the command through the instance
-if(any(grepl("fatal error", c(aws_s3_bcl_download, aws_s3_cecret_download)))) {
+# Download BCLConvert data
+submit_screen_job(message2display = "Downloading BCLConvert data",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = paste("bclconvert-dl", session_suffix, sep = "-"),
+                  screen_log_fp = tmp_screen_fp,
+                  command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
+                                      "aws",
+                                      paste0(bcl_file_download_command, collapse = " "),
+                                      data_output_fp,
+                                      paste0(bcl_file_download_param, collapse = " "))
+)
 
-  # Download BCLConvert data
-  submit_screen_job(message2display = "Downloading BCLConvert data",
-                    ec2_login = ec2_hostname,
-                    screen_session_name = paste("bclconvert-dl", session_suffix, sep = "-"),
-                    screen_log_fp = tmp_screen_fp,
-                    command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
-                                        "aws",
-                                        paste0(bcl_file_download_command, collapse = " "),
-                                        data_output_fp,
-                                        paste0(bcl_file_download_param, collapse = " "))
-  )
+check_screen_job(message2display = "Checking BCLConvert download job",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = paste("bclconvert-dl", session_suffix, sep = "-"),
+                 screen_log_fp = tmp_screen_fp)
 
-  check_screen_job(message2display = "Checking BCLConvert download job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = paste("bclconvert-dl", session_suffix, sep = "-"),
-                   screen_log_fp = tmp_screen_fp)
+# Download Cecret data
+submit_screen_job(message2display = "Downloading Cecret data",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = paste("cecret-dl", session_suffix, sep = "-"),
+                  screen_log_fp = tmp_screen_fp,
+                  command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
+                                      "aws",
+                                      paste0(cecret_file_download_command, collapse = " "),
+                                      data_output_fp,
+                                      paste0(cecret_file_download_param, collapse = " "))
+)
 
-  # Download Cecret data
-  submit_screen_job(message2display = "Downloading Cecret data",
-                    ec2_login = ec2_hostname,
-                    screen_session_name = paste("cecret-dl", session_suffix, sep = "-"),
-                    screen_log_fp = tmp_screen_fp,
-                    command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
-                                        "aws",
-                                        paste0(cecret_file_download_command, collapse = " "),
-                                        data_output_fp,
-                                        paste0(cecret_file_download_param, collapse = " "))
-  )
+check_screen_job(message2display = "Checking Cecret download job",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = paste("cecret-dl", session_suffix, sep = "-"),
+                 screen_log_fp = tmp_screen_fp)
 
-  check_screen_job(message2display = "Checking Cecret download job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = paste("cecret-dl", session_suffix, sep = "-"),
-                   screen_log_fp = tmp_screen_fp)
+# Download data from EC2 instance to local
+run_in_terminal(paste("scp -r", paste0(ec2_hostname, ":", data_output_fp),
+                      here())
+)
 
-  # Download data from EC2 instance to local
-  run_in_terminal(paste("scp -r", paste0(ec2_hostname, ":", data_output_fp),
-                        here())
-  )
-}
 
 # Download Nextflow config file for profile (use terminal because of proxy login issue)
 # If SSH is not working, copy a nextflow.config from an older run and paste into data/processed_cecret as nextflow.config
 run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
-                      here("data", "processed_cecret", "nextflow.config")),
-                paste(" [On", ec2_hostname, "instance]\n",
-                      "aws s3 cp ~/.nextflow/config",
-                      paste0("s3://test-environment/input/", session_suffix, "/"), "\n\n",
-                      "[On local computer]\n",
-                      "aws s3 cp", paste0("s3://test-environment/input/", session_suffix, "/config"),
                       here("data", "processed_cecret", "nextflow.config"))
 )
 
