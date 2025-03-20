@@ -116,3 +116,5 @@ check_screen_job(message2display = "Checking tar job",
                  ec2_login = ec2_hostname,
                  screen_session_name = paste("sequencing-tarball", session_suffix, sep = "-"),
                  screen_log_fp = tmp_screen_fp)
+
+rstudioapi::executeCommand("activateConsole")
