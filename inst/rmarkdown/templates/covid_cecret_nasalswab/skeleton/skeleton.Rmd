@@ -60,7 +60,8 @@ run_uploaded_2_basespace <- FALSE # set this to TRUE if the run was uploaded to 
 
 prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
 
-remove_sample_from_samplesheets <- c("") #add sample names (accessions) to remove from processing
+remove_sample_from_samplesheets <- c(missing_samples,
+                                     "") #add additional sample names (accessions) to remove from processing
 
 sample_w_empty_reads <- c("") #add sample ids that have empty fastq files
 
@@ -96,7 +97,7 @@ source("code/1_filter_samples_n_generate_platemap.R")
 ```{r upload sequencing run data, message = TRUE, include=FALSE, eval = FALSE}
 
 #this script compresses the sequencing run folder and uploads it to S3
-source("code/2_archive_n_upload.R")
+source("code/2_archive_n_upload_run.R")
 
 ```
 

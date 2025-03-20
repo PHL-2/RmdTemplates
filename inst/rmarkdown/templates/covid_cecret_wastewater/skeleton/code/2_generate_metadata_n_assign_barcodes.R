@@ -1,6 +1,6 @@
 library(here)
 library(dplyr)
-library(tidyr)
+library(tidyverse)
 library(readxl)
 library(readr)
 library(stringr)
@@ -97,16 +97,18 @@ barcodes <- tryCatch(
 # Get run stats
 ###############
 
-record_prefix <- "Record__"
 yymmdd <- gsub("^..|-", "", sequencing_date)
+sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
+                             selected_sequencer_type == "NextSeq2000" ~ "VH")
 seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
+intended_sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
+
+record_prefix <- "Record__"
 
 run_cd <- NA
 run_q30 <- NA
 run_pf <- NA
 run_error <- NA
-
-unknown_sequencer_regex <- paste0(record_prefix, yymmdd, "_([M]{1}|[VH]{2})", seq_folder_pattern, "$")
 
 # Get the run id from BaseSpace
 bs_run <- cli_submit("bs", "list", c("runs", "-f csv")) %>%
@@ -115,23 +117,12 @@ bs_run <- cli_submit("bs", "list", c("runs", "-f csv")) %>%
   as.data.frame() %>%
   `colnames<-`(.[1, ]) %>%
   slice(-1) %>%
-  filter(grepl(paste0("^", unknown_sequencer_regex), Name))
+  filter(grepl(paste0("^", intended_sequencing_folder_regex), Name)) %>%
+  filter(grepl(paste0("^", record_prefix, selected_sequencer_type, "_", sequencing_date), ExperimentName))
 
 if(nrow(bs_run) > 1) {
-  warning(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you are selecting the correct sequencer!!!\n",
-                               "Currently, you are pulling the sequencing run from the ", selected_sequencer_type, "\n\n")))
-
-  #runs that have the same sample types, processed on the same date, and on the same sequencing instrument type may throw an error
-  sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
-                               selected_sequencer_type == "NextSeq2000" ~ "VH")
-
-  intended_sequencing_folder_regex <- paste0(record_prefix, yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
-
-  bs_run <- bs_run %>%
-    filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
-
-}
-if (nrow(bs_run) == 0) {
+  stop(simpleError("\nThere are two sequencing runs that matched this date on the same sequencer!!!\n"))
+} else if (nrow(bs_run) == 0) {
   stop(simpleError(paste0("\nThere is no record on BaseSpace for this date: ", sequencing_date,
                           "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
                           "\nThe sequencer type could also be wrong: ", selected_sequencer_type)))
@@ -211,6 +202,8 @@ if(samplesheet_exists) {
                    screen_session_name = paste("bs-dl-sheet", session_suffix, sep = "-"),
                    screen_log_fp = tmp_screen_fp)
 
+  rstudioapi::executeCommand("activateConsole")
+
   # Get name of the final SampleSheet if there is more than 1
   list_sample_sheets <- system2("ssh", c(ec2_hostname,
                                          shQuote(
@@ -223,7 +216,7 @@ if(samplesheet_exists) {
   run_in_terminal(paste("scp",
                         paste0(ec2_hostname, ":", list_sample_sheets),
                         run_samplesheet_fp)
-                  )
+  )
 }
 
 run_sample_sheet <- load_sample_sheet(run_samplesheet_fp)
@@ -269,7 +262,7 @@ ddPCR_files <- list.files(ddPCR_run_fp, pattern = ".*_ww_sequencing_metadata.csv
 ddPCR_files <- tail(ddPCR_files[!grepl(failed_regex, ddPCR_files)], 100)
 
 ddPCR_data <- ddPCR_files %>%
-  data_frame(FileName = .) %>%
+  data.frame(FileName = .) %>%
   group_by(FileName) %>%
   do(read_delim(.$FileName,
                 show_col_types = FALSE,
@@ -301,7 +294,8 @@ if(!is.na(env_fp)) {
   env_data <- read_csv(env_fp) %>%
     #use the Tuesday of the sequencing week as the sample_received_date
     mutate(sample_received_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
-    select(sample_group = sample_name, sample_received_date, environmental_site) %>%
+    select(uniq_sample_name = sample_name, sample_group = sample_name,
+           sample_received_date, environmental_site) %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_group)) %>%
     #filter empty columns
@@ -309,7 +303,10 @@ if(!is.na(env_fp)) {
            !matches("^\\.\\.\\."))
 } else{
 
-  env_data <- data.frame(environmental_site = NA_character_)
+  env_data <- data.frame(uniq_sample_name = NA_character_,
+                         sample_group = NA_character_,
+                         sample_received_date = NA_character_,
+                         environmental_site = NA_character_)
 }
 
 ###################################
@@ -486,10 +483,8 @@ metadata_sheet <- metadata_sheet %>%
                                   TRUE ~ gsub(".*-", "", uniq_sample_name)),
          ww_group = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ sample_type,
                               grepl(paste0(sample_group_controls, collapse = "|"), sample_name) ~ "Wastewater control",
-                              TRUE ~ "Wastewater sample")
-  ) %>%
+                              TRUE ~ "Wastewater sample")) %>%
   merge(ddPCR_data, by = extra_cols2merge, all.x = TRUE, sort = FALSE) %>%
-
   merge(env_data, by = extra_cols2merge, all.x = TRUE, sort = FALSE) %>%
   mutate(environmental_site = case_when(grepl(paste0(sequencing_controls, collapse = "|"), sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
@@ -541,32 +536,9 @@ for(x in fill_in_columns) {
   }
 }
 
-#######################################################################################################
-# Check for the samples in the ddPCR metadata sheet that didn't appear in the sequencing metadata sheet
-#######################################################################################################
-
-if(ncol(ddPCR_data) > 0) {
-
-  ddPCR_sample_not_found <- ddPCR_data %>%
-    filter(grepl(paste0(sample_group_sites, collapse = "|"), sample_group)) %>%
-    merge(metadata_sheet, by = extra_cols2merge, all.x = TRUE) %>%
-    filter(is.na(sample_id)) %>%
-    mutate(date_n_name = paste(sample_received_date, "-", sample_group)) %>%
-    select(date_n_name) %>%
-    pull() %>%
-    str_sort()
-
-  #throw error
-  if(length(ddPCR_sample_not_found) > 0) {
-
-    message("\n*****")
-    message("These samples were found in the ddPCR metadata sheet but not in the sequencing sample sheet")
-    message("Double check that the correct samples were sequenced:")
-    message("*****")
-    stop(simpleError(paste0(ddPCR_sample_not_found, collapse = ", ")))
-
-  }
-}
+#############
+# Check sheet
+#############
 
 missing_metadata_non_ctrl_samples <- metadata_sheet %>%
   filter(!grepl("control", sample_type))
@@ -587,21 +559,6 @@ if(length(missing_sample_date) > 0) {
   stop(simpleError(paste0(missing_sample_date, collapse = ", ")))
 }
 
-missing_ddPCR_data <- missing_metadata_non_ctrl_samples %>%
-  filter(if_any(ends_with("_gc/L"), is.na)) %>%
-  select(sample_name)
-
-#show warning
-if(nrow(missing_ddPCR_data) > 0){
-  message("\n\n\n*****")
-  message("These non-control samples are in the sample sheet but are missing ddPCR values")
-  message("Check to see if the ddPCR has been performed for these samples:")
-  message(paste0(pull(missing_ddPCR_data), collapse = ", "))
-  message("*****")
-
-  Sys.sleep(15)
-}
-
 #check lowest date of sample collection
 oldest_ww_date <- metadata_sheet %>%
   filter(!grepl("control", ww_group)) %>%
@@ -612,10 +569,6 @@ oldest_ww_date <- metadata_sheet %>%
 if(oldest_ww_date < seq(as.Date(sequencing_date), length=2, by="-4 month")[2]){
   warning(simpleError(paste0("\nSome samples have collection dates more than 4 months ago!!")))
 }
-
-#############
-# Check sheet
-#############
 
 #throw error if missing these columns
 for(x in c(cols2merge, "sample_id",
@@ -632,25 +585,25 @@ for(x in c(cols2merge, "sample_id",
 metadata_sheet <- metadata_sheet %>%
   select(where(function(x) any(!is.na(x))))
 
-print("\nNumber of samples to sequence:")
+message("\nNumber of samples to sequence:")
 print(nrow(metadata_sheet))
 
-print("Number of barcodes?")
+message("Number of barcodes?")
 print(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))))
 
-print("\nDates of samples to sequence:")
-print(paste0(unique(metadata_sheet$sample_received_date), collapse = "\n"))
+message("Dates of samples to sequence:")
+print(sort(unique(metadata_sheet$sample_received_date)))
 
-print("\nSample sites to sequence:")
-print(paste0(unique(metadata_sheet$sample_group), collapse = "\n"))
+message("Sample sites to sequence:")
+print(unique(metadata_sheet$sample_group))
 
-print("What do the sample_id look like?")
+message("What do the sample_id look like?")
 print(unique(metadata_sheet$sample_id))
 
-print("Which lanes are sequenced?")
+message("Which lanes are sequenced?")
 print(unique(metadata_sheet$lane))
 
-print("Are the barcode columns unique?")
+message("Are the barcode columns unique?")
 if(length(unique(metadata_sheet$idt_plate_coord)) != dim(metadata_sheet)[1]) {
   stop(simpleError("Barcode positions are not unique!"))
 }
@@ -660,40 +613,53 @@ if(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))) != length
   stop(simpleError("Differing number of samples and barcodes!"))
 }
 
-print("Are the barcodes unique?")
+message("Are the barcodes unique?")
 print(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))) == dim(metadata_sheet)[1])
 
-print("Are the sample names unique?")
+message("Are the sample names unique?")
 print(length(unique(metadata_sheet$sample_id)) == dim(metadata_sheet)[1])
 
-print("Are all the forward primers found?")
+message("Are all the forward primers found?")
 print(sum(is.na(metadata_sheet$index)) == 0)
 
-print("Are all the reverse primers found?")
+message("Are all the reverse primers found?")
 print(sum(is.na(metadata_sheet$index2)) == 0)
 if(sum(is.na(c(metadata_sheet$index, metadata_sheet$index2))) != 0) {
   stop(simpleError("Either the forward or reverse primers are NA!"))
 }
 
-print("Do all the sampleIDs start with a letter?")
+message("Do all the sampleIDs start with a letter?")
 print(all(grepl("^[A-Za-z]", metadata_sheet$sample_id)))
 if(!all(grepl("^[A-Za-z]", metadata_sheet$sample_id))) {
   stop(simpleError("Some Sample IDs do not start with a letter!"))
 }
 
-print("Are there periods, underscores, or space characters in the SampleID?")
+message("Are there periods, underscores, or space characters in the SampleID?")
 print(any(grepl(" |_|\\.", metadata_sheet$sample_id)))
 if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
   stop(simpleError("There are spaces, underscores, or periods in the Sample IDs! Please fix"))
 }
 
-print("\nSamples without ddPCR data:")
-metadata_sheet %>%
-  filter(is.na(sample_collect_date)) %>%
-  mutate(date_group = paste(sample_received_date, "-", sample_group, "\n")) %>%
+missing_ddPCR_data <- missing_metadata_non_ctrl_samples %>%
+  filter(if_any(ends_with("_gc/L"), is.na)) %>%
+  mutate(date_group = paste(sample_received_date, "-", sample_group)) %>%
   select(date_group) %>%
+  unique() %>%
   pull() %>%
-  print()
+  str_sort(numeric = TRUE)
+
+#show warning
+if(!identical(missing_ddPCR_data, character(0))){
+  message("\n\n\n*****")
+  message("These non-control samples are in the sample sheet but are missing ddPCR values!!!")
+  message("Check to see if the ddPCR has been performed for these samples")
+  message(paste("Add the ddPCR data to", ddPCR_run_fp, "and then rerun this script"))
+  message("\nSamples in question:")
+  print(missing_ddPCR_data)
+  message("*****")
+
+  Sys.sleep(15)
+}
 
 ####################
 # Write sample sheet
@@ -786,12 +752,25 @@ run_in_terminal(paste("scp", sample_sheet_fp, nf_demux_samplesheet_fp,
                       paste0(ec2_hostname, ":", ec2_tmp_session_dir))
 )
 
-run_in_terminal(paste("aws s3 cp", ec2_tmp_session_dir, s3_run_bucket_fp,
-                      "--recursive", "--exclude '*'",
-                      paste0("--include '", sample_sheet_fn, "'"),
-                      paste0("--include '", basename(nf_demux_samplesheet_fp), "'"))
+submit_screen_job(message2display = "Uploading sample sheets to S3",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = paste("upload-sheets", session_suffix, sep = "-"),
+                  screen_log_fp = tmp_screen_fp,
+                  command2run = paste("aws s3 cp",
+                                      ec2_tmp_session_dir,
+                                      s3_run_bucket_fp,
+                                      "--recursive",
+                                      "--exclude '*'",
+                                      paste0("--include '", sample_sheet_fn, "'"),
+                                      paste0("--include '", basename(nf_demux_samplesheet_fp), "'"))
 )
 
+check_screen_job(message2display = "Checking sample sheet upload job",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = paste("upload-sheets", session_suffix, sep = "-"),
+                 screen_log_fp = tmp_screen_fp)
+
+rstudioapi::executeCommand("activateConsole")
 
 ################################
 # Write sheet to metadata folder
@@ -914,7 +893,7 @@ if(create_platemap) {
   # if the shared drive can be found, copy the platemap over
   if(file.exists(shared_drive_fp)) {
     plate_map_cp_fp <- file.path(shared_drive_fp, "Sequencing_files", "1_Plate_Maps", "wastewater", format(Sys.Date(), "%Y"),
-                                   paste(format(Sys.time(), "%Y-%m-%d"), sample_type_acronym, prj_description, "Plate_Map.csv", sep = "_"))
+                                 paste(format(Sys.time(), "%Y-%m-%d"), sample_type_acronym, prj_description, "Plate_Map.csv", sep = "_"))
 
     file.copy(plate_map_local_fp, plate_map_cp_fp, overwrite = TRUE)
 

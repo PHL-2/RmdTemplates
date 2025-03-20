@@ -90,16 +90,18 @@ barcodes <- tryCatch(
 # Get run stats
 ###############
 
-record_prefix <- "Record__"
 yymmdd <- gsub("^..|-", "", sequencing_date)
+sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
+                             selected_sequencer_type == "NextSeq2000" ~ "VH")
 seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
+intended_sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
+
+record_prefix <- "Record__"
 
 run_cd <- NA
 run_q30 <- NA
 run_pf <- NA
 run_error <- NA
-
-unknown_sequencer_regex <- paste0(record_prefix, yymmdd, "_([M]{1}|[VH]{2})", seq_folder_pattern, "$")
 
 # Get the run id from BaseSpace
 bs_run <- cli_submit("bs", "list", c("runs", "-f csv")) %>%
@@ -108,28 +110,16 @@ bs_run <- cli_submit("bs", "list", c("runs", "-f csv")) %>%
   as.data.frame() %>%
   `colnames<-`(.[1, ]) %>%
   slice(-1) %>%
-  filter(grepl(paste0("^", unknown_sequencer_regex), Name))
+  filter(grepl(paste0("^", intended_sequencing_folder_regex), Name)) %>%
+  filter(grepl(paste0("^", record_prefix, selected_sequencer_type, "_", sequencing_date), ExperimentName))
 
 if(nrow(bs_run) > 1) {
-  warning(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you are selecting the correct sequencer!!!\n",
-                               "Currently, you are pulling the sequencing run from the ", selected_sequencer_type, "\n\n")))
-
-  #runs that have the same sample types, processed on the same date, and on the same sequencing instrument type may throw an error
-  sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
-                               selected_sequencer_type == "NextSeq2000" ~ "VH")
-
-  intended_sequencing_folder_regex <- paste0(record_prefix, yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
-
-  bs_run <- bs_run %>%
-    filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
-
-}
-if (nrow(bs_run) == 0) {
+  stop(simpleError("\nThere are two sequencing runs that matched this date on the same sequencer!!!\n"))
+} else if (nrow(bs_run) == 0) {
   stop(simpleError(paste0("\nThere is no record on BaseSpace for this date: ", sequencing_date,
                           "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
                           "\nThe sequencer type could also be wrong: ", selected_sequencer_type)))
 }
-
 
 bs_run_id <- bs_run %>%
   select(Id) %>%
@@ -204,6 +194,8 @@ if(samplesheet_exists) {
                    ec2_login = ec2_hostname,
                    screen_session_name = paste("bs-dl-sheet", session_suffix, sep = "-"),
                    screen_log_fp = tmp_screen_fp)
+
+  rstudioapi::executeCommand("activateConsole")
 
   # Get name of the final SampleSheet if there is more than 1
   list_sample_sheets <- system2("ssh", c(ec2_hostname,
@@ -748,48 +740,48 @@ if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sampl
   stop(simpleError(paste0("\nSome samples have collection dates more than 6 months ago. Investigate!!")))
 }
 
-print("What do the sample_id look like?")
+message("What do the sample_id look like?")
 print(unique(metadata_sheet$sample_id))
 
-print("Which lanes are sequenced?")
+message("Which lanes are sequenced?")
 print(unique(metadata_sheet$lane))
 
-print("Are the barcode columns unique?")
+message("Are the barcode columns unique?")
 if(length(unique(metadata_sheet$idt_plate_coord)) != dim(metadata_sheet)[1]) {
   stop(simpleError("Barcode positions are not unique!"))
 }
 print(length(unique(metadata_sheet$idt_plate_coord)) == dim(metadata_sheet)[1])
 
-print("Number of barcodes?")
+message("Number of barcodes?")
 print(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))))
-print("Number of samples?")
+message("Number of samples?")
 print(length(unique(metadata_sheet$sample_id)))
 if(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))) != length(unique(metadata_sheet$sample_id))) {
   stop(simpleError("Differing number of samples and barcodes!"))
 }
 
-print("Are the barcodes unique?")
+message("Are the barcodes unique?")
 print(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))) == dim(metadata_sheet)[1])
 
-print("Are the sample names unique?")
+message("Are the sample names unique?")
 print(length(unique(metadata_sheet$sample_id)) == dim(metadata_sheet)[1])
 
-print("Are all the forward primers found?")
+message("Are all the forward primers found?")
 print(sum(is.na(metadata_sheet$index)) == 0)
 
-print("Are all the reverse primers found?")
+message("Are all the reverse primers found?")
 print(sum(is.na(metadata_sheet$index2)) == 0)
 if(sum(is.na(c(metadata_sheet$index, metadata_sheet$index2))) != 0) {
   stop(simpleError("Either the forward or reverse primers are NA!"))
 }
 
-print("Do all the sampleIDs start with a letter?")
+message("Do all the sampleIDs start with a letter?")
 print(all(grepl("^[A-Za-z]", metadata_sheet$sample_id)))
 if(!all(grepl("^[A-Za-z]", metadata_sheet$sample_id))) {
   stop(simpleError("Some Sample IDs do not start with a letter!"))
 }
 
-print("Are there periods, underscores, or space characters in the SampleID?")
+message("Are there periods, underscores, or space characters in the SampleID?")
 print(any(grepl(" |_|\\.", metadata_sheet$sample_id)))
 if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
   stop(simpleError("There are spaces, underscores, or periods in the Sample IDs! Please fix"))
@@ -886,11 +878,25 @@ run_in_terminal(paste("scp", sample_sheet_fp, nf_demux_samplesheet_fp,
                       paste0(ec2_hostname, ":", ec2_tmp_session_dir))
 )
 
-run_in_terminal(paste("aws s3 cp", ec2_tmp_session_dir, s3_run_bucket_fp,
-                      "--recursive", "--exclude '*'",
-                      paste0("--include '", sample_sheet_fn, "'"),
-                      paste0("--include '", basename(nf_demux_samplesheet_fp), "'"))
+submit_screen_job(message2display = "Uploading sample sheets to S3",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = paste("upload-sheets", session_suffix, sep = "-"),
+                  screen_log_fp = tmp_screen_fp,
+                  command2run = paste("aws s3 cp",
+                                      ec2_tmp_session_dir,
+                                      s3_run_bucket_fp,
+                                      "--recursive",
+                                      "--exclude '*'",
+                                      paste0("--include '", sample_sheet_fn, "'"),
+                                      paste0("--include '", basename(nf_demux_samplesheet_fp), "'"))
 )
+
+check_screen_job(message2display = "Checking sample sheet upload job",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = paste("upload-sheets", session_suffix, sep = "-"),
+                 screen_log_fp = tmp_screen_fp)
+
+rstudioapi::executeCommand("activateConsole")
 
 ################################
 # Write sheet to metadata folder
