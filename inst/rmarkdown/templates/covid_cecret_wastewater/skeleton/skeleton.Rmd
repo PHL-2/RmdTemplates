@@ -520,8 +520,6 @@ if(all(grepl("^EPI_ISL_0$", fasta_seqsender$`bs-gisaid_accession`)) | all(is.na(
                                       "--frameshift", "catch_novel",
                                       "--log", ec2_gs_log), type = "sh")))
   
-  rstudioapi::executeCommand('activateConsole')
-  
   download_gisaid_load <- system2("scp", c(paste0(ec2_hostname, ":", ec2_gs_log), local_gs_log))
   
   ssh_command_check(download_gisaid_load)

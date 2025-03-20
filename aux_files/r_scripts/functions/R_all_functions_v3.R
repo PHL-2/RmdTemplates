@@ -185,6 +185,8 @@ run_in_terminal <- function(command2run = "", command2print = "") {
 
   Sys.sleep(5)
   rstudioapi::terminalKill(init_terminal)
+  Sys.sleep(2)
+  rstudioapi::executeCommand("activateConsole")
 }
 
 ## =============================================================================

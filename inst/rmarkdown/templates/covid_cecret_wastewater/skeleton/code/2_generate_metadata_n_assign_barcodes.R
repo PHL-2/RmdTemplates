@@ -202,8 +202,6 @@ if(samplesheet_exists) {
                    screen_session_name = paste("bs-dl-sheet", session_suffix, sep = "-"),
                    screen_log_fp = tmp_screen_fp)
 
-  rstudioapi::executeCommand("activateConsole")
-
   # Get name of the final SampleSheet if there is more than 1
   list_sample_sheets <- system2("ssh", c(ec2_hostname,
                                          shQuote(
@@ -769,8 +767,6 @@ check_screen_job(message2display = "Checking sample sheet upload job",
                  ec2_login = ec2_hostname,
                  screen_session_name = paste("upload-sheets", session_suffix, sep = "-"),
                  screen_log_fp = tmp_screen_fp)
-
-rstudioapi::executeCommand("activateConsole")
 
 ################################
 # Write sheet to metadata folder
