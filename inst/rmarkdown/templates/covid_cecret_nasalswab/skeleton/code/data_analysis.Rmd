@@ -89,7 +89,17 @@ Run error rate `r unique(s_toPlot$run_error)*100`%
 
 ```{r reads per sample type}
 
+undetermined_read_numbers <- s %>%
+  select(sample_id, read_counts) %>%
+  mutate(total_reads = sum(read_counts, na.rm = TRUE),
+         undetermined_percent_reads = read_counts/total_reads,
+         more_than_half = undetermined_percent_reads > 0.5) %>%
+  filter(sample_id == "Undetermined")
+
 s %>%
+  { if(undetermined_read_numbers$more_than_half) filter(., sample_id != "Undetermined")
+    else .
+  } %>%
   ggplot(aes(y=read_counts, x=sample_type, fill = sample_type)) +
     geom_boxplot(outlier.alpha = 0) +
     geom_point(aes(size = sample_type), shape = 21, position = position_jitter(width = 0.2)) +
@@ -100,7 +110,11 @@ s %>%
     theme(panel.grid = element_blank(),
           axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)) +
     labs(
-      title = paste0("Total number of reads: ", round(sum(s$read_counts, na.rm = TRUE)/1000000, digits = 2), "M"),
+      title = paste0("Total number of reads: ",
+                     round(undetermined_read_numbers$total_reads/1000000, digits = 2), "M",
+                     ifelse(undetermined_read_numbers$more_than_half,
+                            paste0(" (Undetermined: ", round(undetermined_read_numbers$read_counts/1000000, digits = 2), "M", ")"),
+                            "")),
       y="Read counts",
       x="",
       fill = "Sample Type",
