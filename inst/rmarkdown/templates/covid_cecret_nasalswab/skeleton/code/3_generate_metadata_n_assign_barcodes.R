@@ -263,7 +263,7 @@ if(identical(index_sheet_fp, character(0))) {
   if(abs(as.Date(sequencing_date) - sheet_date) > 5) {
     stop(simpleError(paste0("The latest index sheet found is on ", sheet_date,
                             "\nThis date is more than 5 days from the date of this RStudio project",
-                            "\nSomething must be wrong")))
+                            "\nSomething might be wrong")))
   }
 
   file.copy(shared_index_fp, here("metadata", "munge"))
