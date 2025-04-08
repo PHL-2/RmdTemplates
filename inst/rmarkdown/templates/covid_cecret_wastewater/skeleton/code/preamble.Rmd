@@ -744,7 +744,7 @@ s <- s_meta %>%
 s_toPlot <- s %>%
   filter(!grepl("None|Undetermined", sample_id),
          coverage_qc_status == "Good",
-         grepl("Wastewater sample - Merged", ww_group)) %>%
+         grepl("Wastewater sample - Merged|Mock DNA positive control", ww_group)) %>%
   mutate(sample_id = as.character(sample_id)) %>%
   droplevels()
 
