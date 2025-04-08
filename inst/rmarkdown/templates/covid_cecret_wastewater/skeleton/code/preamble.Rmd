@@ -112,6 +112,14 @@ color_group_lvls <- c(NA, "Reference", "Unassigned reads",
                       ctrl_fct_lvls,
                       unlist(lapply(unaccounted_sample_types, function(x) c(x, paste0(x, " - Poor"), paste0(x, " - Merged")))))
 
+date_col <- sym("sample_collect_date")
+sample_collect_date_found <- TRUE
+
+if(!any(grepl("sample_collect_date", colnames(s_meta)))) {
+  date_col <- sym("sample_received_date")
+  sample_collect_date_found <- FALSE
+}
+
 ```
 
 <!-- Load QC data -->
@@ -724,10 +732,10 @@ s <- s_meta %>%
          sample_group = case_when(grepl("^Undetermined$", sample_id) ~ "Unassigned reads",
                                   TRUE ~ sample_group),
          sample_group = factor(sample_group, levels = unique(sample_group[order(ww_group)])),
-         date_facet = ifelse(grepl("Unassigned reads|control", ww_group), "Control", as.character(sample_collect_date)),
+         date_facet = ifelse(grepl("Unassigned reads|control", ww_group), "Control", as.character(!!date_col)),
          date_facet = factor(date_facet, levels = c("Control", sort(unique(date_facet[!grepl("Control", date_facet)])))),
          #order the sample_id by sample type then by plate position
-         sample_id = factor(sample_id, levels = unique(sample_id[str_order(paste0(as.numeric(sample_group), "-", grepl("Merged", sample_id), "-", sample_collect_date), decreasing = FALSE, numeric = TRUE)]))) %>%
+         sample_id = factor(sample_id, levels = unique(sample_id[str_order(paste0(as.numeric(sample_group), "-", grepl("Merged", sample_id), "-", !!date_col), decreasing = FALSE, numeric = TRUE)]))) %>%
   arrange(sample_id) %>%
   droplevels() %>%
   filter(!is.na(sample_group))
@@ -825,7 +833,7 @@ flodel <- function(word1, word2) {
 }
 
 freyja_lineages <- s %>%
-  select(sample_id, sample_name, sample_group, ww_group, sample_collect_date,
+  select(sample_id, sample_name, sample_group, ww_group, !!date_col,
          isControl, freyja_lineages, freyja_abundances, pct_genome_coverage_over_10x) %>%
   group_by(sample_id) %>%
   mutate(lineages = list(freyja_lineages),
@@ -903,18 +911,18 @@ freyja_average <- freyja_grouping %>%
   filter(!isControl) %>%
   droplevels() %>%
   mutate(isMerged = ifelse(grepl("Merged$", ww_group), "Merged sample", "Individual samples")) %>%
-  complete(nesting(sample_id, sample_collect_date, pct_genome_coverage_over_10x, sample_group, isMerged), nesting(lineages, main_lineage, CDC_lineages), fill = list(relative_abundances = 0)) %>%
-  group_by(sample_id, sample_collect_date, pct_genome_coverage_over_10x, sample_group, isMerged, lineages, CDC_lineages, main_lineage) %>%
+  complete(nesting(sample_id, !!date_col, pct_genome_coverage_over_10x, sample_group, isMerged), nesting(lineages, main_lineage, CDC_lineages), fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, !!date_col, pct_genome_coverage_over_10x, sample_group, isMerged, lineages, CDC_lineages, main_lineage) %>%
   summarize(relative_abundances = sum(relative_abundances)) %>%
   ungroup() %>%
   filter(!is.na(relative_abundances)) %>%
-  group_by(sample_group, sample_collect_date, isMerged) %>%
+  group_by(sample_group, !!date_col, isMerged) %>%
   mutate(total_samples = n_distinct(sample_id),
          mean_cov = mean(pct_genome_coverage_over_10x)) %>%
   ungroup() %>%
   # to calculate the total standard deviation of a combined distribution,
   # get the total variance and square root it
-  group_by(sample_group, sample_collect_date, mean_cov, isMerged, lineages, CDC_lineages, main_lineage) %>%
+  group_by(sample_group, !!date_col, mean_cov, isMerged, lineages, CDC_lineages, main_lineage) %>%
   mutate(avg_rel_abund = relative_abundances/total_samples,
          variance = var(avg_rel_abund)) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
@@ -926,17 +934,27 @@ freyja_average <- freyja_grouping %>%
 dir.create(here("upload", "epi"), recursive = TRUE)
 epi_report_fp <- here("upload", "epi", paste0(project_name, "_PHL2_WW_sequencing_results.csv"))
 
-freyja_grouping %>%
-  filter(sample_id %in% s_toPlot$sample_id,
-         !isControl,
-         CDC_lineages %in% lineages_to_keep$variant) %>%
-  group_by(sample_id, sample_collect_date, sample_group, CDC_lineages) %>%
-  summarize(relative_abundances = sum(relative_abundances)) %>%
-  ungroup() %>%
-  filter(relative_abundances >= 0.01) %>%
-  arrange(sample_collect_date, sample_group, desc(relative_abundances), CDC_lineages) %>%
-  select(sample_collect_date, sample_group, freyja_lineage = "CDC_lineages") %>%
-  write_csv(epi_report_fp)
+# export results to epi only if sample_collect_date is present
+if(sample_collect_date_found) {
+  
+  freyja_grouping %>%
+    filter(sample_id %in% s_toPlot$sample_id,
+           !isControl,
+           CDC_lineages %in% lineages_to_keep$variant) %>%
+    group_by(sample_id, sample_collect_date, sample_group, CDC_lineages) %>%
+    summarize(relative_abundances = sum(relative_abundances)) %>%
+    ungroup() %>%
+    filter(relative_abundances >= 0.01) %>%
+    arrange(sample_collect_date, sample_group, desc(relative_abundances), CDC_lineages) %>%
+    select(sample_collect_date, sample_group, freyja_lineage = "CDC_lineages") %>%
+    write_csv(epi_report_fp)
+  
+} else {
+  data.frame(sample_collect_date = "",
+             sample_group = "",
+             freyja_lineage = "") %>%
+    write_csv(epi_report_fp)
+}
 
 ```
 
@@ -961,7 +979,7 @@ seqsender <- s %>%
   filter(uniq_sample_name %in% s_toPlot$uniq_sample_name,
          !isControl)
 
-if(nrow(seqsender) != 0) {
+if(nrow(seqsender) != 0 & sample_collect_date_found) {
 
   seqsender <- seqsender %>%
     rename(sequence_name = "sample_id",
@@ -1445,7 +1463,7 @@ coverage_loop <- s %>%
 date_loop <- s %>%
   filter(sample_id != "Undetermined") %>%
   filter(!is.na(median_coverage)) %>% 
-  select(sample_collect_date) %>%
+  select(!!date_col) %>%
   unique() %>%
   pull()
   
@@ -1455,7 +1473,7 @@ for(sites in coverage_loop) {
   filtered_samp_name <- s %>%
     mutate(loop_group = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_group) ~ "Sequencing-control",
                                   TRUE ~ sample_group),
-           date_char = as.character(sample_collect_date)) %>%
+           date_char = as.character(!!date_col)) %>%
     filter(sample_id != "Undetermined") %>%
     filter(loop_group %in% sites) %>%
     filter(date_char %in% dates) %>%

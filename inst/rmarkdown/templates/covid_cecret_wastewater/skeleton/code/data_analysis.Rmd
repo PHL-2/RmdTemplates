@@ -62,13 +62,13 @@ Freyja (https://github.com/andersen-lab/freyja) \newline
 s %>%
   filter(sample_group != "Unassigned reads") %>%
   droplevels() %>%
-  group_by(sample_group, sample_collect_date) %>%
+  group_by(sample_group, !!date_col) %>%
   mutate(n = n() - sum(grepl("Merged", ww_group)),
          Merged = ifelse(!isControl, as.character(sum(grepl("Merged", ww_group))), ""),
          Good = sum(pct_genome_coverage_over_10x >= 0.6, na.rm = TRUE),
          Poor = n + sum(grepl("Merged", ww_group)) - Good) %>%
   ungroup() %>%
-  select(`Collect date` = sample_collect_date, `Samples/sites` = "sample_group", n, Merged, Good, Poor) %>%
+  select(`Collect date` = !!date_col, `Samples/sites` = "sample_group", n, Merged, Good, Poor) %>%
   unique() %>%
   {if(use_kable) kable_style(.) else pander(.)}
 
@@ -961,13 +961,13 @@ Relative abundances of CDC lineages within each sample group
 ```{r freyja results grouped, fig.height=10, fig.width=8}
 
 freyja_average %>%
-  group_by(sample_group, sample_collect_date, isMerged, CDC_lineages) %>%
+  group_by(sample_group, !!date_col, isMerged, CDC_lineages) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund)) %>%
   ungroup() %>%
   {
   ggplot(., aes(x = isMerged, y = avg_rel_abund, fill = CDC_lineages)) +
     geom_col() +
-    facet_wrap(~sample_collect_date+sample_group) +
+    facet_wrap(~!!date_col+sample_group) +
     scale_fill_manual(values = 
                         c(colorRampPalette(brewer.pal(11, "Spectral"))(max(length(unique(.$CDC_lineages))-3, 1)),
                           "#000000", "#E6BE8A", "#808080")) +
@@ -992,15 +992,15 @@ Green text indicates results that can be reported
 ```{r freyja table, fig.height=11, fig.width=8}
 
 freyja_table_delim <- freyja_average %>%
-  group_by(sample_collect_date, sample_group, isMerged, CDC_lineages) %>%
+  group_by(!!date_col, sample_group, isMerged, CDC_lineages) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
             total_sd = sum(total_sd)) %>%
   ungroup() %>%
   filter(avg_rel_abund >= 0.01) %>%
-  select(sample_collect_date, sample_group, isMerged, CDC_lineages) %>%
+  select(!!date_col, sample_group, isMerged, CDC_lineages) %>%
   unique() %>%
-  arrange(sample_collect_date, sample_group, isMerged) %>%
-  group_by(sample_collect_date, sample_group) %>%
+  arrange(!!date_col, sample_group, isMerged) %>%
+  group_by(!!date_col, sample_group) %>%
   summarize(total_samples = n()) %>%
   ungroup() %>%
   mutate(line_position = cumsum(total_samples)) %>%
@@ -1008,22 +1008,26 @@ freyja_table_delim <- freyja_average %>%
   pull()
 
 freyja_average %>%
-  group_by(sample_collect_date, mean_cov, sample_group, isMerged, CDC_lineages) %>%
+  group_by(!!date_col, mean_cov, sample_group, isMerged, CDC_lineages) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
             total_sd = sum(total_sd)) %>%
   ungroup() %>%
   filter(avg_rel_abund >= 0.01) %>%
-  left_join(select(s_meta, sample_group, sample_collect_date, `N2_gc/L`),
-            by = c("sample_group", "sample_collect_date")) %>%
+  left_join(select(s_meta, any_of(c("sample_group", as.character(date_col), "N2_gc/L"))),
+            by = c("sample_group", as.character(date_col))) %>%
   mutate(relative_abundance = paste0(round(avg_rel_abund*100, 2), "%"),
          isMerged = gsub(" .*", "", isMerged),
          sample_group = factor(sample_group, levels = levels(freyja_average$sample_group)),
-         sample_group_label = paste0(sample_collect_date, " ", sample_group, "\n<", isMerged, ">"),
+         sample_group_label = paste0(!!date_col, " ", sample_group, "\n<", isMerged, ">"),
          good_cov = mean_cov >= 0.6,
          mean_cov = paste0(round(mean_cov*100, 2), "%")) %>%
-  arrange(sample_collect_date, sample_group, sample_group_label, CDC_lineages) %>%
-  select(`Sample group` = sample_group_label, `Mean coverage` = "mean_cov",
-         Lineage = "CDC_lineages", `Relative abundance` = "relative_abundance", `N2_gc/L`, good_cov) %>%
+  arrange(!!date_col, sample_group, sample_group_label, CDC_lineages) %>%
+  select(any_of(c("Sample group" = "sample_group_label",
+                  "Mean coverage" = "mean_cov",
+                  "Lineage" = "CDC_lineages",
+                  "Relative abundance" = "relative_abundance",
+                  "N2_gc/L",
+                  "good_cov"))) %>%
   unique() %>%
   { if(use_kable)
     mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
@@ -1055,17 +1059,17 @@ Only lineages with abundance >1% in at least one sample group are kept
 ```{r freyja table non CDC, fig.height=11, fig.width=8}
 
 freyja_table_delim <- freyja_average %>%
-  group_by(sample_collect_date, sample_group, isMerged, CDC_lineages, lineages) %>%
+  group_by(!!date_col, sample_group, isMerged, CDC_lineages, lineages) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
             total_sd = sum(total_sd)) %>%
   ungroup() %>%
   filter(lineages != "Unresolved",
          CDC_lineages == "Other lineages",
          avg_rel_abund >= 0.01) %>%
-  select(sample_collect_date, sample_group, isMerged, lineages) %>%
+  select(!!date_col, sample_group, isMerged, lineages) %>%
   unique() %>%
-  arrange(sample_collect_date, sample_group, isMerged) %>%
-  group_by(sample_collect_date, sample_group) %>%
+  arrange(!!date_col, sample_group, isMerged) %>%
+  group_by(!!date_col, sample_group) %>%
   summarize(total_samples = n()) %>%
   ungroup() %>%
   mutate(line_position = cumsum(total_samples)) %>%
@@ -1073,23 +1077,26 @@ freyja_table_delim <- freyja_average %>%
   pull()
 
 freyja_average %>%
-  group_by(sample_collect_date, mean_cov, sample_group, isMerged, CDC_lineages, lineages) %>%
+  group_by(!!date_col, mean_cov, sample_group, isMerged, CDC_lineages, lineages) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
             total_sd = sum(total_sd)) %>%
   ungroup() %>%
   filter(lineages != "Unresolved",
          CDC_lineages == "Other lineages",
          avg_rel_abund >= 0.01) %>%
-  left_join(select(s_meta, sample_group, sample_collect_date, `N2_gc/L`),
-            by = c("sample_group", "sample_collect_date")) %>%
+  left_join(select(s_meta, any_of(c("sample_group", as.character(date_col), "N2_gc/L"))),
+            by = c("sample_group", as.character(date_col))) %>%
   mutate(relative_abundance = paste0(round(avg_rel_abund*100, 2), "%"),
          isMerged = gsub(" .*", "", isMerged),
          sample_group = factor(sample_group, levels = levels(freyja_average$sample_group)),
-         sample_group_label = paste0(sample_collect_date, " ", sample_group, " <", isMerged, ">"),
+         sample_group_label = paste0(!!date_col, " ", sample_group, " <", isMerged, ">"),
          mean_cov = paste0(round(mean_cov*100, 2), "%")) %>%
-  arrange(sample_collect_date, sample_group, sample_group_label, lineages) %>%
-  select(`Sample group` = sample_group_label, `Mean coverage` = "mean_cov",
-         Lineage = "lineages", `Relative abundance` = "relative_abundance", `N2_gc/L`) %>%
+  arrange(!!date_col, sample_group, sample_group_label, lineages) %>%
+  select(any_of(c("Sample group" = "sample_group_label",
+                  "Mean coverage" = "mean_cov",
+                  "Lineage" = "lineages",
+                  "Relative abundance" = "relative_abundance",
+                  "N2_gc/L"))) %>%
   unique() %>%
   { if(use_kable)
     mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
