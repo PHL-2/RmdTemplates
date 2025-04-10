@@ -144,9 +144,9 @@ PHL_fp <- PHL_all_fp[!grepl("_filtered.xlsx$", PHL_all_fp)]
 
 PHL_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, sheet = "PHL", skip_row = 1) %>%
-           #have to use cbind here to add new column because sometimes the sheet doesn't exist, therefore giving a null object
-           cbind(filename = x)) %>%
-  do.call(rbind, .)
+           cbind(filename = x) %>%
+           as.data.frame(stringsAsFactors = FALSE)) %>%
+  bind_rows()
 
 if(ncol(PHL_data) == 1) {
   PHL_data <- data.frame(SPECIMEN_NUMBER = "", RLU = "")
@@ -231,8 +231,9 @@ potential_ct_col_names <- c("ct value", "CT value", "CT values", "CTvalue", "CTv
 
 TU_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, sheet = "Temple") %>%
-           cbind(filename = x)) %>%
-  do.call(rbind, .)
+           cbind(filename = x) %>%
+           as.data.frame(stringsAsFactors = FALSE)) %>%
+  bind_rows()
 
 if(ncol(TU_data) == 1) {
   TU_data <- data.frame(SPECIMEN_NUMBER = "") %>%
@@ -292,7 +293,8 @@ for(sheet_name in other_sheets) {
 
   other_data <- PHL_fp %>%
     lapply(function(x) read_excel_safely(x, sheet_name) %>%
-             cbind(filename = x)) %>%
+             cbind(filename = x) %>%
+             as.data.frame(stringsAsFactors = FALSE)) %>%
     bind_rows() %>%
     mutate_at(vars(contains(possible_sample_names)), ~gsub("\\s", "", .)) %>%
     as.data.frame()
