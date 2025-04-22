@@ -1022,8 +1022,10 @@ sample_type_legend <- s %>%
 
 variant_list <- s %>%
   select(nextclade_clade_who, pangolin_lineage, pangolin_note, Nextclade_pango) %>%
-  mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
-  mutate(pangolin_note = ifelse(pangolin_note == "Assigned from designation hash.", NA, pangolin_note)) %>%
+  mutate(pangolin_note = gsub("^.*: |; |scorpio.*", "", pangolin_note)) %>%
+  mutate(pangolin_note = case_when(pangolin_note == "Assigned from designation hash." ~ NA,
+                                   pangolin_note == "" ~ NA,
+                                   TRUE ~ pangolin_note)) %>%
   unique() %>%
   separate_rows(pangolin_note, sep=" ") %>%
   pivot_longer(cols = c("pangolin_lineage", "pangolin_note", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
