@@ -979,8 +979,7 @@ s_toPlot %>%
   select(sample_id, pangolin_note, sample_type, nextclade_qc_overallstatus) %>%
   #remove "Usher placements" text in the front of note and scorpio notes
   mutate(pangolin_note = gsub("^.*: |; |scorpio.*", "", pangolin_note)) %>%
-  filter(pangolin_note != "Assigned from designation hash.",
-         pangolin_note != "") %>%
+  filter(pangolin_note != "Assigned from designation hash.") %>%
   #split note into two variant columns by the space
   separate(pangolin_note, into = c("variant1", "variant2"), sep = " ", extra = "merge") %>%
   mutate(variant1_prop = gsub(".*\\(|\\)", "", variant1)) %>%
