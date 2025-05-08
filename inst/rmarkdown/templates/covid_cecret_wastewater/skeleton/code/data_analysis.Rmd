@@ -65,10 +65,9 @@ s %>%
   group_by(sample_group, !!date_col) %>%
   mutate(n = n() - sum(grepl("Merged", ww_group)),
          Merged = ifelse(!isControl, as.character(sum(grepl("Merged", ww_group))), ""),
-         Good = sum(pct_genome_coverage_over_10x >= 0.6, na.rm = TRUE),
-         Poor = n + sum(grepl("Merged", ww_group)) - Good) %>%
+         passed_qc = ifelse(any(pct_genome_coverage_over_10x >= 0.6, na.rm = TRUE), "Yes", "No")) %>%
   ungroup() %>%
-  select(`Collect date` = !!date_col, `Samples/sites` = "sample_group", n, Merged, Good, Poor) %>%
+  select(`Collect date` = !!date_col, `Samples/sites` = "sample_group", n, Merged, `Passed QC` = passed_qc) %>%
   unique() %>%
   {if(use_kable) kable_style(.) else pander(.)}
 
