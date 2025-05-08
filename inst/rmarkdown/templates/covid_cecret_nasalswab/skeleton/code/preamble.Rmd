@@ -728,6 +728,9 @@ if(any(is.na(s$sample_type))) {
   stop(simpleError("A sample type is unaccounted for either in the metadata sheet or in sample_type_lvls"))
 }
 
+#indicator for samples to rerun
+rerun_samples <- character(0)
+
 ```
 
 <!-- Prepare files containing samples with good results for uploading -->
