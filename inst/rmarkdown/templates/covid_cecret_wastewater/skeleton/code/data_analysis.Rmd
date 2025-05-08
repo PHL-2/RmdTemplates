@@ -264,11 +264,13 @@ actual_read_lengths %>%
 
 s %>%
   filter(!is.na(`N2_gc/uL`)) %>%
+  mutate(weekday_date = paste0(!!date_col, "_", wday(!!date_col, label = TRUE))) %>%
   droplevels() %>%
   {
   ggplot(., aes(x = `N2_gc/uL`, y = read_counts, fill = ww_group)) +
     geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
     geom_point(shape = 21, size = 3) +
+    facet_wrap(~weekday_date, nrow = 1) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$ww_group), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     scale_y_continuous(trans = "log10") +
@@ -282,11 +284,13 @@ s %>%
 
 s %>%
   filter(!is.na(`N2_gc/uL`)) %>%
+  mutate(weekday_date = paste0(!!date_col, "_", wday(!!date_col, label = TRUE))) %>%
   droplevels() %>%
   {
   ggplot(., aes(x = `N2_gc/uL`, y = pct_genome_coverage_over_10x, fill = ww_group)) +
     geom_hline(yintercept = .6, color="black", linetype="dashed") +
     geom_point(shape = 21, size = 3) +
+    facet_wrap(~weekday_date, nrow = 1) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$ww_group), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     scale_y_continuous(labels = percent) +
