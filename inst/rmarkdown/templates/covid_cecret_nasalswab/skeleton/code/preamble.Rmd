@@ -851,9 +851,9 @@ seqsender <- s_toPlot %>%
          `sra16-file_2` = paste0(sequence_name, "_S", sample_number, "_filtered_R2.fastq.gz"),
          #GenBank fields
          `gb-sample_name` = sequence_name,
-         `gb-src-isolate` = `bs1-sample_name`,
+         `gb-src-Isolate` = `bs1-sample_name`,
          `gb-src-isolation_source` = `gs-covv_specimen`,
-         `gb-src-host` = `bs4-host`,
+         `gb-src-Host` = `bs4-host`,
          `gb-cmt-Sequencing Technology` = `sra3-instrument_model`,
          `gb-cmt-Assembly Method` = `gs-covv_assembly_method`,
          `gb-cmt-Coverage` = paste0(`gs-covv_coverage`, "X")) %>%
