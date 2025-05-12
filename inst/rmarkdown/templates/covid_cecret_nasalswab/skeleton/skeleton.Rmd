@@ -232,6 +232,8 @@ test_upload <- TRUE
 #should be in the format of PHL2-[sequencer]-[plate position]-[sequencing date]
 failed_sample_fasta <- c("")
 
+lastest_seqsender_version_tested <- "v1.2.7"
+
 ### =================
 ### End manual inputs
 ### =================
@@ -262,15 +264,17 @@ tryCatch(
 )
 
 ssh_seqsender_cmd <- function(pos_argument,
-                              ssh_destination = ec2_hostname, 
-                              python_script = seqsender_py,
+                              ssh_destination = ec2_hostname,
                               organism = organism_flag,
                               submission_dir = submission_path,
                               submission_name = input_submission_name,
                               config = config2use,
                               metadata = ec2_seqsender_meta_fp,
-                              fasta = consensus_fasta_fp,
+                              fasta = consensus_fasta_ul_fp,
                               is_test = test_flag) {
+
+  docker_prepend <- paste0("docker run --rm -u $(id -u):$(id -g) -v $(pwd):/data cdcgov/seqsender:",
+                           lastest_seqsender_version_tested)
   
   additional_flags <- paste(organism,
                             "--config_file", config,
@@ -278,7 +282,7 @@ ssh_seqsender_cmd <- function(pos_argument,
   
   success_msg <- unlist(lapply(c("BIOSAMPLE", "SRA", "GENBANK", "GISAID"),
                                  function(x) c(paste("Creating submission files for", x),
-                                               paste("Files are stored at:", paste(submission_dir, submission_name, "submission_files", x, sep = "/")))))
+                                               paste0("Files are stored at: /data/", paste(submission_dir, submission_name, "submission_files", x, sep = "/")))))
   
   if(grepl("--gisaid", pos_argument)) {
     additional_flags <- paste(additional_flags, "--fasta_file", fasta)
@@ -312,11 +316,11 @@ ssh_seqsender_cmd <- function(pos_argument,
                      "Downloading report.xml",
                      "Updating submissions complete.")
   }
-                                                     
+
   check_err_msg <- system2("ssh", c("-tt", ssh_destination,
-                                    shQuote(paste("conda activate seqsender;",
-                                                  "python", python_script, pos_argument,
-                                                  "--submission_dir", submission_dir,
+                                    shQuote(paste(docker_prepend,
+                                                  "seqsender.py", pos_argument,
+                                                  "--submission_dir", gsub("/home/ec2-user/", "", submission_dir), #test
                                                   "--submission_name", submission_name,
                                                   additional_flags), type = "sh")),
                            stdout = TRUE, stderr = TRUE) %>%
@@ -382,19 +386,17 @@ if(bioinformatician_name == "") {
 # Define AWS variables and filepaths
 ####################################
 
-#path of where the seqsender repo was cloned, do not use tilde (~) in path
-seqsender_fp <- "/home/ec2-user/git/seqsender"
-seqsender_upload_tmp_fp <- "/home/ec2-user/tmp_data_ul"
+ec2_home_fp <- "/home/ec2-user"
+seqsender_upload_tmp_dir <- "tmp_data_ul"
 workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, project_name, instrument_type, sep = "/")
-submission_path <- paste(seqsender_upload_tmp_fp, sample_type_acronym, sep = "/")
+submission_path <- paste(seqsender_upload_tmp_dir, sample_type_acronym, sep = "/")
 input_submission_name <- paste(project_name, sample_type_acronym, sep = "_")
-ec2_upload_tmp_fp <- paste(submission_path, input_submission_name, sep = "/")
-consensus_fasta_fp <- paste(ec2_upload_tmp_fp, "processed_cecret", "merged_consensus",
-                            paste0(project_name, "_PHL2_combined.fasta"), sep = "/")
-ec2_seqsender_meta_fp <- paste0(ec2_upload_tmp_fp, "/seqsender/", paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"))
-
-seqsender_py <- paste(seqsender_fp, "seqsender.py", sep = "/")
-covCLI_cmd <- paste(seqsender_fp, "gisaid_cli", "covCLI", sep = "/")
+ec2_upload_tmp_fp <- paste(ec2_home_fp, submission_path, input_submission_name, sep = "/")
+consensus_fasta_ul_fp <- paste(submission_path, input_submission_name, "processed_cecret", "merged_consensus",
+                               paste0(project_name, "_PHL2_combined.fasta"), sep = "/")
+consensus_fasta_fp <- paste(ec2_home_fp, consensus_fasta_ul_fp, sep = "/")
+ec2_seqsender_meta_fp <- paste(submission_path, input_submission_name, "seqsender",
+                                     paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"), sep = "/")
 
 if(test_upload) {
   test_flag <- "--test"
@@ -409,8 +411,8 @@ if(test_upload) {
 }
 
 organism_flag <- "--organism COV"
-config2use <- paste0(ec2_upload_tmp_fp, "/seqsender/", basename(seqsender_config_fp))
-ec2_gs_log <- paste0(ec2_upload_tmp_fp, "/submission_files/GISAID/", basename(local_gs_log))
+config2use <- paste(submission_path, input_submission_name, "seqsender", basename(seqsender_config_fp), sep = "/")
+ec2_gs_log <- paste(ec2_upload_tmp_fp, "submission_files", "GISAID", basename(local_gs_log), sep = "/")
 
 #######################
 # Read in seqsender csv
@@ -502,7 +504,7 @@ if(all(grepl("^EPI_ISL_0$", seqsender$`bs-gisaid_accession`)) | all(is.na(seqsen
   # submit files to gisaid
   # covCLI is a program that can be downloaded from gisaid.org; add it to $PATH
   run_in_terminal(paste("ssh -tt", ec2_hostname,
-                        shQuote(paste(covCLI_cmd, "upload",
+                        shQuote(paste("covCLI", "upload",
                                       "--clientid", gs_client_id,
                                       "--username", gisaid_username,
                                       "--metadata", paste(ec2_upload_tmp_fp, "submission_files", "GISAID", "metadata.csv", sep = "/"),
@@ -556,7 +558,7 @@ seqsender %>%
   mutate(`src-note` = paste0(`src-note`, "; Lineage: ", `bs-lineage/clade name`)) %>%
   write_csv(appended_seqsender_meta_fp)
 
-reupload_seqsender_file <- system2("scp", c(appended_seqsender_meta_fp, paste0(ec2_hostname, ":", ec2_seqsender_meta_fp)))
+reupload_seqsender_file <- system2("scp", c(appended_seqsender_meta_fp, paste0(ec2_hostname, ":", ec2_home_fp, "/", ec2_seqsender_meta_fp)))
 
 ssh_command_check(reupload_seqsender_file)
 
