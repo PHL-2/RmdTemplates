@@ -487,7 +487,7 @@ check_fasta <- menu(c("Yes", "No"), title="Did you already do the above?")
 check_rerun <- menu(c("Yes", "No"), title="Do you need to rerun this chunk to remove samples in 'failed_sample_fasta'?")
 
 if(!(check_fasta == 1 & check_rerun == 2)) {
-  stop(simpleError("Please upload the concatenated fasta file to https://clades.nextstrain.org first and check the quality before continuing to submit data"))
+  stop(simpleError("Please upload the concatenated fasta file to https://clades.nextstrain.org first, add any failed samples to 'failed_sample_fasta', and then rerun this chunk"))
 }
 
 upload_seqsender_files <- system2("scp", c(appended_seqsender_meta_fp, seqsender_config_fp,
