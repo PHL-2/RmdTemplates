@@ -1130,27 +1130,20 @@ epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive
 
 reported_samples <- epi_2_upload_fp %>%
   read_csv() %>%
-  select(sample_name = "sample_group") %>%
+  select(sample_name = "sample_group", !!date_col) %>%
   unique() %>%
-  mutate(db = "epi")
+  nrow()
 
 #number of samples to submit
-#check the dcipher file to upload to ncbi
-dcipher_2_upload_fp <- list.files(here("upload", "dcipher"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
+#check the dcipher file to upload
+dcipher_2_upload_fp <- list.files(here("upload", "seqsender"), pattern = "_fasta_upload_orig.csv", recursive = TRUE, full.names = TRUE)
 
 if(length(dcipher_2_upload_fp) != 0) {
   all_reported_samples <- dcipher_2_upload_fp %>%
-    data_frame(FileName = .) %>%
-    group_by(FileName) %>%
-    do(read_csv(.$FileName, col_names = TRUE)) %>%
-    ungroup() %>%
-    filter(!grepl("nwss_upload.csv", FileName)) %>%
-    mutate(sample_name = ifelse(is.na(sample_name), covv_virus_name, sample_name),
-           db = gsub(".*PHL2_|_upload.*", "",  FileName)) %>%
-    select(db, sample_name) %>%
-    rbind(reported_samples)
+    read_csv() %>%
+    nrow()
 } else {
-  all_reported_samples <- tibble(db = "", sample_name = "")
+  all_reported_samples <- 0
 }
 
 ```
@@ -1239,10 +1232,14 @@ sample_type_color_scheme <- c("#808080", "#000000",
 
 ann_geom_values[["sample_type_colors"]] <- setNames(sample_type_color_scheme[sample_type_num_vector], color_group_lvls)
 
+# pick shapes for ggplot
+sample_group_index <- which(levels(s$sample_group) == "ZeptoSC2"):length(levels(s$sample_group))
+ann_geom_values[["sample_group_shapes"]] <- setNames(c(23, 25, 22, 21, 24),
+                                                     levels(s$sample_group)[sample_group_index])
+
 # pick alpha values for ggplot
 alpha_select <- c(1, 1, 1, 0.4, 1, 0.4, 1, 0.2, 0.2)
 additional_alphas <- rep(0.2, length(color_group_lvls) - length(alpha_select))
-
 ann_geom_values[["alpha"]] <- setNames(c(alpha_select, additional_alphas), color_group_lvls)
 
 # pick additional ggplot parameters
