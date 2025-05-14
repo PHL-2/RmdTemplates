@@ -866,11 +866,9 @@ k2 %>%
 
 ```
 
-\elandscape
-
 ### Kmer results (number of SARS-CoV-2 specific sequences detected)
 
-```{r SC2 kmer numbers}
+```{r SC2 kmer numbers, fig.height=4, fig.width=10}
 
 k2 %>%
   filter(grepl("Severe acute respiratory syndrome coronavirus 2", k2_taxon)) %>%
@@ -890,13 +888,13 @@ k2 %>%
 
 ```
 
-\newpage
+\elandscape
 
 ### Kmer results (proportion of kmers classified as SARS-CoV-2)
 
 Number of samples and SARS-CoV-2 kmer proportions
 
-```{r SC2 kmer props}
+```{r SC2 kmer props, fig.height=8, fig.width=6}
 
 k2 %>%
   filter(grepl("Severe acute respiratory syndrome coronavirus 2", k2_taxon)) %>%
@@ -910,7 +908,7 @@ k2 %>%
     scale_y_continuous(breaks = breaks_pretty(3), position = "right") +
     theme_bw() + 
     theme(panel.grid = element_blank(),
-          strip.text.y.left = element_text(angle = 0)) +
+          strip.text.y.left = element_text(angle = 0, size = 5)) +
     labs(
       x="SARS-CoV-2 kmer\nproportions",
       y="", fill = "Samples and Sites"
@@ -1035,48 +1033,6 @@ s %>%
   }
 
 ```
-
-\elandscape
-
-### Amplicon coverage
-
-```{r amplicon cov, fig.height=11, fig.width=9}
-
-s %>%
-  select(ww_group, sample_group, date_facet, starts_with("amp_tile")) %>%
-  pivot_longer(cols = starts_with("amp_tile"), names_to = "amp_pos", values_to = "depth") %>%
-  mutate(amp_pos = gsub("_artic_.*", "", amp_pos),
-         amp_pos = gsub(".*_", "", amp_pos),
-         amp_pos = factor(amp_pos, levels = str_sort(unique(amp_pos), numeric = TRUE)),
-         date_group_facet = gsub(" | - ", "\n", paste(date_facet, sample_group))) %>%
-  order_on_other_col(date_group_facet, ww_group, decreasing = FALSE) %>%
-  filter(!is.na(depth)) %>%
-  group_by(sample_group) %>%
-  filter(!all(depth == 0)) %>%
-  ungroup() %>%
-  droplevels() %>%
-  {
-  ggplot(., aes(x = amp_pos, y = depth)) +
-    geom_boxplot(outlier.alpha = 0) +
-    geom_point(aes(fill = ww_group), shape = 21, size = 0.5) +
-    facet_grid(date_group_facet~., space="free", scales="free") +
-    scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$ww_group), names(ann_geom_values$sample_type_colors))]) +
-    scale_y_continuous(labels = function(x) format(x, scientific = TRUE), trans="log10") +
-    scale_x_discrete(guide = guide_axis(check.overlap = TRUE)) +
-    theme_bw() +
-    theme(
-      strip.background = element_blank(),
-      strip.text.y = element_text(angle = 0),
-      panel.grid = element_blank(),
-      panel.border = element_rect(color = "black", fill = NA, size = 1),
-      legend.position = "none",
-      plot.margin= margin(0, 0, 0, 0, "pt")
-      ) +
-    labs(y="Depth", x="Amplicons")
-  }
-```
-
-\blandscape
 
 ### Whole genome sliding window coverage (100 bp)
 
