@@ -276,13 +276,11 @@ k2 %>%
 
 ```
 
-\elandscape
-
 ## Coverage
 
 ### Percent genome coverage at 10X depth
 
-```{r coverage results}
+```{r coverage results, fig.height=4, fig.width=10}
 
 s %>%
   {
@@ -309,9 +307,9 @@ s %>%
 ### Heatmap
 
 Only top 3 lineage in each sample is shown. The rest are grouped into "Other lineages" \newline
-No freyja results or results assigned "Misc" are grouped into "Unresolved"
+No freyja results or results assigned "Misc" are grouped into "Unresolved" \newline
 
-```{r freyja heatmap, fig.height=11, fig.width=12}
+```{r freyja heatmap, fig.width=20, fig.height=10}
 
 other_lineage_fct_lvl <- c("Other lineages", "Unresolved")
 
@@ -355,7 +353,7 @@ freyja_grouping %>%
 
 ```
 
-\newpage
+\elandscape
 
 ### Freyja table: CDC variants
 
@@ -804,7 +802,6 @@ empty_plate %>%
       strip.background = element_blank(),
       strip.placement = "outside",
       panel.grid = element_blank(),
-      legend.position = "bottom",
       aspect.ratio = 0.66
     ) +
     labs(
@@ -812,7 +809,7 @@ empty_plate %>%
       y="Plate row",
       fill = "Variants"
     ) +
-    guides(fill = guide_legend(override.aes = list(size = 8)))  
+    guides(fill = guide_legend(override.aes = list(size = 8), ncol = 1))  
   }
 
 ```
