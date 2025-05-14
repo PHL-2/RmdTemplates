@@ -567,7 +567,8 @@ gisaid_added_seqsender %>%
 
 fastq_seqsender %>%
   select(-c(`bs-gisaid_accession`, `bs-gisaid_virus_name`)) %>%
-  left_join(select(gisaid_added_seqsender, seqsender_merge_check_cols,
+  left_join(select(gisaid_added_seqsender,
+                  all_of(seqsender_merge_check_cols),
                    `bs-gisaid_accession`, `bs-gisaid_virus_name`),
             by = seqsender_merge_check_cols) %>%
   write_csv(fastq_appended_seqsender_meta_fp)
