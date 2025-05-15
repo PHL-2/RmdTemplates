@@ -1130,7 +1130,8 @@ epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive
 
 reported_samples <- epi_2_upload_fp %>%
   read_csv() %>%
-  select(sample_name = "sample_group", !!date_col) %>%
+  select(sample_name = "sample_group", sample_collect_date) %>%
+  filter(!is.na(sample_name)) %>%
   unique() %>%
   nrow()
 
