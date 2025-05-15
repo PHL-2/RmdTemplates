@@ -441,7 +441,7 @@ if(any(is.na(seqsender_check$fastq_name))) {
   stop(simpleError("The fasta seqsender file does not match the fastq seqsender file"))
 }
 if(nrow(conc_check) > 0) {
-  stop(simpleError("Samples are either missing ddPCR concentration data or have 0 for concentration. Investigate"))
+  stop(simpleError("Do not continue to submit!! Samples are either missing ddPCR concentration data or have 0 for concentration. Investigate first"))
 }
 
 fasta_seqsender %>%
