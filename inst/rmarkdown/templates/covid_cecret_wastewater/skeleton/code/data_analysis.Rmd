@@ -427,7 +427,7 @@ has_pos_ctrl <- s %>%
   filter(grepl("ZeptoSC2", sample_name)) %>%
   filter(!grepl("Merged", sample_name)) %>%
   mutate(is_pos = Nextclade_pango == "A",
-         pos_ctrl_pct = sum(is_pos)/n()) %>%
+         pos_ctrl_pct = sum(is_pos, na.rm = TRUE)/n()) %>%
   select(pos_ctrl_pct) %>%
   unique() %>%
   pull()
