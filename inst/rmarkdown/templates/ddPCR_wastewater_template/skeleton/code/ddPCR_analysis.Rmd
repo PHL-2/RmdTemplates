@@ -144,7 +144,7 @@ d_pre %>%
 
 ```
 
-```{r child = 'code/cluster_graph.Rmd'}
+```{r child = 'code/cluster_graph.Rmd', eval = ampExecute}
 ```
 
 ## Variance check
@@ -205,6 +205,12 @@ if (signalNominal & varNominal) {
 ```
 
 ## Wells removed
+
+```{r, eval = !notNomial}
+
+print("No additional wells removed.")
+
+```
 
 ```{r, eval = notNominal}
 
@@ -279,7 +285,7 @@ d %>%
 
 
 d %>%
-  mutate(SampleType = ifelse(grepl(pattern = "East|West", x = Type) & Spiked == "Unspiked", "NegMHV", SampleType),
+  mutate(SampleType = ifelse(grepl(pattern = "East|West", x = Type) & Spiked == "Unspiked", paste("Neg", icInfo), SampleType),
          SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
    # filter(Spiked == "Spiked") %>%
   ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
@@ -366,7 +372,7 @@ dControls %>%
 ##Extraction
 dControls %>%
   filter(exp_con == "Extraction control",
-         Target != "MHV") %>%
+         Target != icInfo) %>%
   mutate(SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
   ggplot(aes(x=Type, y=Positives, fill = Target)) +
   geom_boxplot(position = "dodge") +
@@ -390,7 +396,7 @@ dControls %>%
 
 dControls %>%
   filter(exp_con == "Extraction control",
-         Target != "MHV") %>%
+         Target != icInfo) %>%
   mutate(SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
   ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
   geom_boxplot(position = "dodge") +
@@ -491,7 +497,7 @@ extraction input volume = 9600 uL
 d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
          grepl(pattern = "concentrated", x = Process, ignore.case = T),
-         Target != "MHV") %>%
+         Target != icInfo) %>%
   ggplot(aes(x = Type, y = Positives, fill = Target)) +
   geom_boxplot(position = "dodge") +
   geom_point(
@@ -508,7 +514,7 @@ d %>%
                                hjust = 1)
   ) +
   labs(
-    title = "Number of droplets positive in wastewater samples without MHV signal",
+    title = paste("Number of droplets positive in wastewater samples without", icInfo, "signal"),
     y = "Number of Positive droplets",
     x = "Samples"
   )
@@ -521,7 +527,7 @@ d %>%
 d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
          grepl(pattern = "concentrated", x = Process, ignore.case = T),
-         Target != "MHV") %>%
+         Target != icInfo) %>%
   ggplot(aes(x = Type, y = percentage_positive, fill = Target)) +
   geom_boxplot(position = "dodge") +
   geom_point(
@@ -538,7 +544,7 @@ d %>%
                                hjust = 1)
   ) +
   labs(
-    title = "Percentage of droplets positive in wastewater samples without MHV signal",
+    title = paste("Percentage of droplets positive in wastewater samples without", icInfo, "signal"),
     y = "Percentage of Positive droplets",
     x = "Samples"
   )
@@ -573,7 +579,7 @@ d %>%
                                hjust = 1)
   ) +
   labs(
-    title = "Number of droplets positive in wastewater samples without MHV signal",
+    title = paste("Number of droplets positive in wastewater samples without", icInfo, "signal"),
     y = "Number of Positive droplets",
     x = "Samples"
   )
@@ -604,7 +610,7 @@ d %>%
                                hjust = 1)
   ) +
   labs(
-    title = "Percentage of droplets positive in wastewater samples without MHV signal",
+    title = paste("Percentage of droplets positive in wastewater samples without", icInfo, "signal"),
     y = "Percentage of Positive droplets",
     x = "Samples"
   )
@@ -757,62 +763,6 @@ d %>%
     y = "Percentage of Positive droplets",
     x = "Samples"
   )
-
-```
-
-## Efficiency
-
-Stock calculation equation:
-
-Calculated stock concentration = (concentration * rxn_vol / input_vol) * (elution_vol / extraction_vol) * (end_concentration_vol / initial_concentration_vol) / efficiency
-
-Number used for calculation
-
-rxn_vol = 20 uL
-
-input_vol = 9 uL
-
-elution_vol = 100 uL
-
-extraction_vol = 400 uL
-
-end_concentration-vol = 500 uL
-
-initial_concentration_vol = 9600 uL
-
-*Unconcentrated samples: (end_concentration_vol / initial_concentration_vol) = 1
-
-Efficiency equation:
-
-(Calculated concentration / Expected concentration)
-
-**Efficiency ranges between 0 to 1 (1 being perfectly efficiency)
-
-
-
-### SC2 efficiency
-```{r calculating efficiency from MHV}
-
-# pander(MHV_efficiency_controls, split.table = 500)
-
-pander(SC2_efficiency, split.table = 500)
-
-```
-
-### SC2 efficiency in oldWW - baseline corrected
-
-```{r }
-
-pander(sc2_n2, split.table = 500)
-
-```
-
-### Samples
-
-```{r}
-
-pander(sample_stock %>% ungroup() %>% arrange() %>%
-         select(-Spiked), digits = 10, round = 2, split.table = 500)
 
 ```
 

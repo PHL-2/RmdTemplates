@@ -54,16 +54,20 @@ rxn_vol_uL = 20
 ## ddPCR: sample input volume (uL)
 input_vol_uL = 9
 
+## LOB
+LoB = 0
+
+## LOD (concentration GC/uL)
+LoD = 0.2
 
 ##### Stock information #####
-
-####MHV stock information
-MHV_stock_name = "UPennMHV"
+## Interal control stock information
+icInfo = "MHV"
 MHV_concentration_copiesuL = 32234
 
-#SC2 stock information
-SC2_stock_name = "ZeptoSC2"
-SC2_concentration_copiesuL = 739.3
+## SC2 stock information
+posCtrl = "ZeptoSC2"
+posCtrl_concentration_copiesuL = 739.3
 
 
 ## Filepath to wastewater metadata in aux folder

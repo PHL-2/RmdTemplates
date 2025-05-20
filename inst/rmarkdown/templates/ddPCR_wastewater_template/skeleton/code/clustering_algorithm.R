@@ -14,13 +14,7 @@ droplet_vol <- 0.795 #nanoliter
 
 
 #File path for sample info/meta
-copyPathSampleInfo <-
-  list.files(
-    path = file.path(here(), "input"),
-    pattern = "import",
-    full.names = TRUE,
-    recursive = FALSE
-  )
+
 
 #Loading amplitude data
 droplets <- read_csv(copy_path,
@@ -105,7 +99,7 @@ clusterAssignment <- droplets %>%
 
 #Generating work data for later analysis
 d_pre <- clusterAssignment %>%
-  pivot_wider(id_cols = c("Well", "type", "process", "Spiked", "Extra", "Sample_received", "channel", "SampleType"), names_from = clusterAssignment, values_from = nAmp) %>%
+  pivot_wider(id_cols = c("Well", "Type", "Process", "Spiked", "Extra", "Sample_received", "channel", "SampleType"), names_from = clusterAssignment, values_from = nAmp) %>%
   rename(Target = "channel") %>%
   group_by(Well, Target) %>%
   mutate(Positives = ifelse(is.na(Positives), 0, Positives),
@@ -116,13 +110,25 @@ d_pre <- clusterAssignment %>%
          Target_present = Positives >= 3) %>%
   select(-lambda)
 
-# clusterAssignment %>%
-#   #left_join(clusterAssignment, by = c("Well", "type", "process", "Extra", "Sample_received", "channel", "SampleType", "cluster")) %>%
-#   #group_by(Well) %>%
-#   #mutate(droplet_num = row_number()) %>%
-#   #filter(channel == "NVO") %>%
-#   ggplot(aes(y = amplitude, x = channel, fill = clusterAssignment, color = clusterAssignment)) +
-#   geom_boxplot() +
-#   #geom_point(position = position_jitterdodge(jitter.width = 0.2)) +
-#   facet_grid(plate_col ~ plate_row, scales = "free") +
-#   theme_light()
+if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
+  d_pre <- d_pre %>%
+    select(
+      Well, Sample = `Sample description 1`, Spiked = `Sample description 2`, Sample_date = `Sample description 3`, Extra = `Sample description 4`, SampleType, Target, `Conc(copies/uL)` = `Conc(copies/µL)`, Droplet_count = `Accepted Droplets`, Positives, Negatives) %>%
+    #mutate(Sample = gsub(pattern = "dd_", replacement = "dd", x = Sample)) %>%
+    separate(Sample, into = c("Type", "Process"), sep = "_", remove = FALSE) %>%
+    filter(!is.na(Sample),
+           Sample != "Buffer") %>%
+    mutate(percentage_positive = Positives/Droplet_count * 100,
+           Process = ifelse(is.na(Process), "Non-processed", Process),
+           Process = ifelse(grepl(pattern = "dil", x = Extra, ignore.case = T), "Dilution", Process),
+           Process = ifelse(Spiked == "Unspiked", "Unspiked", Process),
+           Process = droplevels(factor(Process, level = c("Concentrated", "Unconcentrated", "Non-processed", "Unspiked","Dilution", "Frozen", "QuickExtract"))),
+           `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
+           Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
+           Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d")),
+           SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType),
+           Target_present = Positives >= 3
+    )
+}
+
+
