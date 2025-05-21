@@ -930,6 +930,17 @@ freyja_average <- freyja_grouping %>%
   ungroup() %>%
   droplevels()
 
+#filter s_toPlot to remove samples that have A lineage present
+samples_with_A <- freyja_grouping %>%
+  filter(grepl("^Wastewater sample", ww_group),
+         CDC_lineages == "A") %>%
+  select(sample_id) %>%
+  unique() %>%
+  pull()
+
+s_toPlot <- s_toPlot %>%
+  filter(!sample_id %in% samples_with_A)
+
 #write freyja results for epi's
 dir.create(here("upload", "epi"), recursive = TRUE)
 epi_report_fp <- here("upload", "epi", paste0(project_name, "_PHL2_WW_sequencing_results.csv"))
