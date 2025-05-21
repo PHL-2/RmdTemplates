@@ -443,6 +443,7 @@ cecret_file_download_command <- c("aws s3 cp", workflow_output_fp)
 cecret_file_download_param <- c("--recursive",
                                 "--exclude '*'",
                                 paste0("--include '*/filter/", seqsender$sequence_name, "*_filtered_R[12].fastq.gz'"),
+                                #download FASTA from ivar_consensus/ instead of consensus/ because file is not folded
                                 paste0("--include '*/ivar_consensus/", passed_fasta_files, "*.consensus.fa'"))
 
 aws_s3_cecret_download <- system2("ssh", c("-tt", ec2_hostname,

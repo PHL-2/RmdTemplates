@@ -457,6 +457,7 @@ fastq_seqsender %>%
 cecret_file_download_command <- c("aws s3 cp", workflow_output_fp)
 cecret_file_download_param <- c("--recursive",
                                 "--exclude '*'",
+                                #download FASTA from ivar_consensus/ instead of consensus/ because file is not folded
                                 paste0("--include '*/ivar_consensus/", fasta_seqsender$sequence_name, "*.consensus.fa'"),
                                 paste0("--include '*/filter/", fastq_seqsender$sequence_name, "*_filtered_R[12].fastq.gz'"))
 
