@@ -368,7 +368,7 @@ freyja_table_delim <- freyja_average %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
             total_sd = sum(total_sd)) %>%
   ungroup() %>%
-  filter(avg_rel_abund >= 0.01) %>%
+  filter(avg_rel_abund >= 0.01 | (CDC_lineages == "A" & avg_rel_abund > 0)) %>%
   select(!!date_col, sample_group, isMerged, CDC_lineages) %>%
   unique() %>%
   arrange(!!date_col, sample_group, isMerged) %>%
@@ -384,7 +384,7 @@ freyja_average %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
             total_sd = sum(total_sd)) %>%
   ungroup() %>%
-  filter(avg_rel_abund >= 0.01) %>%
+  filter(avg_rel_abund >= 0.01 | (CDC_lineages == "A" & avg_rel_abund > 0)) %>%
   left_join(select(s_meta, any_of(c("sample_group", as.character(date_col), "N2_gc/L"))),
             by = c("sample_group", as.character(date_col))) %>%
   mutate(relative_abundance = paste0(round(avg_rel_abund*100, 2), "%"),
@@ -394,21 +394,32 @@ freyja_average %>%
          good_cov = mean_cov >= 0.6,
          mean_cov = paste0(round(mean_cov*100, 2), "%")) %>%
   arrange(!!date_col, sample_group, sample_group_label, CDC_lineages) %>%
+  group_by(sample_group, !!date_col) %>%
+  mutate(has_A = any(CDC_lineages == "A"),
+         is_control = grepl("Zepto|oldWW", sample_group)) %>%
+  ungroup() %>%
   select(any_of(c("Sample group" = "sample_group_label",
                   "Mean coverage" = "mean_cov",
                   "Lineage" = "CDC_lineages",
                   "Relative abundance" = "relative_abundance",
                   "N2_gc/L",
-                  "good_cov"))) %>%
+                  "good_cov",
+                  "has_A",
+                  "is_control"))) %>%
   unique() %>%
   { if(use_kable)
     mutate_if(., function(x) is.character(x) | is.factor(x), ~gsub("%", "\\\\%", .)) %>%
       mutate(`Sample group` = cell_spec(`Sample group`, "latex",
                                         color = case_when((grepl("Merged", `Sample group`) &
-                                                           !grepl("^A$|^B$|^Other lineages$", Lineage) &
+                                                           !has_A &
+                                                           !is_control &
+                                                           !grepl("^B$|^Other lineages$", Lineage) &
                                                            good_cov) ~ "#4CBB17",
+                                                          (!is_control &
+                                                           grepl("^A$", Lineage) &
+                                                           good_cov) ~ "#FF9896FF",
                                                           TRUE ~ "black"))) %>%
-      select(-good_cov) %>%
+      select(-c(good_cov, has_A, is_control)) %>%
       select_all(~gsub(" ", "\n", .)) %>%
       select_all(~gsub("_", "\\\\_", .)) %>%
       kable("latex", longtable = T, digits=2, booktabs=T, escape=F, col.names = linebreak(colnames(.), align = "l")) %>%
