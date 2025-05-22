@@ -238,7 +238,7 @@ check_screen_job(message2display = "Checking Cecret job",
                  screen_log_fp = tmp_screen_fp)
 
 # Download BCLConvert options
-bcl_file_download_command <- c("s3 cp", paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, sep = "/"))
+bcl_file_download_command <- c("s3 cp", dirname(bclconvert_output_path))
 bcl_file_download_param <- c("--recursive",
                              "--exclude '*'",
                              "--include '*/software_versions.yml'",
