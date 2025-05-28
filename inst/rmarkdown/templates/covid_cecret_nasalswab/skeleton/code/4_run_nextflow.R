@@ -251,22 +251,20 @@ bcl_file_download_param <- c("--recursive",
                                     "'"))
 
 # Download Cecret options
+cecret_file_patterns <- c("software_versions.yml",
+                          "_demix.tsv",
+                          "_kraken2_report.txt",
+                          "snp-dists.txt",
+                          "_amplicon_depth.csv",
+                          "nextclade.tsv",
+                          ".stats.txt",
+                          ".cov.txt",
+                          ".depth.txt",
+                          "cecret_results.csv")
+
 cecret_file_download_command <- c("s3 cp", workflow_output_fp)
-cecret_file_download_param <- c("--recursive",
-                                "--exclude '*'",
-                                paste0("--include '*/",
-                                       c("software_versions.yml",
-                                         "*_demix.tsv",
-                                         "*_kraken2_report.txt",
-                                         "snp-dists.txt",
-                                         "*_amplicon_depth.csv",
-                                         "nextclade.tsv",
-                                         "*.stats.txt",
-                                         "*.cov.txt",
-                                         "*.depth.txt",
-                                         "cecret_results.csv"),
-                                       collapse = " ",
-                                       "'"))
+cecret_file_download_param <- c("--recursive", "--exclude '*'",
+                                paste0("--include '*", cecret_file_patterns, collapse = " ", "'"))
 
 # Download BCLConvert data
 submit_screen_job(message2display = "Downloading BCLConvert data",
@@ -312,6 +310,81 @@ run_in_terminal(paste("scp -r", paste0(ec2_hostname, ":", data_output_fp),
 run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
                       here("data", "processed_cecret", "nextflow.config"))
 )
+
+# Tag intermediate processed files for deletion after 90 days
+# Intermediate files are files that do not match the file patterns that are downloaded; exceptions are consensus and filtered fastq files for uploading
+# Objects tagged with the tag set {Key=Fading,Value=90days} will be deleted by the bucket's lifecycle policy in 90 days
+tagset <- "'TagSet=[{Key=Fading,Value=90days}]'"
+tag_filename <- "s3_object_keys_2_tag.csv"
+
+file_patterns_not_tagged <- c(cecret_file_patterns,
+                              "/ivar_consensus/.*.consensus.fa",
+                              "_filtered_R[12].fastq.gz")
+
+aws_s3_cecret_intermediate_files <- system2("ssh", c("-tt", ec2_hostname,
+                                                     shQuote(paste("aws s3 ls", workflow_output_fp, "--recursive",
+                                                                   "| grep -ve", #reverse grep files with these patterns
+                                                                   paste0(file_patterns_not_tagged, collapse = " -e ")),
+                                                             type = "sh")),
+                                            stdout = TRUE, stderr = TRUE) %>%
+  head(-1)
+
+if(identical(aws_s3_cecret_intermediate_files, character(0))) {
+  message("\nNo intermediate files found for tagging!")
+} else {
+
+  # This is the list of files to tag for deletion
+  cecret_intermediate_files <- aws_s3_cecret_intermediate_files %>%
+    str_split("\\s+") %>%
+    do.call("rbind", .) %>%
+    as.data.frame() %>%
+    `colnames<-`(c("date", "time", "bytes", "filename")) %>%
+    select(bytes, filename) %>%
+    mutate(bytes = as.numeric(bytes))
+
+  cecret_intermediate_files %>%
+    select(filename) %>%
+    write_csv(here("data", "processed_cecret", tag_filename), col_names = FALSE)
+
+  message("Uploading tag sheet to EC2")
+  mk_tmp_dir <- system2("ssh", c("-tt", ec2_hostname,
+                                 shQuote(paste0("mkdir -p ", ec2_tmp_fp, "/", session_suffix))),
+                        stdout = TRUE, stderr = TRUE)
+
+  if(!grepl("^Connection to .* closed", mk_tmp_dir)) {
+    stop(simpleError("Failed to make temporary directory in EC2 instance"))
+  }
+
+  message("Uploading tag list")
+  run_in_terminal(paste("scp", here("data", "processed_cecret", tag_filename),
+                        paste0(ec2_hostname, ":", ec2_tmp_fp, "/", session_suffix, "/"))
+  )
+
+  # Copy the tag nextflow pipeline to EC2 if its not already there
+  run_in_terminal(paste("scp", file.path(dirname(here()), "aux_files", "external_scripts", "nextflow", "tag_s3_objects.nf"),
+                        paste0(ec2_hostname, ":", tmp_screen_fp))
+  )
+
+  # Run nextflow tag objects pipeline
+  submit_screen_job(message2display = "Tagging S3 objects for eventual removal",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = paste("tag-s3-obj", session_suffix, sep = "-"),
+                    screen_log_fp = tmp_screen_fp,
+                    command2run = paste("cd", paste0(tmp_screen_fp, ";"),
+                                        "nextflow run tag_s3_objects.nf",
+                                        "-bucket-dir", paste0(s3_nextflow_work_bucket, "/tag_objects_", sample_type_acronym, "_", sequencing_date),
+                                        #"-profile", demux_profile,
+                                        #"--awscli_container", "",
+                                        "--obj_key_samplesheet", paste0(ec2_tmp_fp, "/", session_suffix, "/", tag_filename),
+                                        "--s3_bucket", gsub("^s3://|/.*", "", s3_nextflow_output_bucket),
+                                        "--obj_tagset", tagset)
+  )
+
+  # check_screen_job(message2display = "Checking S3 tagging job",
+  #                  ec2_login = ec2_hostname,
+  #                  screen_session_name = paste("tag-s3-obj", session_suffix, sep = "-"),
+  #                  screen_log_fp = tmp_screen_fp)
+}
 
 # Clean up environment
 submit_screen_job(message2display = "Cleaning up run from temporary folder",
