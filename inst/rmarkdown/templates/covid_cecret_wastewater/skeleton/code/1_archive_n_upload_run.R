@@ -104,9 +104,10 @@ system2("ssh", c(ec2_hostname,
                  "scp", tarball_script, paste0(ec2_hostname, ":", tmp_screen_fp))
         )
 
+sequencing_tarball_session <- paste0("creating-tarball-", session_suffix)
 submit_screen_job(message2display = "Creating tarball of the sequencing run folder",
                   ec2_login = ec2_hostname,
-                  screen_session_name = paste("sequencing-tarball", session_suffix, sep = "-"),
+                  screen_session_name = sequencing_tarball_session,
                   screen_log_fp = tmp_screen_fp,
                   command2run = paste("bash", paste0(tmp_screen_fp, "/", basename(tarball_script)),
                                       paste(tarball_script_options, collapse = " "))
@@ -114,5 +115,5 @@ submit_screen_job(message2display = "Creating tarball of the sequencing run fold
 
 check_screen_job(message2display = "Checking tar job",
                  ec2_login = ec2_hostname,
-                 screen_session_name = paste("sequencing-tarball", session_suffix, sep = "-"),
+                 screen_session_name = sequencing_tarball_session,
                  screen_log_fp = tmp_screen_fp)

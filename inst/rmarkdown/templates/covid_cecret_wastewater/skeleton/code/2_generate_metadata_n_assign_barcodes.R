@@ -190,16 +190,17 @@ if(samplesheet_exists) {
                      "--exclude '*' --include 'SampleSheet*'")
 
   # Download the run from BaseSpace onto a running EC2 instance
+  download_bs_sheet_session <- paste0("down-bs-sheet-", session_suffix)
   submit_screen_job(message2display = "Downloading SampleSheet from BaseSpace",
                     ec2_login = ec2_hostname,
-                    screen_session_name = paste("bs-dl-sheet", session_suffix, sep = "-"),
+                    screen_session_name = download_bs_sheet_session,
                     screen_log_fp = tmp_screen_fp,
                     command2run = bs_dl_cmd
   )
 
   check_screen_job(message2display = "Checking BaseSpace download job",
                    ec2_login = ec2_hostname,
-                   screen_session_name = paste("bs-dl-sheet", session_suffix, sep = "-"),
+                   screen_session_name = download_bs_sheet_session,
                    screen_log_fp = tmp_screen_fp)
 
   # Get name of the final SampleSheet if there is more than 1
@@ -750,9 +751,10 @@ run_in_terminal(paste("scp", sample_sheet_fp, nf_demux_samplesheet_fp,
                       paste0(ec2_hostname, ":", ec2_tmp_session_dir))
 )
 
+upload_samplesheet_session <- paste0("up-samplesheet-", session_suffix)
 submit_screen_job(message2display = "Uploading sample sheets to S3",
                   ec2_login = ec2_hostname,
-                  screen_session_name = paste("upload-sheets", session_suffix, sep = "-"),
+                  screen_session_name = upload_samplesheet_session,
                   screen_log_fp = tmp_screen_fp,
                   command2run = paste("aws s3 cp",
                                       ec2_tmp_session_dir,
@@ -765,7 +767,7 @@ submit_screen_job(message2display = "Uploading sample sheets to S3",
 
 check_screen_job(message2display = "Checking sample sheet upload job",
                  ec2_login = ec2_hostname,
-                 screen_session_name = paste("upload-sheets", session_suffix, sep = "-"),
+                 screen_session_name = upload_samplesheet_session,
                  screen_log_fp = tmp_screen_fp)
 
 ################################
