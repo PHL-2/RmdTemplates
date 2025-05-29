@@ -369,3 +369,17 @@ modified_gesdTest <- function(x, maxr){
   return(ans)
 }
 
+## ==================================
+##  Create a directory on remote host
+## ==================================
+
+mk_remote_dir <- function(ec2_login = "", remote_dir_2_make = "") {
+
+  remote_dir <- system2("ssh", c("-tt", ec2_login,
+                                 shQuote(paste0("mkdir -p ", remote_dir_2_make, ";"))),
+                        stdout = TRUE, stderr = TRUE)
+
+  if(!grepl("^Connection to .* closed", remote_dir)) {
+    stop(simpleError("Failed to make temporary directory in EC2 instance"))
+  }
+}
