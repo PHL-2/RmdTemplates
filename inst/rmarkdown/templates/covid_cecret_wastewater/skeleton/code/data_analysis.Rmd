@@ -284,7 +284,7 @@ k2 %>%
 
 s %>%
   {
-  ggplot(., aes(x = sample_group, y = pct_genome_coverage_over_10x, )) +
+  ggplot(., aes(x = sample_group, y = pct_genome_coverage_over_10x)) +
     geom_boxplot(outlier.alpha = 0) +
     geom_hline(yintercept = 0.6, color = "grey", linetype = "dotted", lwd=0.75) +
     geom_point(aes(fill = ww_group), shape = 21, size = 3, position = position_jitter()) +
