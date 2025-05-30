@@ -95,21 +95,20 @@ if(is.null(check_run_on_s3)) {
   stop(simpleError(paste(selected_sequencer_type, "run detected in", s3_run_bucket_fp,
                          "\nTo create a new tarball, manually delete the old file in", s3_run_bucket_fp)))
 }
-message("\nRun on S3 not found. Continuing to create tarball")
 
-system2("ssh", c(ec2_hostname,
-                 shQuote(
-                   paste("mkdir -p", tmp_screen_fp)
-                 ), "&&",
-                 "scp", tarball_script, paste0(ec2_hostname, ":", tmp_screen_fp))
-        )
+message("\nRun on S3 not found. Continuing to create tarball")
+mk_remote_dir(ec2_hostname, paste0(tmp_screen_fp, "/create-tarball"))
+
+run_in_terminal(paste("scp", tarball_script,
+                      paste0(ec2_hostname, ":", paste0(tmp_screen_fp, "/create-tarball")))
+)
 
 sequencing_tarball_session <- paste0("creating-tarball-", session_suffix)
 submit_screen_job(message2display = "Creating tarball of the sequencing run folder",
                   ec2_login = ec2_hostname,
                   screen_session_name = sequencing_tarball_session,
                   screen_log_fp = tmp_screen_fp,
-                  command2run = paste("bash", paste0(tmp_screen_fp, "/", basename(tarball_script)),
+                  command2run = paste("bash", paste0(tmp_screen_fp, "/create-tarball/", basename(tarball_script)),
                                       paste(tarball_script_options, collapse = " "))
 )
 

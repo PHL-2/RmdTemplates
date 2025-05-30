@@ -865,13 +865,7 @@ nf_demux_samplesheet %>%
 
 ec2_tmp_session_dir <- paste0(ec2_tmp_fp, "/", session_suffix, "/")
 
-mk_tmp_dir <- system2("ssh", c(ec2_hostname,
-                               shQuote(paste("mkdir -p", ec2_tmp_session_dir))),
-                      stdout = TRUE, stderr = TRUE)
-
-if(!identical(mk_tmp_dir, character(0))) {
-  stop(simpleError("Failed to make temporary directory in EC2 instance"))
-}
+mk_remote_dir(ec2_hostname, ec2_tmp_session_dir)
 
 run_in_terminal(paste("scp", sample_sheet_fp, nf_demux_samplesheet_fp,
                       paste0(ec2_hostname, ":", ec2_tmp_session_dir))
