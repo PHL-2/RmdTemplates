@@ -299,63 +299,69 @@ fi
 
 # Record the run to BaseSpace
 if [[ -n "$record_prefix" ]]; then
-  echo -e "\n-r option provided. Proceeding to record the sequencing run to BaseSpace"
-  echo -e "\nCleaning any old record files..."
-  bs_ul_fp="${extend_tmp_dir}bs_record/${sequencing_run}/"
-  rm -rf "$bs_ul_fp"
-  mkdir -p "$bs_ul_fp"
 
-  if [[ "$instrument" == "MiSeq" || "$basespace" == "true" ]]; then
-    cp -r \
-      "${actual_temp_dir}"*"SampleSheet"*".csv" \
-      "${actual_temp_dir}"*".xml" \
-      "${actual_temp_dir}InterOp/" \
-      "$bs_ul_fp"
-
-  # If run is from NextSeq, extract the relevant files from tarball
-  elif [[ "$instrument" == "NextSeq2000" ]]; then
-    echo -e "\nExtracting the necessary files from ${extend_tmp_dir}${sequencing_run}.tar.gz..."
-
-    tar -xzf "${extend_tmp_dir}${sequencing_run}.tar.gz" \
-      --directory "$bs_ul_fp" \
-      "./*SampleSheet*.csv" \
-      "./InterOp/" \
-      "./*.xml" \
-      --exclude "./InterOp/C[0-9]*" \
-      --exclude "./Config" \
-      --exclude "./Logs" \
-      --exclude "./Recipe" \
-      --checkpoint=1000 \
-      --checkpoint-action=ttyout='%{%Y-%m-%d %H:%M:%S}t (%d sec): #%u, %T%*\r'
-  fi
-
-  # If the -o option is used, create a new SampleSheet.csv to upload to BaseSpace
-  # Uploaded runs will have a 'Failed' or 'Needs Attention' status without the BCLConvert and Cloud sections
-  if [[ "$overwrite" == "true" ]]; then
-
-    if [[ -f "${bs_ul_fp}SampleSheet.csv" ]]; then
-      mv "${bs_ul_fp}SampleSheet.csv" "${bs_ul_fp}SampleSheet_original.csv"
+  any_bs_record=$(bs list runs -f csv | grep -E "$run_regex" | grep -E "$record_prefix")
+  if [[ -n "$any_bs_record" ]]; then
+    echo -e "\nWarning:\nBaseSpace record for run on ${date_string} from the ${instrument} already exists! Not recording again...\n"
+  else
+    echo -e "\n-r option provided. Proceeding to record the sequencing run to BaseSpace"
+    echo -e "\nCleaning any old record files..."
+    bs_ul_fp="${extend_tmp_dir}bs_record/${sequencing_run}/"
+    rm -rf "$bs_ul_fp"
+    mkdir -p "$bs_ul_fp"
+  
+    if [[ "$instrument" == "MiSeq" || "$basespace" == "true" ]]; then
+      cp -r \
+        "${actual_temp_dir}"*"SampleSheet"*".csv" \
+        "${actual_temp_dir}"*".xml" \
+        "${actual_temp_dir}InterOp/" \
+        "$bs_ul_fp"
+  
+    # If run is from NextSeq, extract the relevant files from tarball
+    elif [[ "$instrument" == "NextSeq2000" ]]; then
+      echo -e "\nExtracting the necessary files from ${extend_tmp_dir}${sequencing_run}.tar.gz..."
+  
+      tar -xzf "${extend_tmp_dir}${sequencing_run}.tar.gz" \
+        --directory "$bs_ul_fp" \
+        "./*SampleSheet*.csv" \
+        "./InterOp/" \
+        "./*.xml" \
+        --exclude "./InterOp/C[0-9]*" \
+        --exclude "./Config" \
+        --exclude "./Logs" \
+        --exclude "./Recipe" \
+        --checkpoint=1000 \
+        --checkpoint-action=ttyout='%{%Y-%m-%d %H:%M:%S}t (%d sec): #%u, %T%*\r'
     fi
-
-    echo -e "A dummy SampleSheet.csv will be created for recording in BaseSpace\n"
-    echo "[Header]," > "${bs_ul_fp}SampleSheet.csv"
-    echo "FileFormatVersion,2" >> "${bs_ul_fp}SampleSheet.csv"
-    echo "" >> "${bs_ul_fp}SampleSheet.csv"
-    echo "[BCLConvert_Data]" >> "${bs_ul_fp}SampleSheet.csv"
-    echo "Sample_ID" >> "${bs_ul_fp}SampleSheet.csv"
-    echo "GenericSampleID" >> "${bs_ul_fp}SampleSheet.csv"
-    echo "" >> "${bs_ul_fp}SampleSheet.csv"
-    echo "[Cloud_Data]" >> "${bs_ul_fp}SampleSheet.csv"
-    echo "Sample_ID" >> "${bs_ul_fp}SampleSheet.csv"
-    echo "GenericSampleID" >> "${bs_ul_fp}SampleSheet.csv"
+  
+    # If the -o option is used, create a new SampleSheet.csv to upload to BaseSpace
+    # Uploaded runs will have a 'Failed' or 'Needs Attention' status without the BCLConvert and Cloud sections
+    if [[ "$overwrite" == "true" ]]; then
+  
+      if [[ -f "${bs_ul_fp}SampleSheet.csv" ]]; then
+        mv "${bs_ul_fp}SampleSheet.csv" "${bs_ul_fp}SampleSheet_original.csv"
+      fi
+  
+      echo -e "A dummy SampleSheet.csv will be created for recording in BaseSpace\n"
+      echo "[Header]," > "${bs_ul_fp}SampleSheet.csv"
+      echo "FileFormatVersion,2" >> "${bs_ul_fp}SampleSheet.csv"
+      echo "" >> "${bs_ul_fp}SampleSheet.csv"
+      echo "[BCLConvert_Data]" >> "${bs_ul_fp}SampleSheet.csv"
+      echo "Sample_ID" >> "${bs_ul_fp}SampleSheet.csv"
+      echo "GenericSampleID" >> "${bs_ul_fp}SampleSheet.csv"
+      echo "" >> "${bs_ul_fp}SampleSheet.csv"
+      echo "[Cloud_Data]" >> "${bs_ul_fp}SampleSheet.csv"
+      echo "Sample_ID" >> "${bs_ul_fp}SampleSheet.csv"
+      echo "GenericSampleID" >> "${bs_ul_fp}SampleSheet.csv"
+    fi
+  
+    bs run upload \
+      --name "${record_prefix}${instrument}_${date_string}" \
+      --instrument "$instrument" \
+      --concurrency "low" \
+      --no-progress-bars \
+      "$bs_ul_fp"
   fi
-
-  bs run upload \
-    --name "${record_prefix}${instrument}_${date_string}" \
-    --instrument "$instrument" \
-    --concurrency "low" \
-    --no-progress-bars \
-    "$bs_ul_fp"
 fi
 
 # Cleanup
