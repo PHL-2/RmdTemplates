@@ -80,6 +80,8 @@ tmp_screen_fp <- paste("~", ".tmp_screen", instrument_type, paste0(sample_type_a
 
 session_suffix <- tolower(paste(instrument_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
 
+nf_s3_bucket_dir <- paste0(s3_nextflow_work_bucket, "/demux_", sample_type_acronym, "_", sequencing_date)
+
 data_output_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/data")
 
 # Demultiplexing
@@ -94,7 +96,7 @@ submit_screen_job(message2display = "Demultiplexing with BCLConvert",
                                       "nextflow run nf-core/demultiplex",
                                       "-c ~/.nextflow/config",
                                       "-profile", demux_profile,
-                                      "-bucket-dir", paste0(s3_nextflow_work_bucket, "/demux_", sample_type_acronym, "_", sequencing_date),
+                                      "-bucket-dir", nf_s3_bucket_dir,
                                       "-resume",
                                       "-r 1.3.2",
                                       "--input", nf_demux_samplesheet_path,
@@ -113,6 +115,41 @@ aws_s3_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
                                                      "| grep -v 'Merged'"), type = "sh")),
                               stdout = TRUE, stderr = TRUE) %>%
   head(-1)
+
+if(identical(aws_s3_fastq_files, character(0))) {
+
+  aws_s3_fastq_files_bucketdir <- system2("ssh", c("-tt", ec2_hostname,
+                                                   shQuote(paste("aws s3 ls", nf_s3_bucket_dir, "--recursive",
+                                                                 "| grep 'R1_001.fastq.gz$'",
+                                                                 "| grep -v 'Merged'"), type = "sh")),
+                                          stdout = TRUE, stderr = TRUE) %>%
+    head(-1)
+
+  fastq_file_sizes_bucketdir <- aws_s3_fastq_files_bucketdir %>%
+    str_split("\\s+") %>%
+    do.call("rbind", .) %>%
+    as.data.frame() %>%
+    `colnames<-`(c("date", "time", "bytes", "filename")) %>%
+    select(bytes, filename) %>%
+    filter(!grepl("/Alignment_|/Fastq/|Undetermined", filename)) %>%
+    mutate(filename = gsub(".*/|_.*", "", filename),
+           bytes = as.numeric(bytes)) %>%
+    #sometimes the Undetermined file from the sequencer gets copied over; remove these samples
+    filter(!grepl("^GenericSampleID", filename),
+           bytes <= 23) %>%
+    group_by(filename) %>%
+    mutate(file_num = n()) %>%
+    filter(!(file_num == 2 & grepl("^Undetermined", filename) & bytes == max(bytes))) %>%
+    ungroup()
+
+  stop(simpleError(paste("\nNumber of samples that had no reads:", nrow(fastq_file_sizes_bucketdir),
+                         "\n\nThese samples are held in", nf_s3_bucket_dir,
+                         "\nand could not be moved to", bclconvert_output_path,
+                         "\n\nPlease check that the correct IDT set for the barcodes were used",
+                         "\n\nFor samples that do not have reads even with the correct barcodes, please remove them from the analysis by",
+                         "\n adding their SampleID to the vector sample_w_empty_reads in *_QC_Report.Rmd",
+                         "\n\nRegenerate the SampleSheet by first and then rerun this script to re-demultiplex")))
+}
 
 fastq_file_sizes <- aws_s3_fastq_files %>%
   str_split("\\s+") %>%
