@@ -194,10 +194,20 @@ run_in_terminal <- function(command2run = "", command2print = "") {
 ## =============================================================================
 
 submit_screen_job <- function(message2display = "Running function to submit screen job",
-                              ec2_login = "", screen_session_name = "", screen_log_fp = "~/.tmp_screen",
+                              ec2_login = "",
+                              screen_session_name = "",
+                              screen_log_fp = "~/.tmp_screen",
                               command2run = "",
                               window_height = 40,
                               window_length = 120) {
+
+  if(is.na(screen_session_name)) {
+    stop(simpleError("screen_session_name cannot be NA"))
+  } else if(nchar(screen_session_name) < 1) {
+    stop(simpleError("Please enter a string for screen_session_name"))
+  } else if(nchar(screen_session_name) > 70) {
+    stop(simpleError("screen_session_name is too long"))
+  }
 
   run_in_terminal(paste("echo", paste0("'", message2display, " through a screen command on EC2 instance [", ec2_login, "]';"),
                         "ssh -tt", ec2_login,
@@ -222,7 +232,18 @@ submit_screen_job <- function(message2display = "Running function to submit scre
 ##   Use the run_in_terminal function to check on submitted jobs
 ## =============================================================
 
-check_screen_job <- function(message2display = "Running function to check screen job", ec2_login = "", screen_session_name = "", screen_log_fp = "~/.tmp_screen") {
+check_screen_job <- function(message2display = "Running function to check screen job",
+                             ec2_login = "",
+                             screen_session_name = "",
+                             screen_log_fp = "~/.tmp_screen") {
+
+  if(is.na(screen_session_name)) {
+    stop(simpleError("screen_session_name cannot be NA"))
+  } else if(nchar(screen_session_name) < 1) {
+    stop(simpleError("Please enter a string for screen_session_name"))
+  } else if(nchar(screen_session_name) > 70) {
+    stop(simpleError("screen_session_name is too long"))
+  }
 
   run_in_terminal(paste("echo 'Checking for dead jobs';",
                         "ssh -tt", ec2_login,
