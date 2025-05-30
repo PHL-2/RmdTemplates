@@ -139,6 +139,34 @@ if(nrow(fastq_file_sizes) == 0) {
                           "\nCheck to see if there was an issue with the demultiplexing of the run\n")))
 }
 
+if(any(fastq_file_sizes$bytes <= 23)) {
+
+  sample_id_no_reads <- fastq_file_sizes %>%
+    mutate(filename = gsub("_.*", "", filename)) %>%
+    filter(!grepl("Undetermined", filename),
+           bytes <= 23)
+
+  rm_bclconvert_session <- paste0("rm-bclconvert-", session_suffix)
+  submit_screen_job(message2display = "Removing recently demultiplexed FASTQ files",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = rm_bclconvert_session,
+                    screen_log_fp = tmp_screen_fp,
+                    command2run = paste("aws s3 rm", bclconvert_output_path, "--recursive")
+  )
+
+  check_screen_job(message2display = "Checking remove FASTQ files job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = rm_bclconvert_session,
+                   screen_log_fp = tmp_screen_fp)
+
+  stop(simpleError(paste("\nThese sample IDs had no reads:\n",
+                         paste0(sample_id_no_reads$filename, collapse = ", "),
+                         "\n\nPlease check that the correct IDT set for the barcodes were used",
+                         "\n\nFor samples that do not have reads even with the correct barcodes, please remove them from the analysis by",
+                         "\n adding their SampleID to the vector sample_w_empty_reads in *_QC_Report.Rmd",
+                         "\n\nRegenerate the SampleSheet by first and then rerun this script to re-demultiplex")))
+}
+
 instrument_run_id <- unique(fastq_file_sizes$sequencing_folder)
 
 if(length(instrument_run_id) > 1) {
