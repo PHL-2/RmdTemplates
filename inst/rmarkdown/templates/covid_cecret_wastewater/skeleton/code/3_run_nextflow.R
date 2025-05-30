@@ -513,7 +513,7 @@ if(identical(aws_s3_cecret_intermediate_files, character(0))) {
                     ec2_login = ec2_hostname,
                     screen_session_name = tag_s3_session,
                     screen_log_fp = tmp_screen_fp,
-                    command2run = paste("cd", remote_tag_fp,
+                    command2run = paste("cd", paste0(remote_tag_fp, ";"),
                                         "nextflow run tag_s3_objects.nf",
                                         "-bucket-dir", paste0(s3_nextflow_work_bucket, "/tag_objects_", sample_type_acronym, "_", sequencing_date),
                                         #"-profile", demux_profile,
