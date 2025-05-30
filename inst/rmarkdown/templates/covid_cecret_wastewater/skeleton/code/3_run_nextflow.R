@@ -6,9 +6,9 @@ library(readr)
 
 #This Rscript submits the relevant jobs to Nextflow once the sequencing run has been uploaded
 
-####################
-# Selected variables
-####################
+#########################
+# AWS and sequencing date
+#########################
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD

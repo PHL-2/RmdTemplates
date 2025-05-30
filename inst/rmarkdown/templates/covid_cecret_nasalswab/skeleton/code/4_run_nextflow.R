@@ -2,6 +2,7 @@ library(here)
 library(dplyr)
 library(tidyr)
 library(stringr)
+library(readr)
 
 #This Rscript submits the relevant jobs to Nextflow once the sequencing run has been uploaded
 
