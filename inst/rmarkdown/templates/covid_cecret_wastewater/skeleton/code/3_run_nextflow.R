@@ -262,7 +262,7 @@ if(!is_nf_concat_samplesheet_empty) {
                     ec2_login = ec2_hostname,
                     screen_session_name = concat_session,
                     screen_log_fp = tmp_screen_fp,
-                    command2run = paste("cd", remote_concat_fp,
+                    command2run = paste("cd", paste0(remote_concat_fp, ";"),
                                         "nextflow run concat_fastq.nf",
                                         "-profile", cecret_profile,
                                         "-bucket-dir", paste0(s3_nextflow_work_bucket, "/concat_fastq_", sample_type_acronym, "_", sequencing_date),
