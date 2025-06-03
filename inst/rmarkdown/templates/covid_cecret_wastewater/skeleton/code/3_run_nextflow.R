@@ -108,7 +108,7 @@ check_screen_job(message2display = "Checking BCLConvert job",
                  screen_session_name = demux_session,
                  screen_log_fp = tmp_screen_fp)
 
-# If the aws-cli provides an SSL error on local machine, run the command through the instance
+# Checking the demultiplexing results
 aws_s3_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
                                        shQuote(paste("aws s3 ls", bclconvert_output_path, "--recursive",
                                                      "| grep 'R1_001.fastq.gz$'",
@@ -502,14 +502,14 @@ run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
 tagset <- "'TagSet=[{Key=Fading,Value=90days}]'"
 tag_filename <- "s3_object_keys_2_tag.csv"
 
-file_patterns_not_tagged <- c(cecret_file_patterns,
+file_patterns_not_tagged <- c(gsub("\\.", "\\\\.", cecret_file_patterns),
                               "/ivar_consensus/.*.consensus.fa",
                               "_filtered_R[12].fastq.gz")
 
 aws_s3_cecret_intermediate_files <- system2("ssh", c("-tt", ec2_hostname,
                                                      shQuote(paste("aws s3 ls", workflow_output_fp, "--recursive",
                                                                    "| grep -ve", #reverse grep files with these patterns
-                                                                   paste0(file_patterns_not_tagged, collapse = " -e ")),
+                                                                   paste0("'", paste0(file_patterns_not_tagged, collapse = "' -e '"), "'")),
                                                              type = "sh")),
                                             stdout = TRUE, stderr = TRUE) %>%
   head(-1)
