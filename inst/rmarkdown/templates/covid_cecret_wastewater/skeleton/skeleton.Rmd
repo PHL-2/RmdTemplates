@@ -320,6 +320,7 @@ ssh_command_check <- function(stdoutput) {
 
 project_name <- basename(here())
 aux_seqsender_fp <- file.path(dirname(here()), "aux_files", "data_submission", "seqsender")
+submission_log_fp <- file.path(dirname(here()), "submission_log.csv")
 fasta_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_fasta_upload_orig.csv", sep = "_"))
 fasta_appended_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_fasta_upload.csv", sep = "_"))
 fastq_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_fastq_upload_orig.csv", sep = "_"))
@@ -392,6 +393,30 @@ if(test_upload) {
 organism_flag <- "--organism COV"
 config2use <- paste(submission_path, input_submission_name, "seqsender", basename(seqsender_config_fp), sep = "/")
 ec2_gs_log <- paste0(ec2_upload_tmp_fp, "/submission_files/GISAID/", basename(local_gs_log))
+
+###############################################################
+# Check submission log to see if run has already been submitted
+###############################################################
+
+submission_log <- read_csv(submission_log_fp)
+
+submission_log_test <- submission_log %>%
+  filter(Submission_Name == input_submission_name,
+         Submission_Type == "TEST")
+
+submission_log_prod <- read_csv(submission_log_fp) %>%
+  filter(Submission_Name == input_submission_name,
+         Submission_Type == "PRODUCTION")
+
+if(nrow(submission_log_prod) > 0 & !test_upload) {
+  stop(simpleError("This run has already been submitted by seqsender. Check NCBI to see submission status"))
+}
+
+if(nrow(submission_log_test) == 0 & !test_upload) {
+  stop(simpleError(paste0("This run has not been submitted as a TEST yet. Please do this first by setting 'test_upload' to TRUE\n",
+                          "A completed TEST run ensures that all the components in this chunk run successfully\n",
+                          "Once a TEST run has completed, rerun this chunk with 'test_upload' set to FALSE for the real submission")))
+}
 
 #######################################
 # Read in fasta and fastq seqsender csv
@@ -590,5 +615,10 @@ download_submission_log <- system2("scp", c(paste0(ec2_hostname, ":", submission
 
 ssh_command_check(download_submission_log)
 
-```
+if(test_upload) {
+  message("You have successfully completed a TEST submission. You may now submit the data for real by setting 'test_upload' to FALSE")
+} else {
+  message("You have successfully completed a submission to GISAID and NCBI")
+}
 
+```
