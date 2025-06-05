@@ -109,6 +109,60 @@ check_screen_job(message2display = "Checking BCLConvert job",
                  screen_log_fp = tmp_screen_fp)
 
 # Checking the demultiplexing results
+aws_s3_fastq_files_bucketdir <- system2("ssh", c("-tt", ec2_hostname,
+                                                 shQuote(paste("aws s3 ls", nf_s3_bucket_dir, "--recursive",
+                                                               "| grep 'R1_001.fastq.gz$'",
+                                                               "| grep -v 'Merged'"), type = "sh")),
+                                        stdout = TRUE, stderr = TRUE) %>%
+  head(-1)
+
+fastq_file_sizes_bucketdir <- aws_s3_fastq_files_bucketdir %>%
+  str_split("\\s+") %>%
+  do.call("rbind", .) %>%
+  as.data.frame() %>%
+  `colnames<-`(c("date", "time", "bytes", "filename")) %>%
+  select(bytes, filename) %>%
+  filter(!grepl("/Alignment_|/Fastq/|Undetermined", filename)) %>%
+  mutate(filename = gsub(".*/|_.*", "", filename),
+         bytes = as.numeric(bytes)) %>%
+  #sometimes the Undetermined file from the sequencer gets copied over; remove these samples
+  filter(!grepl("^GenericSampleID", filename),
+         bytes <= 23) %>%
+  group_by(filename) %>%
+  mutate(file_num = n()) %>%
+  filter(!(file_num == 2 & grepl("^Undetermined", filename) & bytes == max(bytes))) %>%
+  ungroup()
+
+if(nrow(fastq_file_sizes_bucketdir) > 0) {
+
+  rm_work_bclconvert_session <- paste0("rm-bclconvert-work-", session_suffix)
+  submit_screen_job(message2display = "Removing empty FASTQ files from working bucket",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = rm_work_bclconvert_session,
+                    screen_log_fp = tmp_screen_fp,
+                    command2run = paste0("aws s3 rm ", nf_s3_bucket_dir, " --recursive ",
+                                         "--exclude '*' ",
+                                         paste0("--include '*", fastq_file_sizes_bucketdir$filename, "*.fastq.gz",
+                                                collapse = "' "),
+                                         "'")
+  )
+
+  check_screen_job(message2display = "Checking remove bucket FASTQ job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = rm_work_bclconvert_session,
+                   screen_log_fp = tmp_screen_fp)
+
+  stop(simpleError(paste("\nSampleIDs with no reads:", paste0("'", paste0(fastq_file_sizes_bucketdir$filename, collapse = "', '"), "'"),
+                         "\nNumber of samples that had no reads:", nrow(fastq_file_sizes_bucketdir),
+                         "\n\nThese samples are held in", nf_s3_bucket_dir,
+                         "\nand could not be moved to", bclconvert_output_path,
+                         "\n\nIf the number of samples that have no reads corresponds to the total number of samples for the sequencing run,",
+                         "\nthe wrong barcode index may have been used. Please check that the correct IDT set for the barcodes are used for demultiplexing",
+                         "\n\nSome samples may not have reads even with the correct barcodes used (negative controls or no DNA present in sample)",
+                         "\nFor these samples, please remove them from the analysis by adding their SampleID to the vector sample_w_empty_reads in *_QC_Report.Rmd",
+                         "\n\nRegenerate the SampleSheet using the generate_metadata.* Rscript and then rerun this script to re-demultiplex")))
+}
+
 aws_s3_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
                                        shQuote(paste("aws s3 ls", bclconvert_output_path, "--recursive",
                                                      "| grep 'R1_001.fastq.gz$'",
@@ -117,38 +171,7 @@ aws_s3_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
   head(-1)
 
 if(identical(aws_s3_fastq_files, character(0))) {
-
-  aws_s3_fastq_files_bucketdir <- system2("ssh", c("-tt", ec2_hostname,
-                                                   shQuote(paste("aws s3 ls", nf_s3_bucket_dir, "--recursive",
-                                                                 "| grep 'R1_001.fastq.gz$'",
-                                                                 "| grep -v 'Merged'"), type = "sh")),
-                                          stdout = TRUE, stderr = TRUE) %>%
-    head(-1)
-
-  fastq_file_sizes_bucketdir <- aws_s3_fastq_files_bucketdir %>%
-    str_split("\\s+") %>%
-    do.call("rbind", .) %>%
-    as.data.frame() %>%
-    `colnames<-`(c("date", "time", "bytes", "filename")) %>%
-    select(bytes, filename) %>%
-    filter(!grepl("/Alignment_|/Fastq/|Undetermined", filename)) %>%
-    mutate(filename = gsub(".*/|_.*", "", filename),
-           bytes = as.numeric(bytes)) %>%
-    #sometimes the Undetermined file from the sequencer gets copied over; remove these samples
-    filter(!grepl("^GenericSampleID", filename),
-           bytes <= 23) %>%
-    group_by(filename) %>%
-    mutate(file_num = n()) %>%
-    filter(!(file_num == 2 & grepl("^Undetermined", filename) & bytes == max(bytes))) %>%
-    ungroup()
-
-  stop(simpleError(paste("\nNumber of samples that had no reads:", nrow(fastq_file_sizes_bucketdir),
-                         "\n\nThese samples are held in", nf_s3_bucket_dir,
-                         "\nand could not be moved to", bclconvert_output_path,
-                         "\n\nPlease check that the correct IDT set for the barcodes were used",
-                         "\n\nFor samples that do not have reads even with the correct barcodes, please remove them from the analysis by",
-                         "\n adding their SampleID to the vector sample_w_empty_reads in *_QC_Report.Rmd",
-                         "\n\nRegenerate the SampleSheet by first and then rerun this script to re-demultiplex")))
+  stop(simpleError(paste("\nSomething went wrong. FASTQ files in", bclconvert_output_path, "could not be found!")))
 }
 
 fastq_file_sizes <- aws_s3_fastq_files %>%
@@ -172,7 +195,7 @@ fastq_file_sizes <- aws_s3_fastq_files %>%
   ungroup()
 
 if(nrow(fastq_file_sizes) == 0) {
-  stop(simpleError(paste0("\nThere were no FastQ files found at path ", bclconvert_output_path,
+  stop(simpleError(paste0("\nCould not identify FASTQ files in ", bclconvert_output_path,
                           "\nCheck to see if there was an issue with the demultiplexing of the run\n")))
 }
 
@@ -197,7 +220,7 @@ if(any(fastq_file_sizes$bytes <= 23)) {
                    screen_log_fp = tmp_screen_fp)
 
   stop(simpleError(paste("\nThese sample IDs had no reads:\n",
-                         paste0(sample_id_no_reads$filename, collapse = ", "),
+                         paste0("'", paste0(sample_id_no_reads$filename, collapse = "', '"), "'"),
                          "\n\nPlease check that the correct IDT set for the barcodes were used",
                          "\n\nFor samples that do not have reads even with the correct barcodes, please remove them from the analysis by",
                          "\n adding their SampleID to the vector sample_w_empty_reads in *_QC_Report.Rmd",
