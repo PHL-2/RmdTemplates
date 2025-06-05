@@ -40,7 +40,7 @@ if (length(in_results_not_in_s) > 0) {
 
 `r nrow(s)-1` samples and controls were processed with Illumina's COVIDSeq Test (https://www.illumina.com/products/by-type/clinical-research-products/covidseq.html), a SARS-CoV-2 tiled-amplification enrichment assay for NGS using the ARTIC `r artic_primer_scheme` primer scheme \newline
 
-The library was sequenced on the Illumina `r unique(s_toPlot$instrument_type)` platform at 2x`r read_length` bp reads on `r sequencing_date` \newline
+The library was sequenced on the Illumina `r unique(na.omit(s$instrument_type))` platform at 2x`r read_length` bp reads on `r sequencing_date` \newline
 
 BCLConvert was used to generate and demultiplex sample FASTQ files from BCL files (raw data files that contain sequence information and quality scores) \newline
 
@@ -78,10 +78,10 @@ s %>%
 
 ## Sequencing run QC metrics
 
-Cluster density: `r unique(s_toPlot$run_cd)` \newline
-Q30 score or higher: `r unique(s_toPlot$run_q30)*100`% \newline
-Percent of reads that passed filter: `r unique(s_toPlot$run_pf)*100`% \newline
-Run error rate `r unique(s_toPlot$run_error)*100`%
+Cluster density: `r unique(na.omit(s$run_cd))` \newline
+Q30 score or higher: `r unique(na.omit(s$run_q30))*100`% \newline
+Percent of reads that passed filter: `r unique(na.omit(s$run_pf))*100`% \newline
+Run error rate `r unique(na.omit(s$run_error))*100`%
 
 ## Read counts
 
