@@ -251,8 +251,11 @@ if(!read_length %in% c(76, 151)) {
 index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
 
 if(identical(index_sheet_fp, character(0))) {
-  shared_index_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "nasal_swabs", str_sub(sequencing_date, 1, 4)),
-                                    pattern = "sequencing_metadata_sheet", full.names = TRUE))
+  shared_index_fp <- list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "nasal_swabs", str_sub(sequencing_date, 1, 4)),
+                                pattern = "sequencing_metadata_sheet", full.names = TRUE) %>%
+    data.frame(vec = .) %>%
+    filter(grepl(pattern = format(as.Date(sequencing_date), format = "%m-%d-%y"), x = vec)) %>%
+    pull()
 
   if(is.na(shared_index_fp)) {
     stop(simpleError("Files in the shared drive could not be found\nAre you connected to the shared drive?"))
