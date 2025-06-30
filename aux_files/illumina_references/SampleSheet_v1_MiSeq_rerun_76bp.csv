@@ -1,9 +1,7 @@
 [Header]
-Experiment Name,COVIDSeq_YYYY-MM-DD
+Experiment Name,MiSeq_YYYY-MM-DD
 Date,YYYY-MM-DD
 Workflow,GenerateFASTQ
-Library Prep Kit,COVIDSeq for Surveillance
-Index Kit,COVIDSeq indexes_IDT for Illumina-PCR Indexes Set 1 2 3 4
 Chemistry,Amplicon
 Instrument type,MiSeq
 

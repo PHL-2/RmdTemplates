@@ -5,28 +5,26 @@ library(readxl)
 library(readr)
 library(stringr)
 
-#This Rscript currently generates the SampleSheet for demultiplexing a run using the BCL Convert program
+#This Rscript generates the SampleSheet for demultiplexing a run using BCLConvert and a metadata sheet for analysis of the sequencing run
 #https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/bcl_convert/bcl-convert-v3-7-5-software-guide-1000000163594-00.pdf
 
 ###################
 # Default variables
 ###################
 
-prj_description <- "COVIDSeq" #no spaces, should be the same as the R project
-
 index_length <- "10"
 
 phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
 
-sequencer_type <- c("MiSeq", "NextSeq1k2k")[sequencer_select]
+selected_sequencer_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
 # temporary directory to hold the screen log files
-tmp_screen_fp <- paste("~", ".tmp_screen", sequencer_type, "NS_SC2", basename(here()), sep = "/")
+tmp_screen_fp <- paste("~", ".tmp_screen", selected_sequencer_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
 
-session_suffix <- tolower(paste(sequencer_type, "ns-sc2", basename(here()), sep = "-"))
+session_suffix <- tolower(paste(selected_sequencer_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
 
 # temporary directory to hold the sequencing run download
 ec2_tmp_fp <- "~/tmp_bs_dl"
@@ -93,87 +91,74 @@ barcodes <- tryCatch(
 ###############
 
 yymmdd <- gsub("^..|-", "", sequencing_date)
+sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
+                             selected_sequencer_type == "NextSeq2000" ~ "VH")
 seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
+intended_sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
+
+record_prefix <- "Record__"
 
 run_cd <- NA
 run_q30 <- NA
 run_pf <- NA
 run_error <- NA
 
-if(run_uploaded_2_basespace) {
+# Get the run id from BaseSpace
+bs_run <- cli_submit("bs", "list", c("runs", "-f csv")) %>%
+  str_split(",") %>%
+  do.call("rbind", .) %>%
+  as.data.frame() %>%
+  `colnames<-`(.[1, ]) %>%
+  slice(-1) %>%
+  filter(grepl(paste0("^", intended_sequencing_folder_regex), Name)) %>%
+  filter(grepl(paste0("^", record_prefix, selected_sequencer_type, "_", sequencing_date), ExperimentName))
 
-  unknown_sequencer_regex <- paste0(yymmdd, "_([M]{1}|[VH]{2})", seq_folder_pattern, "$")
-
-  # Get the run id from BaseSpace
-  bs_run <- cli_submit("bs", "list", c("runs", "-f csv")) %>%
-    str_split(",") %>%
-    do.call("rbind", .) %>%
-    as.data.frame() %>%
-    `colnames<-`(.[1, ]) %>%
-    slice(-1) %>%
-    filter(grepl(paste0("^", unknown_sequencer_regex), Name))
-
-  if(nrow(bs_run) > 1) {
-    warning(simpleWarning(paste0("\nThere are two sequencing runs that matched this date. Make sure you selected the correct sequencer!!!\n",
-                                 "Currently, you are pulling the sequencing run from the ", sequencer_type, "\n\n")))
-
-    #these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
-    sequencer_regex <- case_when(sequencer_type == "MiSeq" ~ "M",
-                                 sequencer_type == "NextSeq1k2k" ~ "VH")
-
-    intended_sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
-
-    bs_run <- bs_run %>%
-      filter(grepl(paste0("^", intended_sequencing_folder_regex), Name))
-
-  }
-  if (nrow(bs_run) == 0) {
-    stop(simpleError(paste0("\nThere is no sequencing run on BaseSpace for this date: ", sequencing_date,
-                            "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
-                            "\nThe sequencer type could also be wrong: ", sequencer_type,
-                            "\nOtherwise, if you are uploading a local run, set the run_uploaded_2_basespace variable to FALSE")))
-  }
-
-  bs_run_id <- bs_run %>%
-    select(Id) %>%
-    pull()
-
-  sequencing_run <- bs_run %>%
-    select(Name) %>%
-    pull()
-
-  run_stats <- cli_submit("bs", "run", c("seqstats", "--id", bs_run_id)) %>%
-    list(run_stats = .) %>%
-    as.data.frame()
-
-  run_cd <- run_stats %>%
-    filter(grepl("SequencingStatsCompact.ClusterDensity", run_stats)) %>%
-    # cluster density seems to be reported in the millions. If there is no scientific notation, divide by 1000
-    mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
-           run_stats = ifelse(grepl("e", run_stats),
-                              as.numeric(gsub("e.*", "", run_stats))*1000,
-                              as.numeric(run_stats)/1000)) %>%
-    pull()
-
-  run_q30 <- run_stats %>%
-    filter(grepl("SequencingStatsCompact.PercentGtQ30 ", run_stats)) %>%
-    mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
-           run_stats = as.numeric(run_stats)/100) %>%
-    pull()
-
-  run_pf <- run_stats %>%
-    filter(grepl("SequencingStatsCompact.PercentPf", run_stats)) %>%
-    mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
-           run_stats = as.numeric(run_stats)) %>%
-    pull()
-
-  run_error <- run_stats %>%
-    filter(grepl("SequencingStatsCompact.ErrorRate ", run_stats)) %>%
-    mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
-           run_stats = as.numeric(run_stats)/100) %>%
-    pull()
-
+if(nrow(bs_run) > 1) {
+  stop(simpleError("\nThere are two sequencing runs that matched this date on the same sequencer!!!\n"))
+} else if (nrow(bs_run) == 0) {
+  stop(simpleError(paste0("\nThere is no record on BaseSpace for this date: ", sequencing_date,
+                          "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
+                          "\nThe sequencer type could also be wrong: ", selected_sequencer_type)))
 }
+
+bs_run_id <- bs_run %>%
+  select(Id) %>%
+  pull()
+
+sequencing_run <- bs_run %>%
+  select(Name) %>%
+  pull()
+
+run_stats <- cli_submit("bs", "run", c("seqstats", "--id", bs_run_id)) %>%
+  list(run_stats = .) %>%
+  as.data.frame()
+
+run_cd <- run_stats %>%
+  filter(grepl("SequencingStatsCompact.ClusterDensity", run_stats)) %>%
+  # cluster density seems to be reported in the millions. If there is no scientific notation, divide by 1000
+  mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+         run_stats = ifelse(grepl("e", run_stats),
+                            as.numeric(gsub("e.*", "", run_stats))*1000,
+                            as.numeric(run_stats)/1000)) %>%
+  pull()
+
+run_q30 <- run_stats %>%
+  filter(grepl("SequencingStatsCompact.PercentGtQ30 ", run_stats)) %>%
+  mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+         run_stats = as.numeric(run_stats)/100) %>%
+  pull()
+
+run_pf <- run_stats %>%
+  filter(grepl("SequencingStatsCompact.PercentPf", run_stats)) %>%
+  mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+         run_stats = as.numeric(run_stats)) %>%
+  pull()
+
+run_error <- run_stats %>%
+  filter(grepl("SequencingStatsCompact.ErrorRate ", run_stats)) %>%
+  mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+         run_stats = as.numeric(run_stats)/100) %>%
+  pull()
 
 #######################
 # Load run sample sheet
@@ -185,87 +170,45 @@ samplesheet_exists <- file.exists(run_samplesheet_fp)
 if(samplesheet_exists) {
 
   message("\n*****")
-  message("There is already an existing SampleSheet.csv or SampleSheet_v2.csv in the metadata/munge directory")
-  message("BaseSpace run will not be re-downloaded")
+  message("There is already an existing 'SampleSheet' file in the metadata/munge directory")
+  message("Using this sheet to generate the metadata...")
   message("*****")
   Sys.sleep(10)
 
 } else {
 
   run_samplesheet_fp <- here("metadata", "munge", "SampleSheet.csv")
+  temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/", sequencing_run, "/")
+  bs_dl_cmd <- paste("bs download runs --id", bs_run_id, "--output", temporary_seq_run_fp,
+                     "--exclude '*' --include 'SampleSheet*'")
 
-  if(run_uploaded_2_basespace) {
+  # Download the run from BaseSpace onto a running EC2 instance
+  download_bs_sheet_session <- paste0("down-bs-sheet-", session_suffix)
+  submit_screen_job(message2display = "Downloading SampleSheet from BaseSpace",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = download_bs_sheet_session,
+                    screen_log_fp = tmp_screen_fp,
+                    command2run = bs_dl_cmd
+  )
 
-    temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", sequencing_run, "/")
-    bs_dl_cmd <- paste("bs download runs --id", bs_run_id, "--output", temporary_seq_run_fp)
+  check_screen_job(message2display = "Checking BaseSpace download job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = download_bs_sheet_session,
+                   screen_log_fp = tmp_screen_fp)
 
-    if(have_AWS_EC2_SSH_access) {
-      # Download the run from BaseSpace onto a running EC2 instance
-      submit_screen_job(message2display = "Downloading sequencing run from BaseSpace",
-                        ec2_login = ec2_hostname,
-                        screen_session_name = paste("basespace-run-download", session_suffix, sep = "-"),
-                        screen_log_fp = tmp_screen_fp,
-                        command2run = bs_dl_cmd
-      )
+  # Get name of the final SampleSheet if there is more than 1
+  list_sample_sheets <- system2("ssh", c(ec2_hostname,
+                                         shQuote(
+                                           paste0("ls ", temporary_seq_run_fp, "SampleSheet*")
+                                         )),
+                                stdout = TRUE, stderr = TRUE) %>%
+    tail(1)
 
-      check_screen_job(message2display = "Checking BaseSpace download job",
-                       ec2_login = ec2_hostname,
-                       screen_session_name = paste("basespace-run-download", session_suffix, sep = "-"),
-                       screen_log_fp = tmp_screen_fp)
-
-      # Download the SampleSheet from EC2 instance
-      run_in_terminal(paste("scp",
-                            paste0(ec2_hostname, ":", temporary_seq_run_fp, "SampleSheet.csv"),
-                            run_samplesheet_fp),
-                      command2print = paste(" [On", ec2_hostname, "instance]\n",
-                                            "aws s3 cp", paste0(temporary_seq_run_fp, "SampleSheet.csv"),
-                                            paste0("s3://test-environment/input/", sequencing_date, "/"), "\n\n",
-                                            "[On local computer]\n",
-                                            "aws s3 cp", paste0("s3://test-environment/input/", sequencing_date, "/SampleSheet.csv"),
-                                            run_samplesheet_fp)
-      )
-    } else {
-
-      dir.create(temporary_seq_run_fp, recursive = TRUE)
-      run_in_terminal(bs_dl_cmd)
-      file.copy(paste0(temporary_seq_run_fp, "SampleSheet.csv"), run_samplesheet_fp)
-    }
-
-  } else if (!run_uploaded_2_basespace) {
-
-    if(sequencer_type == "MiSeq"){
-
-      intended_miseq_folder_regex <- paste0(yymmdd, "_M", seq_folder_pattern)
-
-      host_samplesheet_fp <- paste0(miseq_hostname, ":", intended_miseq_folder_regex, "/SampleSheet.csv")
-
-    } else if (sequencer_type == "NextSeq1k2k") {
-
-      intended_nextseq_folder_regex <- paste0(yymmdd, "_VH", seq_folder_pattern)
-      nextseq_run_fp <- "/usr/local/illumina/runs/"
-
-      sequencing_run <- system2("ssh", c("-tt", nextseq_hostname,
-                                         shQuote(paste("cd", paste0(nextseq_run_fp, ";"),
-                                                       "ls | grep", intended_nextseq_folder_regex, "| tr -d '\n'"),
-                                                 type = "sh")),
-                                stdout = TRUE)
-
-      host_samplesheet_fp <- paste0(nextseq_hostname, ":", nextseq_run_fp, sequencing_run, "/SampleSheet*.csv")
-    }
-
-    message("\n\n\n*****")
-    message("Transferring SampleSheet.csv locally")
-    message("*****")
-    Sys.sleep(5)
-
-    scp_command <- paste("scp",
-                         host_samplesheet_fp,
-                         paste(run_samplesheet_fp, ";"),
-                         "sleep 2")
-
-    run_in_terminal(scp_command)
-  }
-  rstudioapi::executeCommand("activateConsole")
+  # Download the SampleSheet from EC2 instance
+  run_in_terminal(paste("scp",
+                        paste0(ec2_hostname, ":", list_sample_sheets),
+                        run_samplesheet_fp)
+  )
 }
 
 run_sample_sheet <- load_sample_sheet(run_samplesheet_fp)
@@ -274,7 +217,7 @@ instrument_type <- data.frame(values = unlist(run_sample_sheet$Header)) %>%
   mutate(col_names = gsub(",.*", "", values)) %>%
   mutate(col_names = gsub(" ", "_", col_names)) %>%
   mutate(values = gsub(".*,", "", values)) %>%
-  filter(grepl("instrument_type|InstrumentPlatform|InstrumentType", col_names, ignore.case = TRUE)) %>%
+  filter(grepl("instrument_type|InstrumentType", col_names, ignore.case = TRUE)) %>%
   select(values) %>%
   pull()
 
@@ -284,28 +227,49 @@ read_length <- data.frame(values = unlist(run_sample_sheet$Reads)) %>%
   pull() %>%
   unique()
 
-if(instrument_type != sequencer_type) {
+if(instrument_type != selected_sequencer_type) {
   message("\n*****")
   message("The SampleSheet.csv for this ", sequencing_date, " run has the instrument set as ", instrument_type)
   message("The rest of this script will continue and processing this project as a ", instrument_type, " run")
-  message("If this was not the correct sequencer used for this project, double check the sequencing date or select the appropriate sequencer_type in this Rscript")
+  message("If this was not the correct sequencer used for this project, double check the sequencing date or select the appropriate selected_sequencer_type in this Rscript")
   message("*****")
 
   Sys.sleep(10)
 }
 
 instrument_regex <- case_when(instrument_type == "MiSeq" ~ "M",
-                              instrument_type == "NextSeq1k2k" ~ "VH")
+                              instrument_type == "NextSeq2000" ~ "VH")
 
 if(!read_length %in% c(76, 151)) {
   stop(simpleError("The read length is not 76 or 151 bp. Check the sample sheet from the sequencing run folder"))
 }
 
-#####################
-# Load metadata sheet
-#####################
+##################
+# Load index sheet
+##################
 
-metadata_input_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
+index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
+
+if(identical(index_sheet_fp, character(0))) {
+  shared_index_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "nasal_swabs", str_sub(sequencing_date, 1, 4)),
+                                    pattern = "sequencing_metadata_sheet", full.names = TRUE))
+
+  if(is.na(shared_index_fp)) {
+    stop(simpleError("Files in the shared drive could not be found\nAre you connected to the shared drive?"))
+  }
+
+  #get date of index sheet
+  sheet_date <- as.Date(str_extract(shared_index_fp, "[0-9-]{8}"), tryFormats = c("%y%m%d", "%m%d%y", "%m-%d-%y"))
+
+  if(abs(as.Date(sequencing_date) - sheet_date) > 5) {
+    stop(simpleError(paste0("The latest index sheet found is on ", sheet_date,
+                            "\nThis date is more than 5 days from the date of this RStudio project",
+                            "\nSomething might be wrong")))
+  }
+
+  file.copy(shared_index_fp, here("metadata", "munge"))
+  index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
+}
 
 read_sheet <- function(fp, sheet_name) {
   tryCatch(
@@ -320,13 +284,13 @@ read_sheet <- function(fp, sheet_name) {
         mutate(plate_coord = gsub("^0", "", plate_coord))
     },
     error = function(e) {
-      stop (simpleError("The sample metadata file from the wet lab scientists may be missing or mis-formatted"))
+      stop (simpleError("The sample index file from the wet lab scientists may be missing or mis-formatted"))
     }
   )
 }
 
-index_sheet <- read_sheet(metadata_input_fp, "Index")
-sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
+index_sheet <- read_sheet(index_sheet_fp, "Index")
+sample_info_sheet <- read_sheet(index_sheet_fp, "Sample Info")
 
 ###################################################################################
 # Load the metadata sheet from epidemiologists and merge with sample metadata sheet
@@ -336,16 +300,16 @@ sample_info_sheet <- read_sheet(metadata_input_fp, "Sample Info")
 PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xlsx", full.names = TRUE, recursive = TRUE)
 
 PHL_data <- PHL_fp %>%
-  lapply(function(x) read_excel_safely(x, "PHL")) %>%
+  lapply(function(x) read_excel_safely(x, "PHL") %>%
+           mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens", "", x),
+                  PHL_sample_received_date = as.Date(PHL_sample_received_date, format = "%d%B%y"))) %>%
   bind_rows()
 
 #if PHL_data exists, do the following
 # if it's just a blank sheet, just save sample_name and RLU column names
-if(ncol(PHL_data) == 2) {
+if(ncol(PHL_data) == 3) {
 
-  PHL_data <- PHL_fp %>%
-    lapply(function(x) read_excel_safely(x, "PHL")) %>%
-    bind_rows() %>%
+  PHL_data <- PHL_data %>%
     rename(sample_name = "SPECIMEN_NUMBER") %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
@@ -353,7 +317,7 @@ if(ncol(PHL_data) == 2) {
     mutate(sample_name = as.character(sample_name),
            sample_collected_by = "Philadelphia Department of Public Health")
 
-} else if (ncol(PHL_data) > 2) {
+} else if (ncol(PHL_data) > 3) {
 
   PHL_data <- PHL_data %>%
     rename(sample_name = "SPECIMEN_NUMBER", sample_collection_date = "SPECIMEN_DATE", gender = "GENDER", DOB = "BIRTH_DATE") %>%
@@ -361,7 +325,8 @@ if(ncol(PHL_data) == 2) {
            DOB = as.Date(DOB, format = "%m/%d/%Y"),
            gender = ifelse(is.na(gender), "Unknown", gender),
            sample_collected_by = "Philadelphia Department of Public Health") %>%
-    select(any_of(phi_info), sample_collection_date, sample_collected_by, DOB, age, gender, RLU) %>%
+    select(any_of(phi_info), sample_collection_date, sample_collected_by, PHL_sample_received_date,
+           DOB, age, gender, RLU) %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     #make these columns character vectors
@@ -392,22 +357,22 @@ if(nrow(PHL_data) > 0) {
 ###################################################################################
 
 TU_data <- PHL_fp %>%
-  lapply(function(x) read_excel_safely(x, "Temple")) %>%
-  lapply(function(x) mutate(x, SPECIMEN_NUMBER = as.character(SPECIMEN_NUMBER))) %>%
+  lapply(function(x) read_excel_safely(x, "Temple") %>%
+           mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens", "", x),
+                  PHL_sample_received_date = as.Date(PHL_sample_received_date, format = "%d%B%y"),
+                  SPECIMEN_NUMBER = as.character(SPECIMEN_NUMBER))) %>%
   bind_rows()
 
-if(ncol(TU_data) == 2) {
+if(ncol(TU_data) == 3) {
 
-  TU_data <- PHL_fp %>%
-    lapply(function(x) read_excel_safely(x, "Temple")) %>%
-    bind_rows() %>%
+  TU_data <- TU_data %>%
     rename(sample_name = "SPECIMEN_NUMBER", CT = "ct value") %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     mutate(sample_name = as.character(sample_name),
            sample_collected_by = "Temple University")
 
-} else if(ncol(TU_data) > 2) {
+} else if(ncol(TU_data) > 3) {
 
   TU_data <- TU_data %>%
     rename(sample_name = "SPECIMEN_NUMBER",
@@ -415,7 +380,8 @@ if(ncol(TU_data) == 2) {
            CT = "ct value", gender = "GENDER") %>%
     mutate(sample_collection_date = as.Date(sample_collection_date, format = "%m/%d/%Y"),
            sample_collected_by = "Temple University") %>%
-    select(any_of(phi_info), sample_collection_date, sample_collected_by, CT, age, gender) %>%
+    select(any_of(phi_info), sample_collection_date, sample_collected_by, PHL_sample_received_date,
+           CT, age, gender) %>%
     #filter rows where sample_id is NA
     filter(!is.na(sample_name)) %>%
     #make these columns character vectors
@@ -489,7 +455,9 @@ for(sheet_name in other_sheets) {
   possible_ct_value <- "ct_value"
 
   other_sheet <- PHL_fp %>%
-    lapply(function(x) read_excel_safely(x, sheet_name)) %>%
+    lapply(function(x) read_excel_safely(x, sheet_name) %>%
+             mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens", "", x),
+                    PHL_sample_received_date = as.Date(PHL_sample_received_date, format = "%d%B%y"))) %>%
     bind_rows() %>%
     rename_at(vars(contains(possible_sample_names)),
               ~gsub(possible_sample_names, "sample_name", ., ignore.case = TRUE)) %>%
@@ -587,8 +555,7 @@ named_sample_type <- c("^Test-" = "Testing sample type",
                        "^NC-" = "Water control",
                        "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
                        "^PC[0-9]*$" = "Mock DNA positive control",
-                       "^[A-Z0-9][0-9]*$" = "Nasal swab", #allow the Temple specimen IDs to be any number, once it passes 9
-                       "^WW-" = "Wastewater")
+                       "^[A-Z0-9][0-9]*$" = "Nasal swab") #allow the Temple specimen IDs to be any number, once it passes 9
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,
@@ -599,18 +566,13 @@ metadata_sheet <- metadata_sheet %>%
                                          grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ "Philadelphia Department of Public Health",
                                          TRUE ~ NA)) %>%
   mutate(PHL_sample_received_date = case_when(!(is.na(PHL_sample_received_date) | as.character(PHL_sample_received_date) == "") ~ as.Date(PHL_sample_received_date),
-                                              #if it's a wastewater sample without a date, throw an error
-                                              sample_type == "Wastewater" ~ NA,
-                                              #use Tuesday of the sequencing week if no date specified; older samples that are rerun should have a date manually added in on the sheet
-                                              TRUE ~ as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1)) %>%
+                                              #if it's a control, use Tuesday of the sequencing week if no date specified
+                                              grepl("control$", sample_type) ~ as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1,
+                                              TRUE ~ NA)) %>%
   mutate(sample_collection_date = case_when(!(is.na(sample_collection_date) | as.character(sample_collection_date) == "") ~ as.Date(sample_collection_date),
-                                            #if it's a wastewater sample without a date, use the PHL sample received date
-                                            sample_type == "Wastewater" ~ PHL_sample_received_date,
                                             TRUE ~ NA)) %>%
   mutate(organism = case_when(!(is.na(organism) | organism == "") ~ organism,
                               sample_type == "Nasal swab" ~ "Severe acute respiratory syndrome coronavirus 2",
-                              #WW sample has to be listed as metagenome even if targeted sequencing was used
-                              sample_type == "Wastewater" ~ "Wastewater metagenome",
                               !is.na(sample_type) ~ sample_type,
                               TRUE ~ NA)) %>%
   mutate(host_scientific_name = case_when(!(is.na(host_scientific_name) | host_scientific_name == "") ~ host_scientific_name,
@@ -623,7 +585,6 @@ metadata_sheet <- metadata_sheet %>%
                                   TRUE ~ NA)) %>%
   mutate(isolation_source = case_when(!(is.na(isolation_source) | isolation_source == "") ~ isolation_source,
                                       sample_type == "Nasal swab" ~ "Clinical",
-                                      sample_type == "Wastewater" ~ "Wastewater",
                                       grepl("control$", sample_type) ~ "Environmental",
                                       grepl("test", sample_type, ignore.case = TRUE) ~ "Test sample",
                                       TRUE ~ NA)) %>%
@@ -637,11 +598,19 @@ metadata_sheet <- metadata_sheet %>%
 
 main_sample_type <- unique(metadata_sheet$sample_type)[!grepl("control", unique(metadata_sheet$sample_type))]
 
+if(any(is.na(main_sample_type))) {
+  stop(simpleError(paste0("\nThis metadata sheet has NA in the sample type column!\n",
+                          "Probably something went wrong with the merge of the index sheet and the epi's metadata sheet\n",
+                          "Here are the samples with NA as its sample type:\n",
+                          paste0(metadata_sheet[is.na(metadata_sheet$sample_type), "sample_name"], collapse = ", "),
+                          "\n\nIf these samples are environmental samples, make sure the [YYYY-MM-DD]_environmental_samples.csv file\n",
+                          "is present in the metadata/extra_metadata folder. If not, just grab the appropriate one from a previous run")))
+}
+
 if(length(main_sample_type) > 1) {
-  stop(simpleError(paste0("This metadata sheet has more than one non-control sample type!\n",
+  stop(simpleError(paste0("\nThis metadata sheet has more than one non-control sample type!\n",
                           "You may need to separate the metadata sheet and use the appropriate workflow for these samples types:\n",
                           paste0(main_sample_type, collapse = ", "))))
-  sample_type_acronym <- "Mix"
 }
 
 if(!grepl("Nasal swab|Testing sample type", main_sample_type)) {
@@ -650,8 +619,7 @@ if(!grepl("Nasal swab|Testing sample type", main_sample_type)) {
 }
 
 sample_type_acronym <- case_when(main_sample_type == "Testing sample type" ~ "Test",
-                                 main_sample_type == "Nasal swab" ~ "NS",
-                                 main_sample_type == "Wastewater" ~ "WW")
+                                 main_sample_type == "Nasal swab" ~ "NS")
 
 if(is.na(sample_type_acronym)) {
   stop(simpleError("There's a new or misformatted sample type in the metadata sheet!"))
@@ -685,8 +653,10 @@ if(ncol(epi_sample_not_found > 0)) {
 
     message("\n*****")
     message("These samples were found in the epidemiologists metadata sheet but not in our sample sheet. Something might be wrong!")
-    message("Check email to see if these samples could not be located by the receiving department")
-    message("Otherwise, these samples may have had an issue during extraction. Send wet lab scientists these sample names to check:")
+    message("Check Teams/email to see if these samples were not found by the receiving department")
+    message("Otherwise, these samples may have had an issue during extraction")
+    message("If these samples are okay to be removed from the analysis, add them to remove_sample_from_samplesheets defined above and rerun this script")
+    message("Sample(s) in question:")
     message("*****")
 
     stop(simpleError(paste0(epi_sample_not_found, collapse = ", ")))
@@ -763,52 +733,54 @@ for(x in c("qubit_conc_ng_ul", "sample_collection_date", "host_age_bin", "gender
 }
 
 #check lowest date of sample collection
-if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by='-2 month')[2]){
-  stop(simpleError(paste0("\nSome samples have collection dates more than 2 months ago. Investigate!!")))
+if(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])) < seq(as.Date(sequencing_date), length=2, by="-6 month")[2]){
+  message("Earliest sample collection date in this run:")
+  message(min(as.Date(metadata_sheet$sample_collection_date[!is.na(metadata_sheet$sample_collection_date)])))
+  stop(simpleError(paste0("\nSome samples have collection dates more than 6 months ago. Investigate!!")))
 }
 
-print('What do the sample_id look like?')
+message("What do the sample_id look like?")
 print(unique(metadata_sheet$sample_id))
 
-print('Which lanes are sequenced?')
+message("Which lanes are sequenced?")
 print(unique(metadata_sheet$lane))
 
-print('Are the barcode columns unique?')
+message("Are the barcode columns unique?")
 if(length(unique(metadata_sheet$idt_plate_coord)) != dim(metadata_sheet)[1]) {
   stop(simpleError("Barcode positions are not unique!"))
 }
 print(length(unique(metadata_sheet$idt_plate_coord)) == dim(metadata_sheet)[1])
 
-print('Number of barcodes?')
+message("Number of barcodes?")
 print(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))))
-print('Number of samples?')
+message("Number of samples?")
 print(length(unique(metadata_sheet$sample_id)))
 if(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))) != length(unique(metadata_sheet$sample_id))) {
   stop(simpleError("Differing number of samples and barcodes!"))
 }
 
-print('Are the barcodes unique?')
+message("Are the barcodes unique?")
 print(length(unique(paste0(metadata_sheet$index, metadata_sheet$index2))) == dim(metadata_sheet)[1])
 
-print('Are the sample names unique?')
+message("Are the sample names unique?")
 print(length(unique(metadata_sheet$sample_id)) == dim(metadata_sheet)[1])
 
-print('Are all the forward primers found?')
+message("Are all the forward primers found?")
 print(sum(is.na(metadata_sheet$index)) == 0)
 
-print('Are all the reverse primers found?')
+message("Are all the reverse primers found?")
 print(sum(is.na(metadata_sheet$index2)) == 0)
 if(sum(is.na(c(metadata_sheet$index, metadata_sheet$index2))) != 0) {
   stop(simpleError("Either the forward or reverse primers are NA!"))
 }
 
-print('Do all the sampleIDs start with a letter?')
+message("Do all the sampleIDs start with a letter?")
 print(all(grepl("^[A-Za-z]", metadata_sheet$sample_id)))
 if(!all(grepl("^[A-Za-z]", metadata_sheet$sample_id))) {
   stop(simpleError("Some Sample IDs do not start with a letter!"))
 }
 
-print('Are there periods, underscores, or space characters in the SampleID?')
+message("Are there periods, underscores, or space characters in the SampleID?")
 print(any(grepl(" |_|\\.", metadata_sheet$sample_id)))
 if(any(grepl(" |_|\\.", metadata_sheet$sample_id))) {
   stop(simpleError("There are spaces, underscores, or periods in the Sample IDs! Please fix"))
@@ -866,6 +838,58 @@ write_samp("")
 write_samp("[BCLConvert_Data]")
 write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append = TRUE)
 
+##########################################################
+# Generate a separate sample sheet for nf-core/demultiplex
+##########################################################
+
+s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
+
+nf_demux_samplesheet <- data.frame(
+  id = sequencing_run,
+  samplesheet = paste0(s3_run_bucket_fp, sample_sheet_fn),
+  lane = "",
+  flowcell = paste0(s3_run_bucket_fp, sequencing_run, ".tar.gz")
+)
+
+nfcore_demux_sample_sheet_pattern <- "nf_demux_samplesheet.csv"
+
+nf_demux_samplesheet_fp <- here("metadata", "munge",
+                                tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, nfcore_demux_sample_sheet_pattern, sep = "_")))
+
+nf_demux_samplesheet %>%
+  write_csv(file = nf_demux_samplesheet_fp)
+
+###################################
+# Upload sample sheets to S3 bucket
+###################################
+
+ec2_tmp_session_dir <- paste0(ec2_tmp_fp, "/", session_suffix, "/")
+
+mk_remote_dir(ec2_hostname, ec2_tmp_session_dir)
+
+run_in_terminal(paste("scp", sample_sheet_fp, nf_demux_samplesheet_fp,
+                      paste0(ec2_hostname, ":", ec2_tmp_session_dir))
+)
+
+upload_samplesheet_session <- paste0("up-samplesheet-", session_suffix)
+submit_screen_job(message2display = "Uploading sample sheets to S3",
+                  ec2_login = ec2_hostname,
+                  screen_session_name = upload_samplesheet_session,
+                  screen_log_fp = tmp_screen_fp,
+                  command2run = paste("aws s3 cp",
+                                      ec2_tmp_session_dir,
+                                      s3_run_bucket_fp,
+                                      "--recursive",
+                                      "--exclude '*'",
+                                      paste0("--include '", sample_sheet_fn, "'"),
+                                      paste0("--include '", basename(nf_demux_samplesheet_fp), "'"))
+)
+
+check_screen_job(message2display = "Checking sample sheet upload job",
+                 ec2_login = ec2_hostname,
+                 screen_session_name = upload_samplesheet_session,
+                 screen_log_fp = tmp_screen_fp)
+
 ################################
 # Write sheet to metadata folder
 ################################
@@ -873,16 +897,18 @@ write_csv(samp_sheet_2_write, file = sample_sheet_fp, col_names = TRUE, append =
 #does not contain PHI and accession numbers
 metadata_sheet %>%
   filter(!sample_name %in% remove_sample_from_samplesheets) %>%
+  filter(!sample_id %in% sample_w_empty_reads) %>%
   select(-c(I7_Index_ID, I5_Index_ID, any_of(phi_info))) %>%
   # NextSeq runs have index2 sequences in the reverse complement of the ones listed in the reference barcode sheet
   # however, the sample sheet used for demultiplexing needs to be the same orientation as the reference barcode sheet
   # when BCLConvert demultiplexes a NextSeq run, it will automatically reverse complement index2
   # results from the pipeline will refer to the reverse complement of index2, so this should be updated in the metadata sheet
-  mutate(index2 = ifelse(instrument_type == "NextSeq1k2k", reverse_complement(index2), index2)) %>%
+  mutate(index2 = ifelse(instrument_type == "NextSeq2000", reverse_complement(index2), index2)) %>%
   write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_metadata.csv")))
 
 #contains PHI and accession numbers
 metadata_sheet %>%
   filter(!sample_name %in% remove_sample_from_samplesheets) %>%
+  filter(!sample_id %in% sample_w_empty_reads) %>%
   select(sample_id, any_of(phi_info)) %>%
   write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")))
