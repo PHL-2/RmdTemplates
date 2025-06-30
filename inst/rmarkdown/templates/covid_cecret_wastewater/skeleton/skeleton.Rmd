@@ -205,8 +205,6 @@ test_upload <- TRUE
 #should be in the format of PHL2-[sequencer]-[plate position]-[sequencing date]
 failed_sample_fasta <- c("")
 
-lastest_seqsender_version_tested <- "v1.2.7"
-
 source("code/4_upload_data_2_public_repo.R")
 
 ```

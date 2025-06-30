@@ -2,6 +2,8 @@ library(here)
 library(readr)
 library(tidyverse)
 
+lastest_seqsender_version_tested <- "v1.2.7"
+
 #load constant variables
 tryCatch(
   {
