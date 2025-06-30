@@ -49,10 +49,12 @@ ampCheck <- list.files(
   recursive = TRUE)  %>%
   file.exists
 
-useExportFolder <- !file.exists(ampCheck, standardCheck)
+useExportFolder <- !file.exists(ampCheck&importCheck, standardCheck)
 
 if(useExportFolder) {
   print("No files found, checking export folder")
+} else {
+  print(paste("Found", unlist(list.files(path = here(), pattern = "Analyzed.csv|Amplitude.csv", recursive = TRUE))))
 }
 
 ## Filepath to wastewater metadata in aux folder
@@ -72,23 +74,6 @@ ww_nwss_meta_fp = list.files(path = file.path(dirname(here()), "aux_files"),
 ```
 
 
-
-```{r inital concentrations for efficiency calculations}
-#### Check to see if can be removed
-# init_mhvcontrol_conc <- mhv_to_control_uL * MHV_concentration_copiesuL / (control_vol_mL * 1000)
-# 
-# init_sc2_conc <- SC2_concentration_copiesuL * sc2_to_control_uL / (control_vol_mL * 1000)
-# 
-# init_MHV_ww_conc <- MHV_concentration_copiesuL * mhv_ww_input_uL / (ww_vol_mL * 1000)
-# 
-# init_MHV_unconc_conc <- MHV_concentration_copiesuL * 2 / 800
-# 
-# 
-# dInit_controls<- data.frame(Type = c("MHV", "E", "N2"), 
-#                             initial_conc = c(init_mhvcontrol_conc, init_sc2_conc, init_sc2_conc))
-
-```
-
 ```{r finding most recent data, eval = useExportFolder}
 
 #Path for standard analysis file
@@ -102,13 +87,11 @@ amplitudeRunfp <- dat_fp %>%
 if (file.exists(amplitudeRunfp)) { #check if amp data exists
   print("Found amplitude data. Running the automated clustering analysis")
   
-  copyPathSampleInfo <-
-  list.files(
+  copyPathSampleInfo <- list.files(
     path = file.path(here(), "input"),
-    pattern = "import",
+    pattern = "import.csv",
     full.names = TRUE,
-    recursive = FALSE
-  )
+    recursive = FALSE)
   
   dat_date <- amplitudeRunfp %>%
     str_extract(pattern = "\\d{8}") %>%
@@ -161,6 +144,8 @@ source(file = file.path(here(), "code", "standard_input.R")) #reads in analyzed 
 
 
 ```{r Reading in amplitude data, eval = ampCheck}
+
+read_csv()
 
 source(file = file.path(here(), "code", "clustering_algorithm.R")) #reads in amplitude data, clusters data, then creates d_pre
 

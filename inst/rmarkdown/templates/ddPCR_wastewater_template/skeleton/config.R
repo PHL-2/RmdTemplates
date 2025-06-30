@@ -17,9 +17,6 @@ mhv_ww_input_uL = 8
 ## Control matrix volume (mL)
 control_vol_mL = 20
 
-## Control matrix volume date info ([year][month][day])
-control_matrix_info = "202212XX Wastewater"
-
 ## MHV added to control matrix (uL)
 mhv_to_control_uL = 2
 
@@ -35,7 +32,6 @@ init_concentration_vol_uL = 34375
 
 ## Concentration: Elution volume (uL)
 end_concentration_vol_uL = 400
-
 
 
 #### Extraction step ####
@@ -54,20 +50,13 @@ rxn_vol_uL = 20
 ## ddPCR: sample input volume (uL)
 input_vol_uL = 9
 
-## LOB
-LoB = 0
-
-## LOD (concentration GC/uL)
-LoD = 0.2
 
 ##### Stock information #####
 ## Interal control stock information
 icInfo = "MHV"
-MHV_concentration_copiesuL = 32234
 
 ## SC2 stock information
 posCtrl = "ZeptoSC2"
-posCtrl_concentration_copiesuL = 739.3
 
 
 ## Filepath to wastewater metadata in aux folder

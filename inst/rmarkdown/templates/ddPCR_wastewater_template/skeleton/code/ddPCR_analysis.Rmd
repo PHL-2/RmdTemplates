@@ -227,11 +227,11 @@ print("No additional wells removed.")
 d %>% 
   group_by(Well,Type, Sample, Process, Spiked, Sample_date) %>%
   summarize(overall_positives = sum(Positives), Droplets = mean(Droplet_count)) %>%
-  mutate(percentage_positive = overall_positives / Droplets * 100) %>%
+  mutate(posDrops10k = overall_positives / Droplets * 100) %>%
   ungroup() %>%
-  select(Well, Sample, Sample_date, Type, Process, percentage_positive) %>%
+  select(Well, Sample, Sample_date, Type, Process, posDrops10k) %>%
   #filter(Spiked == "Spiked") %>%
-  ggplot(aes(x=Well, y=percentage_positive, fill = Process)) +
+  ggplot(aes(x=Well, y=posDrops10k, fill = Process)) +
   geom_col(position = "dodge") +
   scale_fill_manual(values = c("orange", "purple", "dodgerblue2")) +
   facet_wrap(Sample_date ~ Type, scales = "free_x") +
@@ -288,7 +288,7 @@ d %>%
   mutate(SampleType = ifelse(grepl(pattern = "East|West", x = Type) & Spiked == "Unspiked", paste("Neg", icInfo), SampleType),
          SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
    # filter(Spiked == "Spiked") %>%
-  ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
+  ggplot(aes(x=Type, y=posDrops10k, fill = Target)) +
   geom_boxplot(position = "dodge") +
   geom_point(
     aes(fill = Target),
@@ -304,8 +304,8 @@ d %>%
                                hjust = 1)
   ) +
   labs(
-    title = "Percentage of droplets positive in all data",
-    y = "Percentage of Positive droplets (%)",
+    title = "Positive droplets per 10k droplets in all data",
+    y = "Positive droplets per 10k droplets",
     x = "Samples"
   )
 
@@ -346,7 +346,7 @@ dControls %>%
 dControls %>%
   filter(exp_con == "Extraction control") %>%
   mutate(SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
-  ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
+  ggplot(aes(x=Type, y=posDrops10k, fill = Target)) +
   geom_boxplot(position = "dodge") +
   geom_point(
     aes(fill = Target),
@@ -357,8 +357,8 @@ dControls %>%
   scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
-    title = "Percentage of droplets positive in positive and negative controls",
-    y = "Percentage of Positive droplets (%)",
+    title = "Positive droplets per 10k droplets in positive and negative controls",
+    y = "Positive droplets per 10k droplets",
     x = "Samples"
   )
 ```
@@ -398,7 +398,7 @@ dControls %>%
   filter(exp_con == "Extraction control",
          Target != icInfo) %>%
   mutate(SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
-  ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
+  ggplot(aes(x=Type, y=posDrops10k, fill = Target)) +
   geom_boxplot(position = "dodge") +
   geom_point(
     aes(fill = Target),
@@ -409,8 +409,8 @@ dControls %>%
   scale_fill_manual(values = c("firebrick1", "dodgerblue2")) +
   theme_light() +
   labs(
-    title = "Percentage of droplets positive in positive and negative controls",
-    y = "Percentage of Positive droplets (%)",
+    title = "Positive droplets per 10k droplets in positive and negative controls",
+    y = "Positive droplets per 10k droplets",
     x = "Samples"
   )
 ```
@@ -447,7 +447,7 @@ dControls %>%
 
 dControls %>%
   filter(exp_con == "ddPCR control") %>%
-  ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
+  ggplot(aes(x=Type, y=posDrops10k, fill = Target)) +
   geom_boxplot(position = "dodge") +
   geom_point(
     aes(fill = Target),
@@ -458,8 +458,8 @@ dControls %>%
   scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
   theme_light() +
   labs(
-    title = "Percentage of droplets positive in ddPCR controls",
-    y = "Percentage of Positive droplets (%)",
+    title = "Positive droplets per 10k droplets in ddPCR controls",
+    y = "Positive droplets per 10k droplets",
     x = "Samples"
   )
 
@@ -528,7 +528,7 @@ d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
          grepl(pattern = "concentrated", x = Process, ignore.case = T),
          Target != icInfo) %>%
-  ggplot(aes(x = Type, y = percentage_positive, fill = Target)) +
+  ggplot(aes(x = Type, y = posDrops10k, fill = Target)) +
   geom_boxplot(position = "dodge") +
   geom_point(
     aes(fill = Target),
@@ -544,8 +544,8 @@ d %>%
                                hjust = 1)
   ) +
   labs(
-    title = paste("Percentage of droplets positive in wastewater samples without", icInfo, "signal"),
-    y = "Percentage of Positive droplets",
+    title = paste("Positive droplets per 10k droplets in wastewater samples without", icInfo, "signal"),
+    y = "Positive droplets per 10k droplets",
     x = "Samples"
   )
 
@@ -594,7 +594,7 @@ d %>%
          grepl(pattern = "concentrated", x = Process, ignore.case = T),
          Target != "MHV",
          !(Well %in% wellsToRemove),) %>%
-  ggplot(aes(x = Type, y = percentage_positive, fill = Target)) +
+  ggplot(aes(x = Type, y = posDrops10k, fill = Target)) +
   geom_boxplot(position = "dodge") +
   geom_point(
     aes(fill = Target),
@@ -610,8 +610,8 @@ d %>%
                                hjust = 1)
   ) +
   labs(
-    title = paste("Percentage of droplets positive in wastewater samples without", icInfo, "signal"),
-    y = "Percentage of Positive droplets",
+    title = paste("Positive droplets per 10k droplets in wastewater samples without", icInfo, "signal"),
+    y = "Positive droplets per 10k droplets",
     x = "Samples"
   )
 
@@ -654,59 +654,6 @@ pander(ww_SC2_conc_result,
 
 # Trouble shooting
 
-## Natural MHV in wastewater
-
-```{r unspiked mhv figures, fig.height = figHeight}
-
-if(nrow(dUnspiked)>0) {
-
-  dUnspiked %>%
-    ggplot(aes(x=Type, y=Positives, fill = Target)) +
-    geom_boxplot(position = "dodge") +
-    geom_point(
-      aes(fill = Target),
-      shape = 21,
-      size = 1.5,
-      position = position_jitterdodge(jitter.width = 0.2)) +
-    facet_grid(Sample_date ~ Type, scales = "free_x") +
-    scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
-    theme_light() +
-    labs(
-      title = "Number of positive droplets in unspiked wastewater samples",
-      y = "Number of Positive droplets",
-      x = "Samples"
-    )
-}
-
-```
-
-
-```{r, fig.height = figHeight}
-
-
-if(nrow(dUnspiked)>0) {
-  dUnspiked %>%
-    ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
-    geom_boxplot(position = "dodge") +
-    geom_point(
-      aes(fill = Target),
-      shape = 21,
-      size = 1.5,
-      position = position_jitterdodge(jitter.width = 0.2)) +
-    facet_grid(Sample_date ~ Type, scales = "free_x") +
-    scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
-    theme_light() +
-    labs(
-      title = "Percent of positive droplets in unspiked wastewater samples",
-      y = "Percent of Positive droplets",
-      x = "Samples"
-    )
-
-} else {
-  print("No unspiked samples")
-}
-```
-
 ## Wastewater with MHV signal
 ```{r waste water signal with MHV, fig.height = figHeight}
 
@@ -743,7 +690,7 @@ d %>%
 d %>%
   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
          grepl(pattern = "concentrated", x = Process, ignore.case = T)) %>%
-  ggplot(aes(x = Type, y = percentage_positive, fill = Target)) +
+  ggplot(aes(x = Type, y = posDrops10k, fill = Target)) +
   geom_boxplot(position = "dodge") +
   geom_point(
     aes(fill = Target),
@@ -764,15 +711,5 @@ d %>%
     x = "Samples"
   )
 
-```
-
-\elandscape
-
-
-```{r child = "code/dilutions.Rmd", eval = has_dilutions}
-```
-
-
-```{r child = "code/quickextract.Rmd", eval = has_QE}
 ```
 

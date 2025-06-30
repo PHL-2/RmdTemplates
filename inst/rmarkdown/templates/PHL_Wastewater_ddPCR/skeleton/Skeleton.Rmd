@@ -20,9 +20,6 @@ ww_report_fp <- "code/ddPCR_analysis.Rmd"
 ww_output_fp <- here("output", paste0(project_name, '.report_gen.on.', Sys.Date(), '.pdf'))
 
 #Indicators for specific analysis
-has_oldWW <- TRUE
-has_dilutions <- FALSE
-has_QE <- FALSE
 days_between_collection <- 1
 
 rmarkdown::render(ww_report_fp, output_file = ww_output_fp, knit_root_dir = here())

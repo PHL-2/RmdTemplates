@@ -12,10 +12,6 @@ droplet_vol <- 0.795 #nanoliter
 #QX Manager User Guide has the above volume. Can use that as the reference and put a link into the validation
 
 
-
-#File path for sample info/meta
-
-
 #Loading amplitude data
 droplets <- read_csv(copy_path,
            id = "FileName",
@@ -118,7 +114,7 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
     separate(Sample, into = c("Type", "Process"), sep = "_", remove = FALSE) %>%
     filter(!is.na(Sample),
            Sample != "Buffer") %>%
-    mutate(percentage_positive = Positives/Droplet_count * 100,
+    mutate(posDrops10k = Positives/Droplet_count * 10000 * 100,
            Process = ifelse(is.na(Process), "Non-processed", Process),
            Process = ifelse(grepl(pattern = "dil", x = Extra, ignore.case = T), "Dilution", Process),
            Process = ifelse(Spiked == "Unspiked", "Unspiked", Process),
