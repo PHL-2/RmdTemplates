@@ -322,7 +322,7 @@ if(nrow(gisaid_errors) > 0) {
   stop(simpleError(paste0("Something went wrong! GISAID upload failed. Did you use the wrong credentials?\n",
                           "This error may also occur if these samples have been already uploaded\n",
                           "Depending on following error message, you may be able to just rerun this chunk to resubmit:\n",
-                          gisaid_errors)))
+                          paste0(gisaid_errors$msg, collapse = "\n"))))
 }
 
 gisaid_success <- read_gisaid_accessions %>%
