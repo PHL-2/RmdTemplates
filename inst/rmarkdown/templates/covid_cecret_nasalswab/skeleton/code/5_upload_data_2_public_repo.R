@@ -319,7 +319,7 @@ gisaid_errors <- read_gisaid_accessions %>%
   filter(grepl("error", code, ignore.case = TRUE))
 
 if(nrow(gisaid_errors) > 0) {
-  stop(simpleError(paste0("Something went wrong! GISAID upload failed. Did you use the wrong credentials?\n",
+  stop(simpleError(paste0("\n\nSomething went wrong! GISAID upload failed. Did you use the wrong credentials?\n",
                           "This error may also occur if these samples have been already uploaded\n",
                           "Depending on following error message, you may be able to just rerun this chunk to resubmit:\n",
                           paste0(gisaid_errors$msg, collapse = "\n"))))
@@ -329,7 +329,7 @@ gisaid_success <- read_gisaid_accessions %>%
   filter(grepl("epi_isl_id", code))
 
 if(nrow(gisaid_success) != nrow(seqsender)) {
-  stop(simpleError("Some GISAID samples failed to upload."))
+  stop(simpleError("\n\nSome GISAID samples failed to upload."))
 }
 
 gisaid_accessions <- gisaid_success %>%
@@ -383,7 +383,7 @@ submission_log %>%
 file.remove(here("submission_log.csv"))
 
 if(test_upload) {
-  message("You have successfully completed a TEST submission. You may now submit the data for real by setting 'test_upload' to FALSE")
+  message("\n\nYou have successfully completed a TEST submission. You may now submit the data for real by setting 'test_upload' to FALSE")
 } else {
-  message("You have successfully completed a submission to GISAID and NCBI")
+  message("\n\nYou have successfully completed a submission to GISAID and NCBI")
 }
