@@ -106,7 +106,7 @@ ssh_command_check <- function(stdoutput) {
 
 project_name <- basename(here())
 aux_seqsender_fp <- file.path(dirname(here()), "aux_files", "data_submission", "seqsender")
-submission_log_fp <- file.path(dirname(here()), "submission_log.csv")
+submission_log_fp <- file.path(dirname(here()), "submission_log_all.csv")
 seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload_orig.csv", sep = "_"))
 appended_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload.csv", sep = "_"))
 
@@ -186,7 +186,7 @@ submission_log_test <- submission_log %>%
   filter(Submission_Name == input_submission_name,
          Submission_Type == "TEST")
 
-submission_log_prod <- read_csv(submission_log_fp) %>%
+submission_log_prod <- submission_log %>%
   filter(Submission_Name == input_submission_name,
          Submission_Type == "PRODUCTION")
 
@@ -368,18 +368,16 @@ ssh_seqsender_cmd("submit --genbank")
 download_submission_log <- system2("scp", c(paste0(ec2_hostname, ":", submission_path, "/submission_log.csv"), here()))
 ssh_command_check(download_submission_log)
 
-submitted_run <- read_csv(here("submission_log.csv")) %>%
+new_submission_log <- read_csv(here("submission_log.csv")) %>%
   filter(Submission_Name == input_submission_name,
          if(test_upload) {
            Submission_Type == "TEST"
          } else {
-           ubmission_Type == "PRODUCTION"
+           Submission_Type == "PRODUCTION"
          })
 
-all_log <- read_csv(file.path(dirname(here()), "submission_log_all.csv")) %>%
-  rbind(submitted_run)
-
-all_log %>%
+submission_log %>%
+  rbind(new_submission_log) %>%
   write_csv(file.path(dirname(here()), "submission_log_all.csv"))
 
 file.remove(here("submission_log.csv"))
