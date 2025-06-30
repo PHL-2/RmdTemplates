@@ -219,7 +219,7 @@ file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = T
 
 ```
 
-```{GISAID GenBank BioSample SRA submission, message=TRUE, include=FALSE, eval=FALSE}
+```{r GISAID GenBank BioSample SRA submission, message=TRUE, include=FALSE, eval=FALSE}
 
 #this script submits the data to NCBI and GISAID
 
