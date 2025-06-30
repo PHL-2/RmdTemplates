@@ -376,11 +376,11 @@ submitted_run <- read_csv(here("submission_log.csv")) %>%
            ubmission_Type == "PRODUCTION"
          })
 
-all_log <- read_csv(file.path(dirname(here()), "all_submission_log.csv")) %>%
+all_log <- read_csv(file.path(dirname(here()), "submission_log_all.csv")) %>%
   rbind(submitted_run)
 
 all_log %>%
-  write_csv(file.path(dirname(here()), "all_submission_log.csv"))
+  write_csv(file.path(dirname(here()), "submission_log_all.csv"))
 
 file.remove(here("submission_log.csv"))
 
