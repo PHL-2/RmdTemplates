@@ -304,7 +304,7 @@ PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xl
 
 PHL_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "PHL") %>%
-           mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens", "", x),
+           mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens.* ", "", x),
                   PHL_sample_received_date = as.Date(PHL_sample_received_date, format = "%d%B%y"))) %>%
   bind_rows()
 
@@ -361,7 +361,7 @@ if(nrow(PHL_data) > 0) {
 
 TU_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "Temple") %>%
-           mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens", "", x),
+           mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens.* ", "", x),
                   PHL_sample_received_date = as.Date(PHL_sample_received_date, format = "%d%B%y"),
                   SPECIMEN_NUMBER = as.character(SPECIMEN_NUMBER))) %>%
   bind_rows()
@@ -459,7 +459,7 @@ for(sheet_name in other_sheets) {
 
   other_sheet <- PHL_fp %>%
     lapply(function(x) read_excel_safely(x, sheet_name) %>%
-             mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens", "", x),
+             mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens.* ", "", x),
                     PHL_sample_received_date = as.Date(PHL_sample_received_date, format = "%d%B%y"))) %>%
     bind_rows() %>%
     rename_at(vars(contains(possible_sample_names)),
