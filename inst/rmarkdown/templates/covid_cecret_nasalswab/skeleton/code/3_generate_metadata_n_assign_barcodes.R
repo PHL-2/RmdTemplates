@@ -14,7 +14,8 @@ library(stringr)
 
 index_length <- "10"
 
-phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
+phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority",
+              "ordering_location", "clinical_test_name", "clinical_test_result")
 
 selected_sequencer_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
 
