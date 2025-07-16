@@ -14,7 +14,8 @@ library(stringr)
 
 index_length <- "10"
 
-phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority")
+phi_info <- c("sample_name", "zip_char", "case_id", "breakthrough_case", "death", "hospitalized", "outbreak", "priority",
+              "ordering_location", "clinical_test_name", "clinical_test_result")
 
 selected_sequencer_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
 
@@ -251,20 +252,30 @@ if(!read_length %in% c(76, 151)) {
 index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
 
 if(identical(index_sheet_fp, character(0))) {
-  shared_index_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "nasal_swabs", str_sub(sequencing_date, 1, 4)),
-                                    pattern = "sequencing_metadata_sheet", full.names = TRUE))
+  shared_index_sheet_list <- list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "nasal_swabs", str_sub(sequencing_date, 1, 4)),
+                                        pattern = "sequencing_metadata_sheet", full.names = TRUE) %>%
+    data.frame(files = .) %>%
+    mutate(posted_dates = gsub(".*([0-9-]{8}).*", "\\1", files))
 
-  if(is.na(shared_index_fp)) {
-    stop(simpleError("Files in the shared drive could not be found\nAre you connected to the shared drive?"))
-  }
+  shared_index_fp <- shared_index_sheet_list %>%
+    filter(grepl(format(as.Date(sequencing_date), format = "%m-%d-%y"), files)) %>%
+    select(files) %>%
+    pull()
 
-  #get date of index sheet
-  sheet_date <- as.Date(str_extract(shared_index_fp, "[0-9-]{8}"), tryFormats = c("%y%m%d", "%m%d%y", "%m-%d-%y"))
+  if(identical(shared_index_fp, character(0))) {
+    if(nrow(shared_index_sheet_list) == 0) {
+      stop(simpleError("\nCannot find files in the shared drive\nAre you connected to the shared drive?"))
+    } else {
+      posted_dates <- shared_index_sheet_list %>%
+        tail(5) %>%
+        select(posted_dates) %>%
+        pull() %>%
+        paste0(collapse = "\n")
 
-  if(abs(as.Date(sequencing_date) - sheet_date) > 5) {
-    stop(simpleError(paste0("The latest index sheet found is on ", sheet_date,
-                            "\nThis date is more than 5 days from the date of this RStudio project",
-                            "\nSomething might be wrong")))
+      stop(simpleError(paste0("\nCannot find the index sheet with the expected date of ", format(as.Date(sequencing_date), format = "%m-%d-%y"),
+                              "\nHere are the dates of the posted index sheets in the shared drive:\n",
+                              posted_dates)))
+    }
   }
 
   file.copy(shared_index_fp, here("metadata", "munge"))
@@ -301,7 +312,7 @@ PHL_fp <- list.files(here("metadata", "extra_metadata"), pattern = "_filtered.xl
 
 PHL_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "PHL") %>%
-           mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens", "", x),
+           mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens.* ", "", x),
                   PHL_sample_received_date = as.Date(PHL_sample_received_date, format = "%d%B%y"))) %>%
   bind_rows()
 
@@ -358,7 +369,7 @@ if(nrow(PHL_data) > 0) {
 
 TU_data <- PHL_fp %>%
   lapply(function(x) read_excel_safely(x, "Temple") %>%
-           mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens", "", x),
+           mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens.* ", "", x),
                   PHL_sample_received_date = as.Date(PHL_sample_received_date, format = "%d%B%y"),
                   SPECIMEN_NUMBER = as.character(SPECIMEN_NUMBER))) %>%
   bind_rows()
@@ -456,7 +467,7 @@ for(sheet_name in other_sheets) {
 
   other_sheet <- PHL_fp %>%
     lapply(function(x) read_excel_safely(x, sheet_name) %>%
-             mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens", "", x),
+             mutate(PHL_sample_received_date = gsub("_filtered.xlsx|.*PHLspecimens.* ", "", x),
                     PHL_sample_received_date = as.Date(PHL_sample_received_date, format = "%d%B%y"))) %>%
     bind_rows() %>%
     rename_at(vars(contains(possible_sample_names)),

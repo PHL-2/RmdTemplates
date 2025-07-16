@@ -170,6 +170,10 @@ if(nrow(fastq_file_sizes_bucketdir) > 0) {
 
   message("\nSampleIDs with no reads: ", paste0("\"", paste0(fastq_file_sizes_bucketdir$filename, collapse = "\", \""), "\"\n"))
 
+  fastq_file_sizes_bucketdir %>%
+    select(sample_id = filename) %>%
+    write_csv(here("metadata", paste(sequencing_date, prj_description, "initial_samples_no_reads.csv", sep = "_")))
+
   stop(simpleError(paste("Number of samples that had no reads:", nrow(fastq_file_sizes_bucketdir),
                          "\n\nThese samples are held in", nf_s3_bucket_dir,
                          "\nand could not be moved to", bclconvert_output_path,

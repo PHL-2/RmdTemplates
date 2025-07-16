@@ -97,7 +97,7 @@ source("code/3_run_nextflow.R")
 
 ```
 
-```{r setup for the pdf, echo=FALSE}
+```{r setup for the pdf, echo=FALSE, warning=FALSE}
 
 library(knitr)
 opts_chunk$set(

@@ -315,20 +315,30 @@ if(!is.na(env_fp)) {
 index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
 
 if(identical(index_sheet_fp, character(0))) {
-  shared_index_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "wastewater", str_sub(sequencing_date, 1, 4)),
-                                    pattern = "sequencing_metadata_sheet", full.names = TRUE))
+  shared_index_sheet_list <- list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "wastewater", str_sub(sequencing_date, 1, 4)),
+                                        pattern = "sequencing_metadata_sheet", full.names = TRUE) %>%
+    data.frame(files = .) %>%
+    mutate(posted_dates = gsub(".*([0-9-]{8}).*", "\\1", files))
 
-  if(is.na(shared_index_fp)) {
-    stop(simpleError("Files in the shared drive could not be found\nAre you connected to the shared drive?"))
-  }
+  shared_index_fp <- shared_index_sheet_list %>%
+    filter(grepl(format(as.Date(sequencing_date), format = "%m-%d-%y"), files)) %>%
+    select(files) %>%
+    pull()
 
-  #get date of index sheet
-  sheet_date <- as.Date(str_extract(shared_index_fp, "[0-9-]{8}"), tryFormats = c("%y%m%d", "%m%d%y", "%m-%d-%y"))
+  if(identical(shared_index_fp, character(0))) {
+    if(nrow(shared_index_sheet_list) == 0) {
+      stop(simpleError("\nCannot find files in the shared drive\nAre you connected to the shared drive?"))
+    } else {
+      posted_dates <- shared_index_sheet_list %>%
+        tail(5) %>%
+        select(posted_dates) %>%
+        pull() %>%
+        paste0(collapse = "\n")
 
-  if(abs(as.Date(sequencing_date) - sheet_date) > 5) {
-    stop(simpleError(paste0("The latest index sheet found is on ", sheet_date,
-                            "\nThis date is more than 5 days from the date of this RStudio project",
-                            "\nSomething might be wrong")))
+      stop(simpleError(paste0("\nCannot find the index sheet with the expected date of ", format(as.Date(sequencing_date), format = "%m-%d-%y"),
+                              "\nHere are the dates of the posted index sheets in the shared drive:\n",
+                              posted_dates)))
+    }
   }
 
   file.copy(shared_index_fp, here("metadata", "munge"))

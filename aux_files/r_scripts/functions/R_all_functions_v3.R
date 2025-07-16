@@ -53,8 +53,9 @@ kable_style <- function(data, font_sizing = 10) {
 
   ##substitute underscore with escaped underscores and remove na in p.value columns
   data_return <- data %>%
-    #replace underscores with escaped underscores in column names
+    #replace underscores and percents with escaped underscores in column names
     select_all(~gsub("_", "\\\\_", .)) %>% ##need to escape the escape
+    select_all(~gsub("%", "\\\\%", .)) %>%
     #change underscores to escaped underscores
     mutate_if(function(x) is.character(x) | is.factor(x), ~gsub("_", "\\\\_", .)) %>%
     #escape percent signs

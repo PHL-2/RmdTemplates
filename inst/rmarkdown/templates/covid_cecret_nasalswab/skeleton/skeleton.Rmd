@@ -26,6 +26,8 @@ output:
 
 ---
 
+\textcolor{red}{DISCLAIMER}: The identification methods used and the data summarized are for public health surveillance or investigational purposes only and must \textcolor{red}{NOT} be communicated to the patient, their care provider, or placed in the patient’s medical record. These results should \textcolor{red}{NOT} be used for diagnosis, treatment, or assessment of individual patient health or management.
+
 \newpage
 
 \tableofcontents
@@ -117,7 +119,7 @@ source("code/4_run_nextflow.R")
 
 ```
 
-```{r setup for the pdf, echo=FALSE}
+```{r setup for the pdf, echo=FALSE, warning=FALSE}
 
 library(knitr)
 opts_chunk$set(

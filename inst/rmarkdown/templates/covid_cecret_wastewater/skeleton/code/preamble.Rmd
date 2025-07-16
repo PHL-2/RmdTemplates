@@ -911,8 +911,11 @@ freyja_average <- freyja_grouping %>%
   filter(!isControl) %>%
   droplevels() %>%
   mutate(isMerged = ifelse(grepl("Merged$", ww_group), "Merged sample", "Individual samples")) %>%
-  complete(nesting(sample_id, !!date_col, pct_genome_coverage_over_10x, sample_group, isMerged), nesting(lineages, main_lineage, CDC_lineages), fill = list(relative_abundances = 0)) %>%
-  group_by(sample_id, !!date_col, pct_genome_coverage_over_10x, sample_group, isMerged, lineages, CDC_lineages, main_lineage) %>%
+  complete(nesting(sample_id, !!date_col, pct_genome_coverage_over_10x, sample_group, isMerged),
+           nesting(lineages, main_lineage, CDC_lineages),
+           fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, !!date_col, pct_genome_coverage_over_10x, sample_group,
+           isMerged, lineages, CDC_lineages, main_lineage) %>%
   summarize(relative_abundances = sum(relative_abundances)) %>%
   ungroup() %>%
   filter(!is.na(relative_abundances)) %>%
