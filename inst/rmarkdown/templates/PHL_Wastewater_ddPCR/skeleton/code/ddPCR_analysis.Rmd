@@ -814,12 +814,3 @@ pander(sample_stock %>% ungroup() %>% arrange() %>%
 ```
 
 \elandscape
-
-
-```{r child = "code/dilutions.Rmd", eval = has_dilutions}
-```
-
-
-```{r child = "code/quickextract.Rmd", eval = has_QE}
-```
-

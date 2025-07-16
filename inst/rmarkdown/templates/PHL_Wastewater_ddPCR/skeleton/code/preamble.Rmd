@@ -405,7 +405,7 @@ dControls_summarise <- dControls %>%
 
 
 
-```{r sc2 efficiency, eval = has_oldWW}
+```{r sc2 efficiency}
 
 oldWW_n2Baseline <- dControls_summarise %>%
   filter(Type == "oldWW",

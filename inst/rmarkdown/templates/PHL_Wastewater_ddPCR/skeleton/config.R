@@ -4,23 +4,15 @@
 
 ## Filepath of exported ddPCR analysis file (Please add quotation marks)
 
-dat_fp = "//Volumes/Export"
-
-##### Target names #####
-
-## Targets
-targetsInfo = c("NVO", "MPox")
-
-## Internal control (IC) name
-icInfo = "MHV"
+dat_fp = "///Volumes/Health/PHL/Sequencing/Wastewater_testing/results/QX200/export"
 
 ###### Volumes used in experiment ######
 
 ## Wastewater volume (mL)
 ww_vol_mL = 40
 
-## IC added to waste water (uL)
-ic_ww_input_uL = 8
+## MHV added to waste water (uL)
+mhv_ww_input_uL = 8
 
 ## Control matrix volume (mL)
 control_vol_mL = 20
@@ -29,10 +21,10 @@ control_vol_mL = 20
 control_matrix_info = "202212XX Wastewater"
 
 ## MHV added to control matrix (uL)
-ic_to_control_uL = 2
+mhv_to_control_uL = 2
 
 ## Sc2 added to control matrix (uL)
-posCtrl_to_control_uL = 40
+sc2_to_control_uL = 40
 
 
 

@@ -17,12 +17,6 @@ mhv_ww_input_uL = 8
 ## Control matrix volume (mL)
 control_vol_mL = 20
 
-## MHV added to control matrix (uL)
-mhv_to_control_uL = 2
-
-## Sc2 added to control matrix (uL)
-sc2_to_control_uL = 40
-
 
 
 #### Concentration step ####
