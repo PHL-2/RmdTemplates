@@ -284,6 +284,20 @@ if (variance_test | signal_check) {
 
 ```
 
+```{r LIMS writing}
+
+LIMS <- d_sd %>%
+  mutate(flag = ifelse((Type == "NorthEast" | Type == "SouthEast" | Type == "SouthWest") & (mad_conc > 9) & (Target == "N2" | Target == "E") | Droplet_count < 10000 | (Target == "MHV" & Droplet_count < 100), TRUE, FALSE),
+         flag = ifelse(is.na(GESD_q), FALSE, flag),
+         flagComment = case_when((mad_conc > 9) & flag ~ "outlier",
+                                 Droplet_count < 10000 ~ "<10000 droplets",
+                                 (Target == "MHV" & Droplet_count < 100) ~ "Internal control failed"))
+
+write_csv(LIMS, file = "LIMSexport.csv")
+  
+
+```
+
 
 
 ```{r Remove samples}
