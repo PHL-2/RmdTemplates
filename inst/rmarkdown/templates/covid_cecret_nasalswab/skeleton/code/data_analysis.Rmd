@@ -40,7 +40,7 @@ if (length(in_results_not_in_s) > 0) {
 
 `r nrow(s)-1` samples and controls were processed with Illumina's COVIDSeq Test (https://www.illumina.com/products/by-type/clinical-research-products/covidseq.html), a SARS-CoV-2 tiled-amplification enrichment assay for NGS using the ARTIC `r artic_primer_scheme` primer scheme \newline
 
-The library was sequenced on the Illumina `r unique(s_toPlot$instrument_type)` platform at 2x`r read_length` bp reads on `r sequencing_date` \newline
+The library was sequenced on the Illumina `r unique(na.omit(s$instrument_type))` platform at 2x`r read_length` bp reads on `r sequencing_date` \newline
 
 BCLConvert was used to generate and demultiplex sample FASTQ files from BCL files (raw data files that contain sequence information and quality scores) \newline
 
@@ -78,10 +78,10 @@ s %>%
 
 ## Sequencing run QC metrics
 
-Cluster density: `r unique(s_toPlot$run_cd)` \newline
-Q30 score or higher: `r unique(s_toPlot$run_q30)*100`% \newline
-Percent of reads that passed filter: `r unique(s_toPlot$run_pf)*100`% \newline
-Run error rate `r unique(s_toPlot$run_error)*100`%
+Cluster density: `r unique(na.omit(s$run_cd))` \newline
+Q30 score or higher: `r unique(na.omit(s$run_q30))*100`% \newline
+Percent of reads that passed filter: `r unique(na.omit(s$run_pf))*100`% \newline
+Run error rate `r unique(na.omit(s$run_error))*100`%
 
 ## Read counts
 
@@ -89,7 +89,17 @@ Run error rate `r unique(s_toPlot$run_error)*100`%
 
 ```{r reads per sample type}
 
+undetermined_read_numbers <- s %>%
+  select(sample_id, read_counts) %>%
+  mutate(total_reads = sum(read_counts, na.rm = TRUE),
+         undetermined_percent_reads = read_counts/total_reads,
+         more_than_half = undetermined_percent_reads > 0.5) %>%
+  filter(sample_id == "Undetermined")
+
 s %>%
+  { if(undetermined_read_numbers$more_than_half) filter(., sample_id != "Undetermined")
+    else .
+  } %>%
   ggplot(aes(y=read_counts, x=sample_type, fill = sample_type)) +
     geom_boxplot(outlier.alpha = 0) +
     geom_point(aes(size = sample_type), shape = 21, position = position_jitter(width = 0.2)) +
@@ -100,7 +110,11 @@ s %>%
     theme(panel.grid = element_blank(),
           axis.text.x.bottom = element_text(angle = -30, hjust = 0, vjust = 0.5)) +
     labs(
-      title = paste0("Total number of reads: ", round(sum(s$read_counts, na.rm = TRUE)/1000000, digits = 2), "M"),
+      title = paste0("Total number of reads: ",
+                     round(undetermined_read_numbers$total_reads/1000000, digits = 2), "M",
+                     ifelse(undetermined_read_numbers$more_than_half,
+                            paste0(" (Undetermined: ", round(undetermined_read_numbers$read_counts/1000000, digits = 2), "M", ")"),
+                            "")),
       y="Read counts",
       x="",
       fill = "Sample Type",
@@ -243,8 +257,8 @@ s %>%
   droplevels() %>%
   {
   ggplot(., aes(x = CT, y = read_counts, fill = sample_type)) +
-    geom_point(shape = 21, size = 3) +
     geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    geom_point(shape = 21, size = 3) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     scale_y_continuous(trans = "log10") +
@@ -261,8 +275,8 @@ s %>%
   droplevels() %>%
   {
   ggplot(., aes(x = RLU, y = read_counts, fill = sample_type)) +
-    geom_point(shape = 21, size = 3) +
     geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    geom_point(shape = 21, size = 3) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     scale_y_continuous(trans = "log10") +
@@ -279,8 +293,8 @@ s %>%
   droplevels() %>%
   {
   ggplot(., aes(x = qubit_conc_ng_ul, y = read_counts, fill = sample_type)) +
-    geom_point(shape = 21, size = 3) +
     geom_hline(yintercept = min_reads, color="black", linetype="dashed") +
+    geom_point(shape = 21, size = 3) +
     scale_fill_manual(values = ann_geom_values$sample_type_colors[match(levels(.$sample_type), names(ann_geom_values$sample_type_colors))]) +
     theme_bw() + 
     scale_y_continuous(trans = "log10") +
@@ -464,12 +478,17 @@ empty_plate %>%
 
 ```{r k2 heatmap, fig.width=20, fig.height=15}
 
-#get the top 3 most abundant taxa in each sample
-top_taxon <- k2 %>%
+#get the top 3 most abundant taxa in each sample and SARS
+abund_taxon <- k2 %>%
   arrange(-k2_kmers) %>%
   group_by(sample_id) %>%
   slice(1:3) %>%
-  ungroup() %>%
+  ungroup()
+
+sars_taxon <- k2 %>%
+  filter(grepl("Severe acute respiratory syndrome", k2_taxon))
+
+top_taxon <- rbind(abund_taxon, sars_taxon) %>%
   mutate(k2_taxon = gsub(" subsp\\. .*", "", k2_taxon)) %>%
   pull(k2_taxon) %>%
   as.character() %>%
@@ -916,7 +935,7 @@ s %>%
 
 ### Variant assignments from Nextclade
 
-```{r variant assignments, fig.height=9, fig.width=7}
+```{r variant assignments, fig.height=9, fig.width=7, eval = (nrow(s_toPlot) > 0)}
 
 s_toPlot %>%
   select(sample_id, Nextclade_pango, sample_type, nextclade_clade_who) %>%
@@ -954,12 +973,12 @@ s_toPlot %>%
 
 ### Figure showing different USHER placements through Pangolin
 
-```{r multiple variant assignments, fig.height=9, fig.width=8}
+```{r multiple variant assignments, fig.height=9, fig.width=8, eval = (nrow(s_toPlot) > 0)}
 
 s_toPlot %>%
   select(sample_id, pangolin_note, sample_type, nextclade_qc_overallstatus) %>%
   #remove "Usher placements" text in the front of note and scorpio notes
-  mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
+  mutate(pangolin_note = gsub("^.*: |; |scorpio.*", "", pangolin_note)) %>%
   filter(pangolin_note != "Assigned from designation hash.") %>%
   #split note into two variant columns by the space
   separate(pangolin_note, into = c("variant1", "variant2"), sep = " ", extra = "merge") %>%
@@ -1002,7 +1021,7 @@ Stars in boxes mean that the variants/sub-variants from different software agree
 Only the top Freyja result for each sample was used here \newline
 White boxes indicate variants that are not assigned a color
 
-```{r conflicting assignments, fig.height=9, fig.width=8}
+```{r conflicting assignments, fig.height=9, fig.width=8, eval = (nrow(s_toPlot) > 0)}
 
 freyja_grouping %>%
   select(sample_id, sample_type, lineages, relative_abundances) %>%
@@ -1156,7 +1175,7 @@ s_toPlot %>%
 
 ```
 
-```{r pc check}
+```{r pc and samples check}
 
 has_pos_ctrl <- s %>%
   filter(grepl("Mock DNA", sample_type)) %>%
@@ -1167,6 +1186,14 @@ has_pos_ctrl <- s %>%
 
 if(length(has_pos_ctrl) == 0) {
   has_pos_ctrl <- FALSE
+}
+
+if(nrow(s_toPlot) > 0) {
+  report_gisaid <- nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "gisaid_name", "sample_id"])
+  report_sra <- nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])
+  report_genbank <- nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])
+} else {
+  n_samples_report <- report_gisaid <- report_sra <- report_genbank <- 0
 }
 
 ```
@@ -1180,9 +1207,9 @@ Red samples will not be reported (controls or no lineage results) \newline
 Orange samples also will not be reported due to low quality (bad or mediocre NextClade QC with <80% 30X coverage) \newline
 The total number of samples with acceptable results for reporting is `r n_samples_report` out of `r sum(!s$isControl, na.rm = TRUE)` non-control samples sequenced. \newline
 Number of samples to send to epidemiologists: `r ifelse(have_phi, nrow(epi_report), 0)` \newline
-Number of samples to upload to GISAID database: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "gisaid_name", "sample_id"])` \newline
-Number of samples to upload to SRA: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "sra_name", "sample_id"])` \newline
-Number of samples to upload to Genbank: `r nrow(all_sample_ids_from_seqsender[all_sample_ids_from_seqsender$file == "genbank_name", "sample_id"])`\newline
+Number of samples to upload to GISAID database: `r report_gisaid` \newline
+Number of samples to upload to SRA: `r report_sra` \newline
+Number of samples to upload to Genbank: `r report_gisaid`\newline
 
 `r if(length(rerun_samples) > 0) { paste0("\\textcolor{red}{\\huge These non-control samples that didn't go through the pipeline correctly!! Try rerunning them through the pipeline again!}")}`
 

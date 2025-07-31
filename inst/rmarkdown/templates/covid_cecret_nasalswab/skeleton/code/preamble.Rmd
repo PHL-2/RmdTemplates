@@ -216,18 +216,18 @@ top_unkwn_indices <- read_delim(top_unkwn_fp) %>%
 
 write_csv(top_unkwn_indices, unkwn_barcodes_fp)
 
-#throw error if the top unknown index is greater than 0.5% percent of all reads
-if(max(top_unkwn_indices$percent_of_all_reads) > 0.005 & unique(s_meta$instrument_type) == "MiSeq") {
-  stop(simpleError("Top unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode"))
-}
-
 non_ctrl_samples <- s_meta %>%
   filter(!sample_type %in% ctrl_fct_lvls) %>%
   select(sample_id) %>%
   pull()
 
-#throw error if Undetermined sample has more reads than non-control samples
 if(!remove_undetermined_file) {
+  #throw error if the top unknown index is greater than 0.5% percent of all reads
+  if(max(top_unkwn_indices$percent_of_all_reads) > 0.005 & unique(s_meta$instrument_type) == "MiSeq") {
+    stop(simpleError("Top unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode"))
+  }
+  
+  #throw error if Undetermined sample has more reads than non-control samples
   if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] >
      sum(samp_reads[samp_reads$sample_id %in% non_ctrl_samples, "read_counts"])) {
     stop(simpleError("Undetermined sample has more reads than the median. Double check the sample barcodes"))
@@ -468,7 +468,7 @@ cov_stats <- cov_num_fps %>%
 
 k2_files_fps <- list.files(here("data", "processed_cecret", "kraken2"), pattern = "_kraken2_report.txt", recursive = TRUE, full.names = TRUE)
 
-k2_files_fps %>%
+k2_raw <- k2_files_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
   do(read_delim(.$FileName,
@@ -495,7 +495,17 @@ k2_files_fps %>%
                            k2_top_rank,
                            paste0(k2_top_rank, " ", gsub("*[0-9]*", "", k2_rank), "__", k2_name))) %>%
   select(sample_id, k2_taxon, k2_props, k2_kmers) %>%
-  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
+  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id))
+
+k2_sc2 <- k2_raw %>%
+  # includes SARSr-CoV species and SARS-CoV-2 strain
+  filter(grepl("Severe acute respiratory syndrome", k2_taxon)) %>%
+  group_by(sample_id) %>%
+  summarize(k2_sc2_kmers = sum(k2_kmers),
+            k2_sc2_props = sum(k2_props)) %>%
+  ungroup()
+
+k2_raw %>%
   write_csv(kraken_props_fp)
 
 ```
@@ -659,7 +669,7 @@ profile_software_version %>%
 
 ```{r write cecret results, eval = import_data}
 
-list(cov_stats, coverage, s_gene_coverage, next_clade, freyja, amplicon_depth, samtools_stat) %>%
+list(cov_stats, coverage, s_gene_coverage, next_clade, freyja, amplicon_depth, samtools_stat, k2_sc2) %>%
   reduce(merge, by = "sample_id", all = TRUE) %>%
   merge(cecret_aggregate,
         by = c("sample_id", "nextclade_clade", "nextclade_clade_who", "nextclade_qc_overallstatus", "nextclade_qc_overallscore"),
@@ -728,6 +738,9 @@ if(any(is.na(s$sample_type))) {
   stop(simpleError("A sample type is unaccounted for either in the metadata sheet or in sample_type_lvls"))
 }
 
+#indicator for samples to rerun
+rerun_samples <- character(0)
+
 ```
 
 <!-- Prepare files containing samples with good results for uploading -->
@@ -762,7 +775,7 @@ epi_report %>%
 
 ```
 
-```{r export data to upload to NCBI}
+```{r export data to upload to NCBI, eval = (nrow(s_toPlot) > 0)}
 
 data2submit_metadata_fp <- file.path(dirname(here()), "aux_files", "data_submission", "ns", "nasalswab_data_submission_metadata.csv")
 
@@ -790,7 +803,7 @@ seqsender <- s_toPlot %>%
          `gs-covv_gender` = ifelse(is.na(gender)|`gs-covv_orig_lab` == "Temple University", "Unknown", gender),
          `gs-covv_patient_age` = ifelse(is.na(host_age_bin)|`gs-covv_orig_lab` == "Temple University", "Unknown", host_age_bin),
          `gs-covv_seq_technology` = case_when(instrument_type == "MiSeq" ~ "Illumina MiSeq",
-                                              instrument_type == "NextSeq1k2k" ~ "Illumina NextSeq 2000",
+                                              instrument_type == "NextSeq2000" ~ "Illumina NextSeq 2000",
                                               TRUE ~ NA_character_),
          `gs-covv_assembly_method` = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
          `gs-covv_orig_lab_addr` = case_when(`gs-covv_orig_lab` == "Philadelphia Department of Public Health" ~ "1930 South Broad Street, Philadelphia, PA 19145, USA",
@@ -848,9 +861,9 @@ seqsender <- s_toPlot %>%
          `sra16-file_2` = paste0(sequence_name, "_S", sample_number, "_filtered_R2.fastq.gz"),
          #GenBank fields
          `gb-sample_name` = sequence_name,
-         `gb-src-isolate` = `bs1-sample_name`,
+         `gb-src-Isolate` = `bs1-sample_name`,
          `gb-src-isolation_source` = `gs-covv_specimen`,
-         `gb-src-host` = `bs4-host`,
+         `gb-src-Host` = `bs4-host`,
          `gb-cmt-Sequencing Technology` = `sra3-instrument_model`,
          `gb-cmt-Assembly Method` = `gs-covv_assembly_method`,
          `gb-cmt-Coverage` = paste0(`gs-covv_coverage`, "X")) %>%
@@ -871,7 +884,7 @@ seqsender %>%
 
 ```
 
-```{r reported numbers}
+```{r reported numbers, eval = (nrow(s_toPlot) > 0)}
 
 #double checking to see if number of samples match
 n_samples_report <- s %>%
@@ -1022,8 +1035,10 @@ sample_type_legend <- s %>%
 
 variant_list <- s %>%
   select(nextclade_clade_who, pangolin_lineage, pangolin_note, Nextclade_pango) %>%
-  mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
-  mutate(pangolin_note = ifelse(pangolin_note == "Assigned from designation hash.", NA, pangolin_note)) %>%
+  mutate(pangolin_note = gsub("^.*: |; |scorpio.*", "", pangolin_note)) %>%
+  mutate(pangolin_note = case_when(pangolin_note == "Assigned from designation hash." ~ NA,
+                                   pangolin_note == "" ~ NA,
+                                   TRUE ~ pangolin_note)) %>%
   unique() %>%
   separate_rows(pangolin_note, sep=" ") %>%
   pivot_longer(cols = c("pangolin_lineage", "pangolin_note", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
@@ -1077,6 +1092,8 @@ names(ann_geom_values[["variants"]]) <- c(NA, "Unassigned", names(ann_geom_value
 ```
 
 ```{r save coverage png, eval=import_data}
+
+dir.create(here("data", "figures"), recursive = TRUE)
 
 SC2_annotation <- data.frame(ORF1a = "266-13468",
                              ORF1b = "13468-21555",

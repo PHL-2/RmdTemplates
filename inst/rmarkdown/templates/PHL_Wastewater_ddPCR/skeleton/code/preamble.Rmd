@@ -122,8 +122,7 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
           `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
           Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
           Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d")),
-          SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType),
-          Target_present = Positives >= 3
+          SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType)
     )
 } else {
   d_pre <- d_pre %>%
@@ -156,8 +155,7 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
           `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
           Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
           Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d")),
-          SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType),
-          Target_present = Positives >= 3
+          SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType)
     )
 }
 
@@ -561,9 +559,10 @@ sequencing_metadata <- d %>%
          !is.na(`Conc(copies/uL)`)) %>%
   group_by(Type, Process, Spiked, Target, Sample_date) %>%
   summarise(avg_conc = mean(`Conc(copies/uL)`),
-            ddpcr_replicates = n(),
-            target_present = sum(Target_present)/ddpcr_replicates >= 0.5) %>%
-  mutate(stock_conc = stock_concentration_calc(concentration = avg_conc, 
+            ddpcr_replicates = n()) %>%
+  mutate(target_lod = 0.5, #this lod is just for the targets in the PREvalence kit
+         target_present = avg_conc >= target_lod,
+         stock_conc = stock_concentration_calc(concentration = avg_conc, 
                                                rxn_vol = rxn_vol_uL,
                                                input_vol = input_vol_uL,
                                                elution_vol = elution_vol_uL,
@@ -572,11 +571,12 @@ sequencing_metadata <- d %>%
                                                initial_concentration_vol = init_concentration_vol_uL,
                                                efficiency = 1)*1000*1000) %>%
   ungroup() %>%
-  pivot_longer(cols = c(avg_conc, stock_conc, target_present),
+  pivot_longer(cols = c(avg_conc, stock_conc, target_lod, target_present),
                names_to = "concentration",
                values_to = "values") %>%
   mutate(Target = case_when(concentration == "avg_conc" ~ paste0(Target, "_gc/uL"),
                             concentration == "stock_conc" ~ paste0(Target, "_gc/L"),
+                            concentration == "target_lod" ~ paste0(Target, "_lod_gc/uL"),
                             concentration == "target_present" ~ paste0(Target, "_present"),
                             TRUE ~ NA),
          sample_collect_date = Sample_date - days_between_collection,

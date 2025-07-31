@@ -112,6 +112,14 @@ color_group_lvls <- c(NA, "Reference", "Unassigned reads",
                       ctrl_fct_lvls,
                       unlist(lapply(unaccounted_sample_types, function(x) c(x, paste0(x, " - Poor"), paste0(x, " - Merged")))))
 
+date_col <- sym("sample_collect_date")
+sample_collect_date_found <- TRUE
+
+if(!any(grepl("sample_collect_date", colnames(s_meta)))) {
+  date_col <- sym("sample_received_date")
+  sample_collect_date_found <- FALSE
+}
+
 ```
 
 <!-- Load QC data -->
@@ -228,20 +236,22 @@ top_unkwn_indices <- read_delim(top_unkwn_fp) %>%
 
 write_csv(top_unkwn_indices, unkwn_barcodes_fp)
 
-#throw error if the top unknown index is greater than 0.5% percent of all reads
-if(max(top_unkwn_indices$percent_of_all_reads) > 0.005 & unique(s_meta$instrument_type) == "MiSeq") {
-  stop(simpleError("Top unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode"))
-}
-
 non_ctrl_samples <- s_meta %>%
-  filter(!sample_group %in% ctrl_fct_lvls) %>%
+  filter(!sample_type %in% ctrl_fct_lvls) %>%
   select(sample_id) %>%
   pull()
 
-#throw error if Undetermined sample has more reads than non-control samples
-if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] >
-   sum(samp_reads[samp_reads$sample_id %in% non_ctrl_samples, "read_counts"])) {
-  stop(simpleError("Undetermined sample has more reads than the median. Double check the sample barcodes"))
+if(!remove_undetermined_file) {
+  #throw error if the top unknown index is greater than 0.5% percent of all reads
+  if(max(top_unkwn_indices$percent_of_all_reads) > 0.005 & unique(s_meta$instrument_type) == "MiSeq") {
+    stop(simpleError("Top unknown barcode sequence makes up more than 0.5% of all reads. There may be a misassigned barcode"))
+  }
+  
+  #throw error if Undetermined sample has more reads than non-control samples
+  if(samp_reads[samp_reads$sample_id == "Undetermined", "read_counts"] >
+     sum(samp_reads[samp_reads$sample_id %in% non_ctrl_samples, "read_counts"])) {
+    stop(simpleError("Undetermined sample has more reads than the median. Double check the sample barcodes"))
+  }
 }
 
 ```
@@ -479,7 +489,7 @@ cov_stats <- cov_num_fps %>%
 
 k2_files_fps <- list.files(here("data", "processed_cecret", "kraken2"), pattern = "_kraken2_report.txt", recursive = TRUE, full.names = TRUE)
 
-k2_files_fps %>%
+k2_raw <- k2_files_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
   do(read_delim(.$FileName,
@@ -506,7 +516,17 @@ k2_files_fps %>%
                            k2_top_rank,
                            paste0(k2_top_rank, " ", gsub("*[0-9]*", "", k2_rank), "__", k2_name))) %>%
   select(sample_id, k2_taxon, k2_props, k2_kmers) %>%
-  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
+  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id))
+
+k2_sc2 <- k2_raw %>%
+  # includes SARSr-CoV species and SARS-CoV-2 strain
+  filter(grepl("Severe acute respiratory syndrome", k2_taxon)) %>%
+  group_by(sample_id) %>%
+  summarize(k2_sc2_kmers = sum(k2_kmers),
+            k2_sc2_props = sum(k2_props)) %>%
+  ungroup()
+
+k2_raw %>%
   write_csv(kraken_props_fp)
 
 ```
@@ -670,7 +690,7 @@ profile_software_version %>%
 
 ```{r write cecret results, eval = import_data}
 
-list(cov_stats, coverage, s_gene_coverage, next_clade, freyja, amplicon_depth, samtools_stat) %>%
+list(cov_stats, coverage, s_gene_coverage, next_clade, freyja, amplicon_depth, samtools_stat, k2_sc2) %>%
   reduce(merge, by = "sample_id", all = TRUE) %>%
   merge(cecret_aggregate,
         by = c("sample_id", "nextclade_clade", "nextclade_clade_who", "nextclade_qc_overallstatus", "nextclade_qc_overallscore"),
@@ -722,10 +742,10 @@ s <- s_meta %>%
          sample_group = case_when(grepl("^Undetermined$", sample_id) ~ "Unassigned reads",
                                   TRUE ~ sample_group),
          sample_group = factor(sample_group, levels = unique(sample_group[order(ww_group)])),
+         date_facet = ifelse(grepl("Unassigned reads|control", ww_group), "Control", as.character(!!date_col)),
+         date_facet = factor(date_facet, levels = c("Control", sort(unique(date_facet[!grepl("Control", date_facet)])))),
          #order the sample_id by sample type then by plate position
-         sample_id = factor(sample_id, levels = unique(sample_id[str_order(as.numeric(sample_group), decreasing = FALSE, numeric = TRUE)])),
-         date_facet = ifelse(grepl("Unassigned reads|control", ww_group), "Control", as.character(sample_collect_date)),
-         date_facet = factor(date_facet, levels = c("Control", sort(unique(date_facet[!grepl("Control", date_facet)]))))) %>%
+         sample_id = factor(sample_id, levels = unique(sample_id[str_order(paste0(as.numeric(sample_group), "-", grepl("Merged", sample_id), "-", !!date_col), decreasing = FALSE, numeric = TRUE)]))) %>%
   arrange(sample_id) %>%
   droplevels() %>%
   filter(!is.na(sample_group))
@@ -734,7 +754,7 @@ s <- s_meta %>%
 s_toPlot <- s %>%
   filter(!grepl("None|Undetermined", sample_id),
          coverage_qc_status == "Good",
-         grepl("Wastewater sample - Merged", ww_group)) %>%
+         grepl("Wastewater sample - Merged|Mock DNA positive control", ww_group)) %>%
   mutate(sample_id = as.character(sample_id)) %>%
   droplevels()
 
@@ -752,54 +772,40 @@ if(any(is.na(s$ww_group))) {
 
 ```{r download pango names and CDC Tracker lineages, eval = download_cdc_tracker & report_only_cdc_lineages}
 
-# pango_lineage_names_url <- "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json"
-# pango_lineage_names_fp <- here("data", paste0(sequencing_date, "_pango_designation_alias_key.json"))
+sixty_days_ago <- Sys.Date() - 60
+cdc_tracker_url <- paste0("https://data.cdc.gov/resource/jr58-6ysp.json?$select=variant,week_ending&$where=week_ending>'", sixty_days_ago, "'")
 
-# dl_pango_names <- system2("curl", c("--output", pango_lineage_names_fp, pango_lineage_names_url))
-# if(dl_pango_names != 0) {
-#   stop(simpleError(paste("The pangolin designation names were not downloaded. Please manually download the file:\n",
-#                          pango_lineage_names_url, "\n and save it as\n", pango_lineage_names_fp)))
-# }
-# 
-# pango_lineage_names <- pango_lineage_names_fp %>%
-#   read_delim(delim = ":", col_names = c("key", "value"), skip = 1) %>%
-#   mutate(across(everything(), ~ gsub("\"| |,$", "", .)))
+dl_cdc_names <- simpleError("Initial message")
 
-cdc_tracker_url <- "https://data.cdc.gov/resource/jr58-6ysp.json?$select=variant, week_ending"
+counter <- 1
+max_tries <- 5
 
-tryCatch(
-  {
-    dl_cdc_names <- RSocrata::read.socrata(cdc_tracker_url)
-    
-    #Use the below code if the counts and creation dates are needed. Will need to remove the $select tag from the url if that's the case
-    # dl_cdc_names <- dl_cdc_names %>%
-    #   select(variant, creation_date) %>%
-    #   group_by(variant) %>%
-    #   summarize(count_variant = n(),
-    #             min_creation_date = min(creation_date),
-    #             max_creation_date = max(creation_date)) %>%
-    #   ungroup %>%
-    #   arrange(variant) %>%
-    #   mutate(across(ends_with("creation_date"), ~ as.Date(.)))
-    
-  },
-  error = function(e) {
-    stop(simpleError(paste0("The lineages from CDC COVID Data Tracker could not be downloaded\n",
-                            "Download the CDC json file using the following URL:\n",
-                            "https://data.cdc.gov/resource/jr58-6ysp.json?$query=SELECT%0A%20%20%60variant%60%2C%0A%20%20count(%60variant%60)%20AS%20%60count_variant%60%2C%0A%20%20min(%60creation_date%60)%20AS%20%60min_creation_date%60%2C%0A%20%20max(%60creation_date%60)%20AS%20%60max_creation_date%60%0AGROUP%20BY%20%60variant%60\n",
-                            "Save the file as:\n", cdc_tracker_fp,
-                            "\nUncomment the below code to read in the CDC variant list")))
-  }
-)
-    
-# cdc_lineages <- read_delim(cdc_tracker_fp, delim = "\",\"", col_names = c("variant", "count_variant", "min_creation_date", "max_creation_date")) %>%
+while(inherits(dl_cdc_names, "error") & counter <= max_tries) {
+  message("Trying SoQL query from https://data.cdc.gov/\nAttempt #", counter)
+  Sys.sleep(counter)
+  dl_cdc_names <- tryCatch(
+    {
+      RSocrata::read.socrata(cdc_tracker_url)
+    }, 
+    error = function(error_input) {
+      error_input
+    }
+  )
+  counter <- counter + 1
+}
+
+if(counter > max_tries) {
+  stop(simpleError(paste0("\nThe lineages from CDC COVID Data Tracker could not be downloaded",
+                          "\nDownload the CDC json file using the following URL:",
+                          "\nhttps://data.cdc.gov/resource/jr58-6ysp.json?$query=SELECT%0A%20%20%60variant%60%2C%0A%20%20count(%60variant%60)%20AS%20%60count_variant%60%2C%0A%20%20min(%60creation_date%60)%20AS%20%60min_creation_date%60%2C%0A%20%20max(%60creation_date%60)%20AS%20%60max_creation_date%60%0AGROUP%20BY%20%60variant%60",
+                          "\nSave the file as:\n", cdc_tracker_fp,
+                          "\nUncomment the code below to read in this CDC variant list")))
+}
+
+# dl_cdc_names <- read_delim(cdc_tracker_fp, delim = "\",\"", col_names = c("variant", "count_variant", "min_creation_date", "max_creation_date")) %>%
 #   mutate(across(everything(), ~ gsub(".*\":\"", "", .)),
-#          max_creation_date = gsub("\"}", "", max_creation_date),
-#          count_variant = as.integer(count_variant),
-#          across(ends_with("creation_date"), ~ as.Date(.))) %>%
-#   select(variant)
-
-#dl_cdc_names <- read_csv(cdc_tracker_fp)
+#          week_ending = Sys.Date()) %>%
+#   select(variant, week_ending)
 
 cdc_lineages <- dl_cdc_names %>%
   unique() %>%
@@ -837,7 +843,7 @@ flodel <- function(word1, word2) {
 }
 
 freyja_lineages <- s %>%
-  select(sample_id, sample_name, sample_group, ww_group, sample_collect_date,
+  select(sample_id, sample_name, sample_group, ww_group, !!date_col,
          isControl, freyja_lineages, freyja_abundances, pct_genome_coverage_over_10x) %>%
   group_by(sample_id) %>%
   mutate(lineages = list(freyja_lineages),
@@ -915,18 +921,21 @@ freyja_average <- freyja_grouping %>%
   filter(!isControl) %>%
   droplevels() %>%
   mutate(isMerged = ifelse(grepl("Merged$", ww_group), "Merged sample", "Individual samples")) %>%
-  complete(nesting(sample_id, sample_collect_date, pct_genome_coverage_over_10x, sample_group, isMerged), nesting(lineages, main_lineage, CDC_lineages), fill = list(relative_abundances = 0)) %>%
-  group_by(sample_id, sample_collect_date, pct_genome_coverage_over_10x, sample_group, isMerged, lineages, CDC_lineages, main_lineage) %>%
+  complete(nesting(sample_id, !!date_col, pct_genome_coverage_over_10x, sample_group, isMerged),
+           nesting(lineages, main_lineage, CDC_lineages),
+           fill = list(relative_abundances = 0)) %>%
+  group_by(sample_id, !!date_col, pct_genome_coverage_over_10x, sample_group,
+           isMerged, lineages, CDC_lineages, main_lineage) %>%
   summarize(relative_abundances = sum(relative_abundances)) %>%
   ungroup() %>%
   filter(!is.na(relative_abundances)) %>%
-  group_by(sample_group, sample_collect_date, isMerged) %>%
+  group_by(sample_group, !!date_col, isMerged) %>%
   mutate(total_samples = n_distinct(sample_id),
          mean_cov = mean(pct_genome_coverage_over_10x)) %>%
   ungroup() %>%
   # to calculate the total standard deviation of a combined distribution,
   # get the total variance and square root it
-  group_by(sample_group, sample_collect_date, mean_cov, isMerged, lineages, CDC_lineages, main_lineage) %>%
+  group_by(sample_group, !!date_col, mean_cov, isMerged, lineages, CDC_lineages, main_lineage) %>%
   mutate(avg_rel_abund = relative_abundances/total_samples,
          variance = var(avg_rel_abund)) %>%
   summarize(avg_rel_abund = sum(avg_rel_abund),
@@ -934,21 +943,42 @@ freyja_average <- freyja_grouping %>%
   ungroup() %>%
   droplevels()
 
+#filter s_toPlot to remove samples that have A lineage present
+samples_with_A <- freyja_grouping %>%
+  filter(grepl("^Wastewater sample", ww_group),
+         CDC_lineages == "A") %>%
+  select(sample_id) %>%
+  unique() %>%
+  pull()
+
+s_toPlot <- s_toPlot %>%
+  filter(!sample_id %in% samples_with_A)
+
 #write freyja results for epi's
 dir.create(here("upload", "epi"), recursive = TRUE)
 epi_report_fp <- here("upload", "epi", paste0(project_name, "_PHL2_WW_sequencing_results.csv"))
 
-freyja_grouping %>%
-  filter(sample_id %in% s_toPlot$sample_id,
-         !isControl,
-         CDC_lineages %in% lineages_to_keep$variant) %>%
-  group_by(sample_id, sample_collect_date, sample_group, CDC_lineages) %>%
-  summarize(relative_abundances = sum(relative_abundances)) %>%
-  ungroup() %>%
-  filter(relative_abundances >= 0.01) %>%
-  arrange(sample_collect_date, sample_group, desc(relative_abundances), CDC_lineages) %>%
-  select(sample_collect_date, sample_group, freyja_lineage = "CDC_lineages") %>%
-  write_csv(epi_report_fp)
+# export results to epi only if sample_collect_date is present
+if(sample_collect_date_found) {
+  
+  freyja_grouping %>%
+    filter(sample_id %in% s_toPlot$sample_id,
+           !isControl,
+           CDC_lineages %in% lineages_to_keep$variant) %>%
+    group_by(sample_id, sample_collect_date, sample_group, CDC_lineages) %>%
+    summarize(relative_abundances = sum(relative_abundances)) %>%
+    ungroup() %>%
+    filter(relative_abundances >= 0.01) %>%
+    arrange(sample_collect_date, sample_group, desc(relative_abundances), CDC_lineages) %>%
+    select(sample_collect_date, sample_group, freyja_lineage = "CDC_lineages") %>%
+    write_csv(epi_report_fp)
+  
+} else {
+  data.frame(sample_collect_date = "",
+             sample_group = "",
+             freyja_lineage = "") %>%
+    write_csv(epi_report_fp)
+}
 
 ```
 
@@ -973,7 +1003,7 @@ seqsender <- s %>%
   filter(uniq_sample_name %in% s_toPlot$uniq_sample_name,
          !isControl)
 
-if(nrow(seqsender) != 0) {
+if(nrow(seqsender) != 0 & sample_collect_date_found) {
 
   seqsender <- seqsender %>%
     rename(sequence_name = "sample_id",
@@ -991,7 +1021,7 @@ if(nrow(seqsender) != 0) {
            #GISAID name format for WW samples needs to be hCoV-19/env/[country]/[state]-[sample_id without a year]/sample collection year (collection year may be different from sequence year)
            `gs-sample_name` = paste0("hCoV-19/env/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sequence_name), "/", collection_year),
            `gs-covv_seq_technology` = case_when(instrument_type == "MiSeq" ~ "Illumina MiSeq",
-                                                instrument_type == "NextSeq1k2k" ~ "Illumina NextSeq 2000",
+                                                instrument_type == "NextSeq2000" ~ "Illumina NextSeq 2000",
                                                 TRUE ~ NA_character_),
            `gs-covv_assembly_method` = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
            `gs-covv_subm_sample_id` = `bs17-ww_surv_system_sample_id`,
@@ -1124,91 +1154,21 @@ epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = ".csv", recursive
 
 reported_samples <- epi_2_upload_fp %>%
   read_csv() %>%
-  select(sample_name = "sample_group") %>%
+  select(sample_name = "sample_group", sample_collect_date) %>%
+  filter(!is.na(sample_name)) %>%
   unique() %>%
-  mutate(db = "epi")
+  nrow()
 
 #number of samples to submit
-#check the dcipher file to upload to ncbi
-dcipher_2_upload_fp <- list.files(here("upload", "dcipher"), pattern = ".csv", recursive = TRUE, full.names = TRUE)
+#check the dcipher file to upload
+dcipher_2_upload_fp <- list.files(here("upload", "seqsender"), pattern = "_fasta_upload_orig.csv", recursive = TRUE, full.names = TRUE)
 
 if(length(dcipher_2_upload_fp) != 0) {
   all_reported_samples <- dcipher_2_upload_fp %>%
-    data_frame(FileName = .) %>%
-    group_by(FileName) %>%
-    do(read_csv(.$FileName, col_names = TRUE)) %>%
-    ungroup() %>%
-    filter(!grepl("nwss_upload.csv", FileName)) %>%
-    mutate(sample_name = ifelse(is.na(sample_name), covv_virus_name, sample_name),
-           db = gsub(".*PHL2_|_upload.*", "",  FileName)) %>%
-    select(db, sample_name) %>%
-    rbind(reported_samples)
-} else {
-  all_reported_samples <- tibble(db = "", sample_name = "")
-}
-
-```
-
-```{r check all files generated, eval = FALSE}
-
-#check the csv file for the epi's
-if(have_phi) {
-
-  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = "_PHL_WW_sequencing_results.csv", recursive = TRUE, full.names = TRUE)
-  
-  epi_report <- epi_2_upload_fp %>%
     read_csv() %>%
-    select(accession_number) %>%
-    merge(select(s_phi, sample_id, sample_name), by.x = "accession_number", by.y = "sample_name", all.x = TRUE) %>%
-    mutate(sample_id = ifelse(is.na(sample_id), X1, sample_id)) %>%
-    mutate(file = "epi") %>%
-    select(file, sample_id)
-
-}
-
-#check the fastq files to upload; should be 1 set here
-fastq_2_upload <- list.files(here("upload", "fastq"), pattern = ".fastq.gz", recursive = TRUE, full.names = TRUE) %>%
-  data.frame(FileName = .) %>%
-  mutate(sample_id = gsub(".*upload/fastq/|_S[0-9]*|_filtered_R[12].fastq.gz$", "", FileName)) %>%
-  mutate(file = gsub(".*/", "", FileName)) %>%
-  select(-FileName)
-
-fastq2_compare <- fastq_2_upload %>%
-  filter(grepl("_filtered_R1.fastq.gz", file))
-
-if (nrow(fastq_2_upload)/2 != nrow(fastq2_compare)) {
-  stop (simpleError("Missing some fastq files!"))
-}
-
-#check the fasta files to upload; should be 1 set here
-fasta_samples <- read_csv(here("upload", "fasta", paste0(project_name, "_PHL2_combined.fasta")), col_names = FALSE) %>%
-  filter(grepl("^>", X1)) %>%
-  mutate(sample_id = gsub("^>|_S[0-9]*$", "", X1)) %>%
-  mutate(file = paste0(project_name, "_PHL2_combined.fasta")) %>%
-  select(-X1)
-
-check_all <- all_sample_ids_from_dcipher %>%
-  rbind(fastq2_compare) %>%
-  rbind(fasta_samples)
-
-if (have_phi) {
-  check_all <- check_all %>%
-    rbind(epi_report)
-  
-  total_file_sets_2_count <- 6
-  
+    nrow()
 } else {
-  total_file_sets_2_count <- 5
-  
-}
-
-check_all %<>%
-  group_by(sample_id) %>%
-  mutate(count_all_samples = n()) %>%
-  ungroup()
-
-if (!all(check_all$count_all_samples == total_file_sets_2_count)) {
-  stop (simpleError("Some files are missing samples to upload!"))
+  all_reported_samples <- 0
 }
 
 ```
@@ -1233,10 +1193,14 @@ sample_type_color_scheme <- c("#808080", "#000000",
 
 ann_geom_values[["sample_type_colors"]] <- setNames(sample_type_color_scheme[sample_type_num_vector], color_group_lvls)
 
+# pick shapes for ggplot
+sample_group_index <- which(levels(s$sample_group) == "ZeptoSC2"):length(levels(s$sample_group))
+ann_geom_values[["sample_group_shapes"]] <- setNames(c(23, 25, 22, 21, 24),
+                                                     levels(s$sample_group)[sample_group_index])
+
 # pick alpha values for ggplot
 alpha_select <- c(1, 1, 1, 0.4, 1, 0.4, 1, 0.2, 0.2)
 additional_alphas <- rep(0.2, length(color_group_lvls) - length(alpha_select))
-
 ann_geom_values[["alpha"]] <- setNames(c(alpha_select, additional_alphas), color_group_lvls)
 
 # pick additional ggplot parameters
@@ -1282,9 +1246,11 @@ sample_group_legend <- s %>%
 
 variant_list <- s %>%
   select(nextclade_clade_who, pangolin_lineage, pangolin_note, Nextclade_pango) %>%
-  mutate(pangolin_note = gsub("^.*: |; scorpio.*", "", pangolin_note)) %>%
-  mutate(pangolin_note = ifelse(pangolin_note == "Assigned from designation hash.", NA, pangolin_note)) %>%
-  unique() %>%
+  mutate(pangolin_note = gsub("^.*: |; |scorpio.*", "", pangolin_note)) %>%
+  mutate(pangolin_note = case_when(pangolin_note == "Assigned from designation hash." ~ NA,
+                                   pangolin_note == "" ~ NA,
+                                   TRUE ~ pangolin_note)) %>%
+    unique() %>%
   separate_rows(pangolin_note, sep=" ") %>%
   pivot_longer(cols = c("pangolin_lineage", "pangolin_note", "Nextclade_pango"), names_to = "variant_num", values_to = "variants") %>%
   mutate(variants = gsub("\\(.*", "", variants)) %>%
@@ -1293,7 +1259,15 @@ variant_list <- s %>%
   filter(variants!="Unassigned") %>%
   distinct() %>%
   arrange(nextclade_clade_who, variants) %>%
-  mutate(combined_list = gsub("^([A-Za-z]*\\.[0-9]*).*", "\\1", variants))
+  mutate(combined_list = gsub("\\..*", "", variants))
+
+if(length(unique(variant_list$combined_list)) > 20) {
+  stop(simpleError("The number of variants to color is greater than 20. Increase the number of colors in variant_color below"))
+}
+
+if(length(unique(variant_list$combined_list)) > 20) {
+  stop(simpleError("The number of variants to color is greater than 20. Increase the number of colors in variant_color below"))
+}
 
 variant_color <- data.frame(colors = c(calc_pal()(12)[c(6, 2:5, 1, 8:12, 7)],
                                        few_pal(palette = "Light")(8))) %>%
@@ -1337,6 +1311,8 @@ names(ann_geom_values[["variants"]]) <- c(NA, "Unassigned", names(ann_geom_value
 ```
 
 ```{r save coverage png, eval=import_data}
+
+dir.create(here("data", "figures"), recursive = TRUE)
 
 SC2_annotation <- data.frame(ORF1a = "266-13468",
                              ORF1b = "13468-21555",
@@ -1447,7 +1423,7 @@ coverage_loop <- s %>%
 date_loop <- s %>%
   filter(sample_id != "Undetermined") %>%
   filter(!is.na(median_coverage)) %>% 
-  select(sample_collect_date) %>%
+  select(!!date_col) %>%
   unique() %>%
   pull()
   
@@ -1457,7 +1433,7 @@ for(sites in coverage_loop) {
   filtered_samp_name <- s %>%
     mutate(loop_group = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_group) ~ "Sequencing-control",
                                   TRUE ~ sample_group),
-           date_char = as.character(sample_collect_date)) %>%
+           date_char = as.character(!!date_col)) %>%
     filter(sample_id != "Undetermined") %>%
     filter(loop_group %in% sites) %>%
     filter(date_char %in% dates) %>%
