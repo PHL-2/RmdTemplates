@@ -468,7 +468,7 @@ cov_stats <- cov_num_fps %>%
 
 k2_files_fps <- list.files(here("data", "processed_cecret", "kraken2"), pattern = "_kraken2_report.txt", recursive = TRUE, full.names = TRUE)
 
-k2_files_fps %>%
+k2_raw <- k2_files_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
   do(read_delim(.$FileName,
@@ -495,7 +495,17 @@ k2_files_fps %>%
                            k2_top_rank,
                            paste0(k2_top_rank, " ", gsub("*[0-9]*", "", k2_rank), "__", k2_name))) %>%
   select(sample_id, k2_taxon, k2_props, k2_kmers) %>%
-  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id)) %>%
+  mutate(sample_id = gsub("_S[0-9]*$", "", sample_id))
+
+k2_sc2 <- k2_raw %>%
+  # includes SARSr-CoV species and SARS-CoV-2 strain
+  filter(grepl("Severe acute respiratory syndrome", k2_taxon)) %>%
+  group_by(sample_id) %>%
+  summarize(k2_sc2_kmers = sum(k2_kmers),
+            k2_sc2_props = sum(k2_props)) %>%
+  ungroup()
+
+k2_raw %>%
   write_csv(kraken_props_fp)
 
 ```
@@ -659,7 +669,7 @@ profile_software_version %>%
 
 ```{r write cecret results, eval = import_data}
 
-list(cov_stats, coverage, s_gene_coverage, next_clade, freyja, amplicon_depth, samtools_stat) %>%
+list(cov_stats, coverage, s_gene_coverage, next_clade, freyja, amplicon_depth, samtools_stat, k2_sc2) %>%
   reduce(merge, by = "sample_id", all = TRUE) %>%
   merge(cecret_aggregate,
         by = c("sample_id", "nextclade_clade", "nextclade_clade_who", "nextclade_qc_overallstatus", "nextclade_qc_overallscore"),
