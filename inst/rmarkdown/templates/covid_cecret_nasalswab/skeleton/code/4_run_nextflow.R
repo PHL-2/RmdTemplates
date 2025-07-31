@@ -420,8 +420,8 @@ tagset <- "'TagSet=[{Key=Fading,Value=90days}]'"
 tag_filename <- "s3_object_keys_2_tag.csv"
 
 file_patterns_not_tagged <- c(gsub("\\.", "\\\\.", cecret_file_patterns),
-                              "/ivar_consensus/.*.consensus.fa",
-                              "_filtered_R[12].fastq.gz")
+                              "/ivar_consensus/.*\\.consensus\\.fa",
+                              "_filtered_R[12]\\.fastq\\.gz")
 
 aws_s3_cecret_intermediate_files <- system2("ssh", c("-tt", ec2_hostname,
                                                      shQuote(paste("aws s3 ls", workflow_output_fp, "--recursive",
