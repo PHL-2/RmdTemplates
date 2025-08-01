@@ -71,7 +71,7 @@ if(length(covid_test_fp) == 0) {
 
 }
 
-covid_test_data <- read_csv(covid_test_fp, show_col_types = FALSE) %>%
+covid_test_data <- read_csv(covid_test_fp) %>%
   select_all(~tolower(gsub(" ", "_", .))) %>%
   select(SPECIMEN_NUMBER = "sample_id", SPECIMEN_DATE = "collection_date", BIRTH_DATE = "patient_dob_(mm/dd/yyyy)", # columns used to merge
          ordering_location, clinical_test_name = "test_name", clinical_test_result = "result") %>%

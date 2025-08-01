@@ -323,7 +323,8 @@ write_csv(actual_read_lengths, actual_read_lengths_fp)
 
 ```{r load samtools stats files, eval = import_data}
 
-samtools_stats_fps <- list.files(here("data", "processed_cecret", "samtools_stats"), pattern = ".stats.txt", recursive = TRUE, full.names = TRUE)
+samtools_stats_fps <- list.files(here("data", "processed_cecret", "samtools_stats"),
+                                 pattern = ".stats.txt", recursive = TRUE, full.names = TRUE)
 
 #line positions to skip to
 summary_indic <- "# Summary Numbers."
@@ -558,9 +559,9 @@ freyja <- freyja_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
   do(read_tsv(.$FileName,
-                col_names = c("col_names", "values"),
-                col_types = cols("col_names" = col_character(),
-                                 "values" = col_character()))) %>%
+              col_names = c("col_names", "values"),
+              col_types = cols("col_names" = col_character(),
+                               "values" = col_character()))) %>%
   ungroup() %>%
   filter(!is.na(col_names)) %>%
   mutate(sample_id = gsub(".*/", "", FileName),

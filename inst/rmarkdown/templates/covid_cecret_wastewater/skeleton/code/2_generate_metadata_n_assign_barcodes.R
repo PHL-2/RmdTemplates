@@ -264,7 +264,6 @@ ddPCR_data <- ddPCR_files %>%
   data.frame(FileName = .) %>%
   group_by(FileName) %>%
   do(read_delim(.$FileName,
-                show_col_types = FALSE,
                 col_types = cols("sample_received_date" = col_character(),
                                  "sample_collect_date" = col_character()))) %>%
   ungroup() %>%
