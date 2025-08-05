@@ -284,6 +284,38 @@ if (variance_test | signal_check) {
 
 ```
 
+```{r LIMS writing}
+
+```{r LIMS writing}
+
+
+LIMS <- d_sd %>%
+  mutate(flag = ifelse((Type == "NorthEast" | Type == "SouthEast" | Type == "SouthWest") & (outlier_median > 9) & (Target == "N2" | Target == "E") | Droplet_count < 10000 | (Target == "MHV" & Droplet_count < 100), TRUE, FALSE),
+         flag = ifelse(is.na(GESD_q), FALSE, flag),
+         flagComment = case_when((outlier_median > 9) & flag ~ "outlier",
+                                 Droplet_count < 10000 ~ "<10000 droplets",
+                                 (Target == "MHV" & Droplet_count < 100) ~ "Internal control failed"),
+         uniq_sample_name = paste0("WW-", Sample_date, "-", Type),
+         Pos10k = percentage_positive*100,
+         rxn_vol_uL = rxn_vol_uL, 
+         input_vol_uL = input_vol_uL, 
+         extraction_vol_uL = extraction_vol_uL, 
+         elution_vol_uL = elution_vol_uL,
+         end_concentration_vol_uL = end_concentration_vol_uL,
+         init_concentration_vol_uL = init_concentration_vol_uL
+         ) %>%
+  right_join(d_pre) %>%
+  select(uniq_sample_name,Type, Sample_date, `Conc(copies/uL)`, Droplet_count, Positives, Negatives, Pos10k, avg_conc, sd_conc, rxn_vol_uL, input_vol_uL, extraction_vol_uL, elution_vol_uL, end_concentration_vol_uL, init_concentration_vol_uL, outlier_median, flag, flagComment)
+
+
+write_csv(LIMS, file = file.path(here(), "LIMSexport.csv"))
+  
+
+```
+  
+
+```
+
 
 
 ```{r Remove samples}
