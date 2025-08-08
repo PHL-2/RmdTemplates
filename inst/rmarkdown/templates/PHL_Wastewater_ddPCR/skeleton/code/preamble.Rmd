@@ -284,7 +284,6 @@ if (variance_test | signal_check) {
 
 ```
 
-```{r LIMS writing}
 
 ```{r LIMS writing}
 
@@ -312,10 +311,6 @@ write_csv(LIMS, file = file.path(here(), "LIMSexport.csv"))
   
 
 ```
-  
-
-```
-
 
 
 ```{r Remove samples}
