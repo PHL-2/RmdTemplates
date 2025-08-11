@@ -280,7 +280,7 @@ nf_concat_sample_sheet_pattern <- "nf_concat_fastq_samplesheet.csv"
 nf_concat_samplesheet_fp <- here("metadata", "munge",
                                  tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, nf_concat_sample_sheet_pattern, sep = "_")))
 
-is_nf_concat_samplesheet_empty <- read_csv(nf_concat_samplesheet_fp, show_col_types = FALSE) %>%
+is_nf_concat_samplesheet_empty <- read_csv(nf_concat_samplesheet_fp) %>%
   nrow() == 0
 
 if(!is_nf_concat_samplesheet_empty) {

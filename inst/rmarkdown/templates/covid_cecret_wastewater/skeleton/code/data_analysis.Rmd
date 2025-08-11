@@ -477,7 +477,7 @@ s %>%
     mutate(., SampleID = gsub("_", "-", sample_id)) %>%
     mutate(SampleID = cell_spec(SampleID, "latex",
                                color = case_when((grepl(paste0(rerun_samples, collapse = "|"), sample_id) & length(rerun_samples) > 0) ~ "#FFD700",
-                                                 ((grepl("control|Unassigned reads", `sample/site`)) | (!(sample_id %in% s_toPlot$sample_id))) ~ "red",
+                                                 ((grepl("control|Unassigned reads", `sample/site`)) | (!(sample_id %in% s_toReport$sample_id))) ~ "red",
                                                  TRUE ~ "black"))) %>%
       select(SampleID,
              `sample/site`,

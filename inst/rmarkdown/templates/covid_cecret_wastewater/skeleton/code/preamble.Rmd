@@ -323,7 +323,8 @@ write_csv(actual_read_lengths, actual_read_lengths_fp)
 
 ```{r load samtools stats files, eval = import_data}
 
-samtools_stats_fps <- list.files(here("data", "processed_cecret", "samtools_stats"), pattern = ".stats.txt", recursive = TRUE, full.names = TRUE)
+samtools_stats_fps <- list.files(here("data", "processed_cecret", "samtools_stats"),
+                                 pattern = ".stats.txt", recursive = TRUE, full.names = TRUE)
 
 #line positions to skip to
 summary_indic <- "# Summary Numbers."
@@ -558,9 +559,9 @@ freyja <- freyja_fps %>%
   data_frame(FileName = .) %>%
   group_by(FileName) %>%
   do(read_tsv(.$FileName,
-                col_names = c("col_names", "values"),
-                col_types = cols("col_names" = col_character(),
-                                 "values" = col_character()))) %>%
+              col_names = c("col_names", "values"),
+              col_types = cols("col_names" = col_character(),
+                               "values" = col_character()))) %>%
   ungroup() %>%
   filter(!is.na(col_names)) %>%
   mutate(sample_id = gsub(".*/", "", FileName),
@@ -750,14 +751,6 @@ s <- s_meta %>%
   droplevels() %>%
   filter(!is.na(sample_group))
 
-#only get merged samples that have passing results and controls
-s_toPlot <- s %>%
-  filter(!grepl("None|Undetermined", sample_id),
-         coverage_qc_status == "Good",
-         grepl("Wastewater sample - Merged|Mock DNA positive control", ww_group)) %>%
-  mutate(sample_id = as.character(sample_id)) %>%
-  droplevels()
-
 has_N2 <- any(grepl("^N2_gc/uL$", colnames(s)))
 
 has_qubit <- !all(is.na(s$qubit_conc_ng_ul))
@@ -821,7 +814,7 @@ cdc_lineages %>%
 
 ```
 
-```{r prepare freyja table and export report}
+```{r prepare freyja table}
 
 flodel <- function(word1, word2) {
    # the length of the 2nd word
@@ -943,26 +936,35 @@ freyja_average <- freyja_grouping %>%
   ungroup() %>%
   droplevels()
 
-#filter s_toPlot to remove samples that have A lineage present
-samples_with_A <- freyja_grouping %>%
-  filter(grepl("^Wastewater sample", ww_group),
-         CDC_lineages == "A") %>%
-  select(sample_id) %>%
-  unique() %>%
-  pull()
+```
 
-s_toPlot <- s_toPlot %>%
-  filter(!sample_id %in% samples_with_A)
+```{r export data for epi}
 
 #write freyja results for epi's
 dir.create(here("upload", "epi"), recursive = TRUE)
 epi_report_fp <- here("upload", "epi", paste0(project_name, "_PHL2_WW_sequencing_results.csv"))
 
+#filter s_toReport to remove samples that have A lineage present
+samples_with_A <- freyja_grouping %>%
+  filter(CDC_lineages == "A") %>%
+  select(sample_id) %>%
+  unique() %>%
+  pull()
+
+#only get merged samples that have passing results and controls
+s_toReport <- s %>%
+  filter(!grepl("None|Undetermined", sample_id),
+         coverage_qc_status == "Good",
+         grepl("Wastewater sample - Merged", ww_group),
+         !sample_id %in% samples_with_A) %>%
+  mutate(sample_id = as.character(sample_id)) %>%
+  droplevels()
+
 # export results to epi only if sample_collect_date is present
 if(sample_collect_date_found) {
   
   freyja_grouping %>%
-    filter(sample_id %in% s_toPlot$sample_id,
+    filter(sample_id %in% s_toReport$sample_id,
            !isControl,
            CDC_lineages %in% lineages_to_keep$variant) %>%
     group_by(sample_id, sample_collect_date, sample_group, CDC_lineages) %>%
@@ -978,6 +980,102 @@ if(sample_collect_date_found) {
              sample_group = "",
              freyja_lineage = "") %>%
     write_csv(epi_report_fp)
+}
+
+```
+
+```{r file for lims}
+
+#write file for LIMS
+dir.create(here("upload", "lims"), recursive = TRUE)
+lims_import_fp <- here("upload", "lims", paste0(project_name, "_PHL2_WW_LIMS_import.csv"))
+
+fields4lims <- c("sample_id",
+                 "sample_number",
+                 "sample_name",
+                 "uniq_sample_name",
+                 "sample_group",
+                 "ww_group", 
+                 "sample_type",
+                 "environmental_site",
+                 "sample_collected_by",
+                 "sample_collect_date",
+                 "sample_received_date",
+                 "ddpcr_analysis_date",
+                 "plate",
+                 "plate_row",
+                 "plate_col",
+                 "plate_coord",
+                 "idt_set",
+                 "idt_plate_row",
+                 "idt_plate_col",
+                 "idt_plate_coord",
+                 "UDI_Index_ID",
+                 "index",
+                 "index2",
+                 "prj_descrip",
+                 "sequencing_date",
+                 "instrument_type",
+                 "read_length",
+                 "index_length",
+                 "run_cd",
+                 "run_q30",
+                 "run_pf",
+                 "run_error",
+                 
+                 #results and qc
+                 "read_counts",
+                 "R1_Q30",
+                 "R2_Q30",
+                 "aligned_reads",
+                 "pct_genome_coverage_over_10x",
+                 "pct_genome_coverage_over_1x",
+                 "median_coverage",
+                 "mean_coverage",
+                 "k2_sc2_kmers",
+                 "k2_sc2_props",
+                 "A_detected")
+
+select_software <- read_csv(software_version_fp) %>%
+  filter(grepl(paste("^Nextflow",
+                     "nf-core-demultiplex",
+                     "bclconvert",
+                     "Cecret",
+                     "primer_set",
+                     "kraken2",
+                     "kraken2_db",
+                     "bwa",
+                     "samtools",
+                     "ivar", 
+                     "freyja",
+                     "freyja-dataset$", sep = "$|^"), software)) %>%
+  mutate(software_version = paste0(pipeline, "_", software)) %>%
+  select(software_version, version) %>%
+  pivot_wider(names_from = "software_version", values_from = "version")
+
+s_merged <- s %>%
+  filter(grepl("Merged", sample_id)) %>%
+  #sometimes the merged Zepto will not have A lineage, even when one of its replicates have it
+  mutate(merged_A_detected = sample_id %in% samples_with_A) %>%
+  select(sequencing_date,
+         uniq_sample_name,
+         merged_pct_genome_coverage_over_10x = "pct_genome_coverage_over_10x",
+         merged_freyja_summarized = "freyja_summarized",
+         merged_freyja_lineages = "freyja_lineages",
+         merged_freyja_abundances = "freyja_abundances",
+         merged_A_detected)
+
+lims_import <- s %>%
+  filter(!grepl("Merged|Undetermined", sample_id)) %>%
+  left_join(s_merged, by = c("sequencing_date", "uniq_sample_name")) %>%
+  mutate(A_detected = sample_id %in% samples_with_A) %>%
+  select(all_of(fields4lims), starts_with("merged_")) %>%
+  cbind(select_software) %>%
+  arrange(sample_number)
+
+if(sample_collect_date_found) {
+  lims_import %>%
+    write_csv(lims_import_fp)
 }
 
 ```
@@ -1000,7 +1098,7 @@ fasta_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2
 fastq_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_fastq_upload_orig.csv", sep = "_"))
 
 seqsender <- s %>%
-  filter(uniq_sample_name %in% s_toPlot$uniq_sample_name,
+  filter(uniq_sample_name %in% s_toReport$uniq_sample_name,
          !isControl)
 
 if(nrow(seqsender) != 0 & sample_collect_date_found) {
@@ -1138,7 +1236,7 @@ if(nrow(seqsender) != 0 & sample_collect_date_found) {
 ```{r reported numbers}
 
 #double checking to see if number of samples match
-n_samples_report <- s_toPlot %>%
+n_samples_report <- s_toReport %>%
   filter(!isControl) %>%
   nrow()
 

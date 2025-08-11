@@ -747,8 +747,9 @@ rerun_samples <- character(0)
 
 ```{r upload filepaths}
 
-epi_report_fp <- here("upload", "epi", paste(project_name, "PHL_sequencing_results.csv", sep = "_"))
+epi_report_fp <- here("upload", "epi", paste(project_name, "PHL2_sequencing_results.csv", sep = "_"))
 seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_upload_orig.csv", sep = "_"))
+lims_import_fp <- here("upload", "lims", paste(project_name, "PHL2_NS_LIMS_import.csv", sep = "_"))
 
 ```
 
@@ -772,6 +773,85 @@ epi_report <- s_toPlot %>%
 
 epi_report %>%
   write_csv(epi_report_fp)
+
+```
+
+```{r file for lims, eval = have_phi}
+
+dir.create(here("upload", "lims"), recursive = TRUE)
+
+fields4lims <- c("sample_id",
+                 "accession_number" = "sample_name",
+                 "sample_number",
+                 "sample_type",
+                 "environmental_site",
+                 "sample_collected_by",
+                 "sample_collection_date",
+                 "plate",
+                 "plate_row",
+                 "plate_col",
+                 "plate_coord",
+                 "idt_set",
+                 "idt_plate_row",
+                 "idt_plate_col",
+                 "idt_plate_coord",
+                 "UDI_Index_ID",
+                 "index",
+                 "index2",
+                 "prj_descrip",
+                 "sequencing_request_date" = "PHL_sample_received_date",
+                 "sequencing_date",
+                 "instrument_type",
+                 "read_length",
+                 "index_length",
+                 "run_cd",
+                 "run_q30",
+                 "run_pf",
+                 "run_error",
+                 
+                 #results and qc
+                 "read_counts",
+                 "R1_Q30",
+                 "R2_Q30",
+                 "aligned_reads",
+                 "pct_genome_coverage_over_30x",
+                 "pct_genome_coverage_over_1x",
+                 "median_coverage",
+                 "mean_coverage",
+                 "k2_sc2_kmers",
+                 "k2_sc2_props",
+                 "nextclade_qc_overallstatus",
+                  
+                  #epi
+                 "nextclade_pango_lineage" = "Nextclade_pango",
+                 "who_label" = "nextclade_clade_who")
+
+select_software <- read_csv(software_version_fp) %>%
+  filter(grepl(paste("^Nextflow",
+                     "nf-core-demultiplex",
+                     "bclconvert",
+                     "Cecret",
+                     "primer_set",
+                     "kraken2",
+                     "kraken2_db",
+                     "bwa",
+                     "samtools",
+                     "ivar", 
+                     "nextclade",
+                     "nextclade-dataset$", sep = "$|^"), software)) %>%
+  mutate(software_version = paste0(pipeline, "_", software)) %>%
+  select(software_version, version) %>%
+  pivot_wider(names_from = "software_version", values_from = "version")
+
+lims_import <- s %>%
+  merge(s_phi, by = "sample_id", all.x = TRUE) %>%
+  select(all_of(fields4lims)) %>%
+  cbind(select_software) %>%
+  filter(!grepl("Undetermined", sample_id)) %>%
+  arrange(sample_number)
+
+lims_import %>%
+  write_csv(lims_import_fp)
 
 ```
 
