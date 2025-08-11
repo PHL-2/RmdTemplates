@@ -44,6 +44,9 @@ sample_type_acronym <- "WW"
 
 pathogen_acronym <- "SC2"
 
+# set show_col_types to FALSE
+options("readr.show_col_types" = FALSE)
+
 #################################################################
 # 2_generate_metadata_n_assign_barcodes.R (Sample sheet settings)
 #################################################################
@@ -146,6 +149,7 @@ rstudioapi::documentSaveAll()
 library(here)
 dir.create(here("output"))
 project_name <- basename(here())
+options("readr.show_col_types" = FALSE)
 
 qc_report_fp <- paste0(project_name, "_QC_Report.Rmd")
 qc_output_fp <- here("output", paste0(project_name, ".QC.report_gen.on.", Sys.Date(), ".pdf"))
@@ -191,6 +195,8 @@ for(i in pdf_fp){
 }
 
 file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = TRUE, overwrite = TRUE)
+
+file.copy(here("upload", "lims"), file.path(copy_to, project_name), recursive = TRUE, overwrite = TRUE)
 
 ```
 
