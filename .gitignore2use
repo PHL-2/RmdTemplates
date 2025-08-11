@@ -8,6 +8,7 @@ processed_*/
 fastq/
 **/epi/*
 !**/epi/*_WW_sequencing_results.csv
+*_NS_LIMS_import.csv
 aux_files/data_submission/seqsender/
 **/signature/*
 !**/signature/blank.png
