@@ -1,0 +1,828 @@
+---
+title: |
+  ![](../../aux_files/pdf_generation/forKnitting/logo_blk.png){width=5in}  
+  `r paste0('Results for wastewater ddPCR run ', basename(here()))`
+author: "Philadelphia Public Health Labs"
+date: \today
+geometry: margin=2cm
+output:
+    pdf_document:
+        template: ../../aux_files/pdf_generation/forKnitting/toc_after.tex
+        keep_tex: false
+        toc: true
+        toc_depth: 3
+        includes:
+            in_header: ../../aux_files/pdf_generation/forKnitting/TeX_packages_commands.sty
+
+---
+
+
+\newpage
+\tableofcontents
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  tidy=TRUE,
+  cache=FALSE,
+  cache.lazy = FALSE,
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE,
+  #fig.height = figHeight,
+  dpi=300,
+  dev.args = list(pdf = list(useDingbats = FALSE))
+  )
+  
+library(tidyverse)
+library(pander)
+
+```
+
+
+```{r child = 'code/preamble.Rmd', include = FALSE}
+```
+
+
+\newpage
+
+# Summary checks and results
+
+## Flags
+
+```{r summary droplet counts check}
+
+
+if (droplet_test) {
+  print("Detected wells with <10000 droplets; wells will be excluded from analysis")
+  print(paste("Wells with <10000 droplets removed:", paste(droplet_test_wells, collapse = ", "), collapose = ""))
+  }
+
+# if (sum(d_pre$Droplet_count<10000) > 0) {
+#   print("Detected wells with <10000 droplets; wells will be excluded from analysis")
+#   }
+
+if (variance_test | signal_check) {
+  if (!all_var_check) {
+    print("Detected high variation in non-summarized wells; no wells removed")
+  } else {
+    if (variance_test) {
+      print(paste("Detected wells with high variance:", paste(wellsToRemove1, collapse =", "), collapse = ""))
+    } 
+    if(signal_check) {
+      print(paste("Detected wells with no signal:", paste(wellsToRemove2, collapse =", "), collapse = ""))
+    }
+    print(paste("Wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
+  }
+}
+# if ((sum(d_sd$cv_conc>30, na.rm = T) > 0 & sum(d_sd$sd_from_mean > 1, na.rm = T) > 0) | sum(d_sd$outlier_median > 5, na.rm = T) > 0) {
+#   print("Detected high variation; please check samples")
+#   }
+
+```
+
+## Results
+
+```{r summary results}
+
+pander(ww_SC2_conc_result_summarised,
+       digits = 10, round = 2)
+
+```
+
+
+\newpage
+
+# Introduction
+
+This report summarises the results for SARS-COV-2 waste water detection by ddPCR using the BioRad PREvalence ddPCR SARS-CoV-2 Wastewater Quantification Kit (manual can be found [here](https://www.bio-rad.com/sites/default/files/webroot/web/pdf/lsr/literature/10000142158.pdf)). In this process, we quantify the amount of SARS-COV-2 N2 and E genes in waste water samples. Our controls for this experiment are SARS-COV-2 and MHV and are spiked into control buffer (old wastewater).
+
+# Sample summary
+
+```{r table of samples}
+
+d_pre %>%
+  select(Type, Process, Spiked, Sample_date, Well) %>%
+  distinct() %>%
+  pander()
+
+```
+
+
+\newpage
+\blandscape
+
+# Quality control
+
+## Droplet count
+
+```{r checking droplet count, fig.width=16, fig.height = 4.2}
+
+if (droplet_test) {
+  print("Detected wells with <10000 droplets; wells will be excluded from analysis")
+  print(paste("Wells with <10000 droplets removed:", paste(droplet_test_wells, collapse = ", "), collapose = " "))
+  pander(
+    d_pre %>%
+      filter(Droplet_count< 10000) %>%
+      select(Well, Sample, Type, Process, Spiked, Sample_date, Droplet_count) %>%
+      distinct(),
+      split.table = 500
+    ) 
+  } else {
+    print("No detected wells with <10000 droplets")
+  }
+
+d_pre %>%
+  select(-Target) %>%
+  distinct() %>%
+  ggplot(aes(x = Well, y = Droplet_count)) +
+  geom_col() + 
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  )
+
+```
+
+```{r child = 'code/cluster_graph.Rmd'}
+```
+
+## Variance check
+
+```{r variance check}
+
+if (variance_test) {
+  if (!all_var_check) {
+    varNominal <- TRUE
+    print("Detected high variation in non-summarized wells; no wells removed")
+  } else {
+      varNominal <- FALSE
+      print(paste("Detected wells with high variance:", paste(wellsToRemove1, collapse =", "), collapse = ""))
+  }
+
+  var_pander <- d_sd %>%
+    select(Well, Sample_date, Type, Process, Target, conc = `Conc(copies/uL)`, avg_conc, cv_conc, sd, med_conc = median_conc, MAD = outlier_median, GESD_q
+           ) %>%
+    filter(MAD >=7 | GESD_q <= 0.01
+           ) %>%
+    arrange(Type, Target) %>%
+    distinct()
+
+  pander(var_pander,
+      split.table = 500
+  )
+} else {
+  varNominal <- TRUE
+  print("Variation nominal")
+}
+
+```
+
+## Signal Check
+
+```{r}
+
+if (signal_check) {
+    print(paste("Detected wells with no signal:", paste(wellsToRemove2, collapse =", "), collapse = " "))
+  signalNominal <- FALSE
+} else {
+  signalNominal <- TRUE
+  print("Signal nominal")
+}
+
+
+```
+
+
+```{r}
+
+if (signalNominal & varNominal) {
+  notNominal <- FALSE
+} else {
+  notNominal <- TRUE
+}
+
+```
+
+## Wells removed
+
+```{r, eval = notNominal}
+
+    print(paste("Wells", paste(wellsToRemove, collapse = ", "), "have been removed", collapse = ""))
+
+```
+
+\elandscape
+
+## Number of overall positive droplets per sample
+
+```{r, fig.height = 8.2}
+
+d %>% 
+  group_by(Well,Type, Sample, Process, Spiked, Sample_date) %>%
+  summarize(overall_positives = sum(Positives), Droplets = mean(Droplet_count)) %>%
+  mutate(percentage_positive = overall_positives / Droplets * 100) %>%
+  ungroup() %>%
+  select(Well, Sample, Sample_date, Type, Process, percentage_positive) %>%
+  #filter(Spiked == "Spiked") %>%
+  ggplot(aes(x=Well, y=percentage_positive, fill = Process)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("orange", "purple", "dodgerblue2")) +
+  facet_wrap(Sample_date ~ Type, scales = "free_x") +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  ) +
+  labs(
+    title = "Percent of positive droplets in all data",
+    y = "Percent of positive droplets",
+    x = "Samples"
+  )
+  
+
+```
+
+## All Data
+
+```{r, fig.height = figHeight}
+
+#All data
+d %>%
+  mutate(SampleType = ifelse(grepl(pattern = "East|West", x = Type) & Spiked == "Unspiked", "NegMHV", SampleType),
+         SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
+  #filter(Spiked == "Spiked") %>%
+  ggplot(aes(x=Type, y=Positives, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
+  theme_light() +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  ) +
+  labs(
+    title = "Number of droplets positive in all data",
+    y = "Number of Positive droplets",
+    x = "Samples"
+  )
+```
+
+```{r, fig.height = figHeight}
+
+
+d %>%
+  mutate(SampleType = ifelse(grepl(pattern = "East|West", x = Type) & Spiked == "Unspiked", "NegMHV", SampleType),
+         SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
+   # filter(Spiked == "Spiked") %>%
+  ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
+  theme_light() +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  ) +
+  labs(
+    title = "Percentage of droplets positive in all data",
+    y = "Percentage of Positive droplets (%)",
+    x = "Samples"
+  )
+
+
+```
+
+## Positive and negative controls
+
+### Experiment controls with MHV signal
+
+```{r Positive and negative control figures MHV, fig.height = figHeight}
+
+#Negative controls
+##Extraction
+dControls %>%
+  filter(exp_con == "Extraction control") %>%
+  mutate(SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
+  ggplot(aes(x=Type, y=Positives, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
+  theme_light() +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
+  labs(
+    title = "Number of droplets positive in positive and negative controls",
+    y = "Number of Positive droplets",
+    x = "Samples"
+  )
+
+```
+
+```{r, fig.height = figHeight}
+
+dControls %>%
+  filter(exp_con == "Extraction control") %>%
+  mutate(SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
+  ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
+  theme_light() +
+  labs(
+    title = "Percentage of droplets positive in positive and negative controls",
+    y = "Percentage of Positive droplets (%)",
+    x = "Samples"
+  )
+```
+
+
+### Experimental controls with MHV removed
+
+```{r Positive and negative control figures, fig.height = figHeight}
+
+#Negative controls
+##Extraction
+dControls %>%
+  filter(exp_con == "Extraction control",
+         Target != "MHV") %>%
+  mutate(SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
+  ggplot(aes(x=Type, y=Positives, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
+  theme_light() +
+  scale_fill_manual(values = c("firebrick1", "dodgerblue2")) +
+  labs(
+    title = "Number of droplets positive in positive and negative controls",
+    y = "Number of Positive droplets",
+    x = "Samples"
+  )
+
+```
+
+```{r, fig.height = figHeight}
+
+dControls %>%
+  filter(exp_con == "Extraction control",
+         Target != "MHV") %>%
+  mutate(SampleType = ifelse(Type == "oldWW", "NegCtrl", SampleType)) %>%
+  ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "dodgerblue2")) +
+  theme_light() +
+  labs(
+    title = "Percentage of droplets positive in positive and negative controls",
+    y = "Percentage of Positive droplets (%)",
+    x = "Samples"
+  )
+```
+
+### ddPCR controls
+
+```{r}
+
+##ddPCR
+dControls %>%
+  filter(exp_con == "ddPCR control") %>%
+  ggplot(aes(x=Type, y=Positives, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
+  theme_light() +
+  labs(
+    title = "Number of droplets positive in ddPCR controls",
+    y = "Number of Positive droplets",
+    x = "Samples"
+  )
+
+
+```
+
+
+```{r}
+
+
+dControls %>%
+  filter(exp_con == "ddPCR control") %>%
+  ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ SampleType, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
+  theme_light() +
+  labs(
+    title = "Percentage of droplets positive in ddPCR controls",
+    y = "Percentage of Positive droplets (%)",
+    x = "Samples"
+  )
+
+```
+
+
+## Limit of detection based on negative controls
+
+Limit of detection is based on a positive signal being >3 positive droplets in a reaction well. >3 positive droplets roughly equates to ~0.5 genome copies per uL depending on total number of droplets.
+
+Thus our limit of detection based on our concentration (Ceres NanoTrap) and extraction (MagMax wastewater ultra nucleic acid isolation kit) methods can be found with this formula:
+
+LOD = 0.5 * (ddPCR reaction volume) / (template input volume) * (concentration output volume) / (concentration input volume) * (extraction output volume) / (extraction input volume)
+
+where:
+
+ddPCR reaction volume = 20 uL
+
+template input volume = 9 uL
+
+concentration output volume = 100 uL
+
+concentration output volume = 400 uL
+
+extraction output volume = 400 uL
+
+extraction input volume = 9600 uL
+
+# Results
+
+##  Wastewater signal with MHV
+
+```{r WW signal without MHV1, fig.height = figHeight}
+
+d %>%
+  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+         grepl(pattern = "concentrated", x = Process, ignore.case = T),
+         Target != "MHV") %>%
+  ggplot(aes(x = Type, y = Positives, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "dodgerblue2")) +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  ) +
+  labs(
+    title = "Number of droplets positive in wastewater samples without MHV signal",
+    y = "Number of Positive droplets",
+    x = "Samples"
+  )
+
+```
+
+```{r, fig.height = figHeight}
+
+
+d %>%
+  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+         grepl(pattern = "concentrated", x = Process, ignore.case = T),
+         Target != "MHV") %>%
+  ggplot(aes(x = Type, y = percentage_positive, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ Process, scales = "free_x") +
+  theme_light() +
+  scale_fill_manual(values = c("firebrick1", "dodgerblue2")) +
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  ) +
+  labs(
+    title = "Percentage of droplets positive in wastewater samples without MHV signal",
+    y = "Percentage of Positive droplets",
+    x = "Samples"
+  )
+
+
+
+
+```
+
+## Wastewater signal with MHV and outliers removed
+
+```{r WW signal without MHV, fig.height = figHeight}
+
+d %>%
+  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+         grepl(pattern = "concentrated", x = Process, ignore.case = T),
+         Target != "MHV",
+         !(Well %in% wellsToRemove),) %>%
+  ggplot(aes(x = Type, y = Positives, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "dodgerblue2")) +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  ) +
+  labs(
+    title = "Number of droplets positive in wastewater samples without MHV signal",
+    y = "Number of Positive droplets",
+    x = "Samples"
+  )
+
+```
+
+```{r, fig.height = figHeight}
+
+
+d %>%
+  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+         grepl(pattern = "concentrated", x = Process, ignore.case = T),
+         Target != "MHV",
+         !(Well %in% wellsToRemove),) %>%
+  ggplot(aes(x = Type, y = percentage_positive, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ Process, scales = "free_x") +
+  theme_light() +
+  scale_fill_manual(values = c("firebrick1", "dodgerblue2")) +
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  ) +
+  labs(
+    title = "Percentage of droplets positive in wastewater samples without MHV signal",
+    y = "Percentage of Positive droplets",
+    x = "Samples"
+  )
+
+
+
+
+```
+
+\newpage
+
+## Summarized signal
+
+```{r summary}
+
+pander(ww_SC2_conc_result_summarised,
+       digits = 10, round = 2)
+
+```
+
+\newpage
+\blandscape
+
+
+
+## Wastewater original concentration
+
+Based on conversations with other public health departments, we are no longer account for efficiency in final calculations for SC2 concentration in wastewater.
+
+```{r wastewater stock concentration calculations}
+
+pander(ww_SC2_conc_result,
+       digits = 10, round = 2, split.table = 500)
+
+```
+
+
+
+
+
+
+# Trouble shooting
+
+## Natural MHV in wastewater
+
+```{r unspiked mhv figures, fig.height = figHeight}
+
+if(nrow(dUnspiked)>0) {
+
+  dUnspiked %>%
+    ggplot(aes(x=Type, y=Positives, fill = Target)) +
+    geom_boxplot(position = "dodge") +
+    geom_point(
+      aes(fill = Target),
+      shape = 21,
+      size = 1.5,
+      position = position_jitterdodge(jitter.width = 0.2)) +
+    facet_grid(Sample_date ~ Type, scales = "free_x") +
+    scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
+    theme_light() +
+    labs(
+      title = "Number of positive droplets in unspiked wastewater samples",
+      y = "Number of Positive droplets",
+      x = "Samples"
+    )
+}
+
+```
+
+
+```{r, fig.height = figHeight}
+
+
+if(nrow(dUnspiked)>0) {
+  dUnspiked %>%
+    ggplot(aes(x=Type, y=percentage_positive, fill = Target)) +
+    geom_boxplot(position = "dodge") +
+    geom_point(
+      aes(fill = Target),
+      shape = 21,
+      size = 1.5,
+      position = position_jitterdodge(jitter.width = 0.2)) +
+    facet_grid(Sample_date ~ Type, scales = "free_x") +
+    scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
+    theme_light() +
+    labs(
+      title = "Percent of positive droplets in unspiked wastewater samples",
+      y = "Percent of Positive droplets",
+      x = "Samples"
+    )
+
+} else {
+  print("No unspiked samples")
+}
+```
+
+## Wastewater with MHV signal
+```{r waste water signal with MHV, fig.height = figHeight}
+
+d %>%
+  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+         grepl(pattern = "concentrated", x = Process, ignore.case = T)) %>%
+  ggplot(aes(x = Type, y = Positives, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  ) +
+  labs(
+    title = "Number of droplets positive in wastewater samples",
+    y = "Number of Positive droplets",
+    x = "Samples"
+  )
+
+```
+
+
+```{r, fig.height = figHeight}
+
+
+d %>%
+  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+         grepl(pattern = "concentrated", x = Process, ignore.case = T)) %>%
+  ggplot(aes(x = Type, y = percentage_positive, fill = Target)) +
+  geom_boxplot(position = "dodge") +
+  geom_point(
+    aes(fill = Target),
+    shape = 21,
+    size = 1.5,
+    position = position_jitterdodge(jitter.width = 0.2)) +
+  facet_grid(Sample_date ~ Process, scales = "free_x") +
+  scale_fill_manual(values = c("firebrick1", "limegreen", "dodgerblue2")) +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(angle = 45,
+                               vjust = 0.95,
+                               hjust = 1)
+  ) +
+  labs(
+    title = "Percentage of droplets positive in wastewater samples",
+    y = "Percentage of Positive droplets",
+    x = "Samples"
+  )
+
+```
+
+## Efficiency
+
+Stock calculation equation:
+
+Calculated stock concentration = (concentration * rxn_vol / input_vol) * (elution_vol / extraction_vol) * (end_concentration_vol / initial_concentration_vol) / efficiency
+
+Number used for calculation
+
+rxn_vol = 20 uL
+
+input_vol = 9 uL
+
+elution_vol = 100 uL
+
+extraction_vol = 400 uL
+
+end_concentration-vol = 500 uL
+
+initial_concentration_vol = 9600 uL
+
+*Unconcentrated samples: (end_concentration_vol / initial_concentration_vol) = 1
+
+Efficiency equation:
+
+(Calculated concentration / Expected concentration)
+
+**Efficiency ranges between 0 to 1 (1 being perfectly efficiency)
+
+
+
+### SC2 efficiency
+```{r calculating efficiency from MHV}
+
+# pander(MHV_efficiency_controls, split.table = 500)
+
+pander(SC2_efficiency, split.table = 500)
+
+```
+
+### SC2 efficiency in oldWW - baseline corrected
+
+```{r }
+
+pander(sc2_n2, split.table = 500)
+
+```
+
+### Samples
+
+```{r}
+
+pander(sample_stock %>% ungroup() %>% arrange() %>%
+         select(-Spiked), digits = 10, round = 2, split.table = 500)
+
+```
+
+\elandscape
+
+
+```{r child = "code/dilutions.Rmd", eval = has_dilutions}
+```
+
+
+```{r child = "code/quickextract.Rmd", eval = has_QE}
+```
+

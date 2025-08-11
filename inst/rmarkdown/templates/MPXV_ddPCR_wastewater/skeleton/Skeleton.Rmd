@@ -1,0 +1,44 @@
+#Written by Christopher Gu, 02/01/2023
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+library(here)
+
+```
+
+
+```{r render report}
+
+rstudioapi::documentSaveAll()
+dir.create(here("output"))
+project_name <- basename(here())
+
+ww_report_fp <- "code/ddPCR_analysis.Rmd"
+ww_output_fp <- here("output", paste0(project_name, '.report_gen.on.', Sys.Date(), '.pdf'))
+
+#Indicators for specific analysis
+has_oldWW <- TRUE
+has_dilutions <- FALSE
+has_QE <- FALSE
+days_between_collection <- 1
+
+rmarkdown::render(ww_report_fp, output_file = ww_output_fp, knit_root_dir = here())
+
+```
+
+```{r github document}
+rmarkdown::render(input = ww_report_fp, output_file = "README.md",
+                  knit_root_dir = here(),
+                  output_format = rmarkdown::md_document(variant = "gfm", toc = TRUE))
+
+
+file.copy("code/README.md", "README.md")
+file.copy("code/README_files", here(), recursive = TRUE)
+
+unlink(c("code/README.md", "code/README_files"), recursive = TRUE)
+
+```
+
