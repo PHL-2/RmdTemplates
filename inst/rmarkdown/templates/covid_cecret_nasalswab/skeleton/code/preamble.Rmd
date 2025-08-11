@@ -725,6 +725,7 @@ s_toPlot <- s %>%
   filter(!grepl("None|Undetermined", sample_id)) %>%
   filter(!grepl(" - Poor$", sample_type)) %>%
   filter(!(pangolin_qc_status == "fail" & nextclade_qc_overallstatus == "bad")) %>%
+  filter(!(grepl("^B$|^B\\.|^A$|^A\\.", Nextclade_pango) & !isControl)) %>%
   mutate(sample_id = as.character(sample_id)) %>%
   droplevels()
 
