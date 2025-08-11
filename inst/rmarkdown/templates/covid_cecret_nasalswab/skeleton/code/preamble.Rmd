@@ -776,7 +776,7 @@ epi_report %>%
 
 ```
 
-```{r data for lims, eval = have_phi}
+```{r file for lims, eval = have_phi}
 
 dir.create(here("upload", "lims"), recursive = TRUE)
 

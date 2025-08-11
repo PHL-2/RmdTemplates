@@ -196,6 +196,8 @@ for(i in pdf_fp){
 
 file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = TRUE, overwrite = TRUE)
 
+file.copy(here("upload", "lims"), file.path(copy_to, project_name), recursive = TRUE, overwrite = TRUE)
+
 ```
 
 ```{r GISAID BioSample SRA submission, message=TRUE, include=FALSE, eval=FALSE}
