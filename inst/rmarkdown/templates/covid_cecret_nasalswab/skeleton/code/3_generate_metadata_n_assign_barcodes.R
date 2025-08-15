@@ -105,7 +105,10 @@ run_pf <- NA
 run_error <- NA
 
 # Get the run id from BaseSpace
-bs_run <- cli_submit("bs", "list", c("runs", "-f csv")) %>%
+bs_run <- system2("ssh", c("-tt", ec2_hostname,
+                           shQuote("bs list runs -f csv", type = "sh")),
+                  stdout = TRUE, stderr = TRUE) %>%
+  head(-1) %>%
   str_split(",") %>%
   do.call("rbind", .) %>%
   as.data.frame() %>%
@@ -130,7 +133,10 @@ sequencing_run <- bs_run %>%
   select(Name) %>%
   pull()
 
-run_stats <- cli_submit("bs", "run", c("seqstats", "--id", bs_run_id)) %>%
+run_stats <- system2("ssh", c("-tt", ec2_hostname,
+                              shQuote(paste("bs run seqstats --id", bs_run_id), type = "sh")),
+                     stdout = TRUE, stderr = TRUE) %>%
+  head(-1) %>%
   list(run_stats = .) %>%
   as.data.frame()
 
