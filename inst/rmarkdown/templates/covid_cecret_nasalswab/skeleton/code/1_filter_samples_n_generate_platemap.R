@@ -441,6 +441,8 @@ plate_view <- combined_list_first_half %>%
   group_by(grp) %>%
   group_modify(~ add_row(.x, sample_name = "NC-pre-extract")) %>%
   ungroup() %>%
+  # removing last water control after samples due to request
+  head(-1) %>%
   select(-grp) %>%
   mutate(number = cumsum(duplicated(sample_name)) + 1) %>%
   mutate(sample_name = ifelse(sample_name == "NC-pre-extract", paste0(sample_name, number), sample_name)) %>%
