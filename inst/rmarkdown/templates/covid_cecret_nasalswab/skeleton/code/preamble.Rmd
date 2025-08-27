@@ -725,6 +725,7 @@ s_toPlot <- s %>%
   filter(!grepl("None|Undetermined", sample_id)) %>%
   filter(!grepl(" - Poor$", sample_type)) %>%
   filter(!(pangolin_qc_status == "fail" & nextclade_qc_overallstatus == "bad")) %>%
+  filter(!(grepl("^B$|^B\\.|^A$|^A\\.", Nextclade_pango) & !isControl)) %>%
   mutate(sample_id = as.character(sample_id)) %>%
   droplevels()
 
@@ -1004,7 +1005,7 @@ all_sample_ids_from_seqsender <- seqsender_2_upload_fp %>%
 #check the csv file for the epi's
 if(have_phi) {
 
-  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = "_PHL_sequencing_results.csv", recursive = TRUE, full.names = TRUE)
+  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = "_PHL2_sequencing_results.csv", recursive = TRUE, full.names = TRUE)
   
   epi_report <- epi_2_upload_fp %>%
     read_csv() %>%
