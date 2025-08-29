@@ -836,7 +836,7 @@ flodel <- function(word1, word2) {
 }
 
 freyja_lineages <- s %>%
-  select(sample_id, sample_name, sample_group, ww_group, !!date_col,
+  select(sample_id, sample_name, uniq_sample_name, sample_group, ww_group, !!date_col, sequencing_date,
          isControl, freyja_lineages, freyja_abundances, pct_genome_coverage_over_10x) %>%
   group_by(sample_id) %>%
   mutate(lineages = list(freyja_lineages),
@@ -963,15 +963,19 @@ s_toReport <- s %>%
 # export results to epi only if sample_collect_date is present
 if(sample_collect_date_found) {
   
-  freyja_grouping %>%
-    filter(sample_id %in% s_toReport$sample_id,
-           !isControl,
-           CDC_lineages %in% lineages_to_keep$variant) %>%
-    group_by(sample_id, sample_collect_date, sample_group, CDC_lineages) %>%
+  freyja_summary <- freyja_grouping %>%
+    group_by(sample_id, uniq_sample_name, sample_group, isControl,
+             sequencing_date, sample_collect_date,
+             pct_genome_coverage_over_10x, CDC_lineages) %>%
     summarize(relative_abundances = sum(relative_abundances)) %>%
     ungroup() %>%
     filter(relative_abundances >= 0.01) %>%
-    arrange(sample_collect_date, sample_group, desc(relative_abundances), CDC_lineages) %>%
+    arrange(sample_collect_date, sample_group, desc(relative_abundances), CDC_lineages)
+
+  freyja_summary %>%
+    filter(sample_id %in% s_toReport$sample_id,
+           !isControl,
+           CDC_lineages %in% lineages_to_keep$variant) %>%
     select(sample_collect_date, sample_group, freyja_lineage = "CDC_lineages") %>%
     write_csv(epi_report_fp)
   
@@ -1028,12 +1032,15 @@ fields4lims <- c("sample_id",
                  "R1_Q30",
                  "R2_Q30",
                  "aligned_reads",
-                 "pct_genome_coverage_over_10x",
-                 "pct_genome_coverage_over_1x",
+                 
                  "median_coverage",
                  "mean_coverage",
                  "k2_sc2_kmers",
                  "k2_sc2_props",
+                 "pct_genome_coverage_over_1x",
+                 "pct_genome_coverage_over_10x",
+                 "freyja_cdc_lineages",
+                 "freyja_cdc_lineages_abund", 
                  "A_detected")
 
 select_software <- read_csv(software_version_fp) %>%
@@ -1053,21 +1060,31 @@ select_software <- read_csv(software_version_fp) %>%
   select(software_version, version) %>%
   pivot_wider(names_from = "software_version", values_from = "version")
 
-s_merged <- s %>%
+freyja_summarized <- freyja_summary %>%
+  mutate(CDC_lineages = factor(CDC_lineages, levels = c(tail(levels(freyja_summary$CDC_lineages), 2),
+                                                        head(levels(freyja_summary$CDC_lineages), -2))),
+         relative_abundances = round(relative_abundances, 3)) %>%
+  arrange(CDC_lineages, desc(relative_abundances)) %>%
+  group_by(sample_id, uniq_sample_name, sequencing_date, pct_genome_coverage_over_10x) %>%
+  summarize(freyja_cdc_lineages = paste0(CDC_lineages, collapse = "; "),
+            freyja_cdc_lineages_abund = paste0(CDC_lineages, "-", relative_abundances, collapse = "; ")) %>%
+  ungroup()
+
+s_merged <- freyja_summarized %>%
   filter(grepl("Merged", sample_id)) %>%
-  #sometimes the merged Zepto will not have A lineage, even when one of its replicates have it
+  # sometimes the merged Zepto will not have A lineage, even when one of its replicates have it
   mutate(merged_A_detected = sample_id %in% samples_with_A) %>%
   select(sequencing_date,
          uniq_sample_name,
          merged_pct_genome_coverage_over_10x = "pct_genome_coverage_over_10x",
-         merged_freyja_summarized = "freyja_summarized",
-         merged_freyja_lineages = "freyja_lineages",
-         merged_freyja_abundances = "freyja_abundances",
+         merged_freyja_cdc_lineages = "freyja_cdc_lineages",
+         merged_freyja_cdc_lineages_abund = "freyja_cdc_lineages_abund",
          merged_A_detected)
 
 lims_import <- s %>%
   filter(!grepl("Merged|Undetermined", sample_id)) %>%
-  left_join(s_merged, by = c("sequencing_date", "uniq_sample_name")) %>%
+  left_join(freyja_summarized, by = c("sample_id", "uniq_sample_name", "sequencing_date", "pct_genome_coverage_over_10x")) %>%
+  left_join(s_merged, by = c("uniq_sample_name", "sequencing_date")) %>%
   mutate(A_detected = sample_id %in% samples_with_A) %>%
   select(all_of(fields4lims), starts_with("merged_")) %>%
   cbind(select_software) %>%
