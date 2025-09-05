@@ -168,7 +168,7 @@ rmarkdown::render(qc_report_fp, output_file = "README.md",
 
 ```
 
-```{r run R script, include=FALSE, eval=FALSE}
+```{r save pdf shared drive, include=FALSE, eval=FALSE}
 
 rstudioapi::documentSaveAll()
 library(here)
