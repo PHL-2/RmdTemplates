@@ -167,7 +167,7 @@ if(ncol(PHL_data) == 1) {
     stop(simpleError(paste("Some samples do not have a positive result or any result",
                            "It's possible that the epi's metadata are missing the following columns so the clinical results could not be merged:",
                            paste0(cols2merge, collapse = ", "),
-                           "\nThe latest date found in the clinical test metadata sheet from OEL is:", max(as.Date(covid_test_data$SPECIMEN_DATE, format = "%m/%d/%Y")),
+                           "\nThe latest date found in the clinical test metadata sheet from OEL is:", max(as.Date(covid_test_data$SPECIMEN_DATE, format = "%m/%d/%Y"), na.rm = TRUE),
                            paste0("\nIf the test results are not missing, check with ", epi_name, " to see if these samples should still be sequenced"),
                            "If you want to proceed with sequencing these samples without the clinical data, comment out this stop message",
                            "\nSample(s) in question:", paste0(non_positive_PHL_results[, "SPECIMEN_NUMBER"], collapse = ", "), sep = "\n")))
