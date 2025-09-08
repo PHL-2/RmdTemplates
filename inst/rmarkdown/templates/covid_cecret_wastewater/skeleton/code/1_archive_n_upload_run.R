@@ -82,7 +82,7 @@ tarball_script_options <- c("-t", ec2_tmp_fp,
                             "-o",
                             "-c")
 
-message(paste("Checking if a", selected_sequencer_type, "run on", sequencing_date, "exists on S3"))
+message(paste("Checking if a", selected_sequencer_type, "run from", sequencing_date, "exists in S3"))
 check_run_on_s3 <- system2("ssh", c(ec2_hostname,
                                     shQuote(
                                       paste0("aws s3 ls ", s3_run_bucket_fp,
@@ -92,8 +92,8 @@ check_run_on_s3 <- system2("ssh", c(ec2_hostname,
   attr("status") #if run found, returns null. if no run, returns 1
 
 if(is.null(check_run_on_s3)) {
-  stop(simpleError(paste(selected_sequencer_type, "run detected in", s3_run_bucket_fp,
-                         "\nTo create a new tarball, manually delete the old file in", s3_run_bucket_fp)))
+  stop(simpleError(paste("Existing", selected_sequencer_type, "run detected in", s3_run_bucket_fp,
+                         "\nTo create a new tarball, manually delete this run in", s3_run_bucket_fp)))
 }
 
 message("\nRun on S3 not found. Continuing to create tarball")
@@ -116,3 +116,5 @@ check_screen_job(message2display = "Checking tar job",
                  ec2_login = ec2_hostname,
                  screen_session_name = sequencing_tarball_session,
                  screen_log_fp = tmp_screen_fp)
+
+message("\nTarball script finished!")
