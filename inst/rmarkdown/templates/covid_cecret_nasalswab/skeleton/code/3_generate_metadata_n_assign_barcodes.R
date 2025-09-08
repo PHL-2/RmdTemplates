@@ -930,3 +930,5 @@ metadata_sheet %>%
   filter(!sample_id %in% sample_w_empty_reads) %>%
   select(sample_id, any_of(phi_info)) %>%
   write_csv(file = here("metadata", paste0(sequencing_date, "_", prj_description, "_PHI.csv")))
+
+message("\nRscript finished successfully!")

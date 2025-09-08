@@ -485,3 +485,5 @@ if(copy_platemap) {
 }
 
 write_csv(enviro_samples, file = here("metadata", "extra_metadata", paste0(format(Sys.time(), "%Y%m%d"), "_environmental_samples.csv")))
+
+message("\nRscript finished successfully!")

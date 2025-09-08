@@ -117,4 +117,4 @@ check_screen_job(message2display = "Checking tar job",
                  screen_session_name = sequencing_tarball_session,
                  screen_log_fp = tmp_screen_fp)
 
-message("\nTarball script finished!")
+message("\nRscript finished successfully!")

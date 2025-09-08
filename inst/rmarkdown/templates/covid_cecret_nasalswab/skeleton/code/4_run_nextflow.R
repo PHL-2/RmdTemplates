@@ -499,3 +499,5 @@ check_screen_job(message2display = "Checking delete job",
                  ec2_login = ec2_hostname,
                  screen_session_name = clean_tmp_session,
                  screen_log_fp = tmp_screen_fp)
+
+message("\nRscript finished successfully!")

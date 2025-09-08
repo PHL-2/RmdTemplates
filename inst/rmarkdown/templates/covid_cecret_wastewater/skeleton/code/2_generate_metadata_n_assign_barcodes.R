@@ -912,3 +912,5 @@ if(create_platemap) {
     Sys.sleep(5)
   }
 }
+
+message("\nRscript finished successfully!")
