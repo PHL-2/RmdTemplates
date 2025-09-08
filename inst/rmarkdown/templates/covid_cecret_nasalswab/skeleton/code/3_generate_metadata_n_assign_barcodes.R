@@ -87,171 +87,6 @@ barcodes <- tryCatch(
   }
 )
 
-###############
-# Get run stats
-###############
-
-yymmdd <- gsub("^..|-", "", sequencing_date)
-sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
-                             selected_sequencer_type == "NextSeq2000" ~ "VH")
-seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
-intended_sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
-
-record_prefix <- "Record__"
-
-run_cd <- NA
-run_q30 <- NA
-run_pf <- NA
-run_error <- NA
-
-# Get the run id from BaseSpace
-bs_run <- system2("ssh", c("-tt", ec2_hostname,
-                           shQuote("bs list runs -f csv", type = "sh")),
-                  stdout = TRUE, stderr = TRUE) %>%
-  head(-1) %>%
-  str_split(",") %>%
-  do.call("rbind", .) %>%
-  as.data.frame() %>%
-  `colnames<-`(.[1, ]) %>%
-  slice(-1) %>%
-  filter(grepl(paste0("^", intended_sequencing_folder_regex), Name)) %>%
-  filter(grepl(paste0("^", record_prefix, selected_sequencer_type, "_", sequencing_date), ExperimentName))
-
-if(nrow(bs_run) > 1) {
-  stop(simpleError("\nThere are two sequencing runs that matched this date on the same sequencer!!!\n"))
-} else if (nrow(bs_run) == 0) {
-  stop(simpleError(paste0("\nThere is no record on BaseSpace for this date: ", sequencing_date,
-                          "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
-                          "\nThe sequencer type could also be wrong: ", selected_sequencer_type)))
-}
-
-bs_run_id <- bs_run %>%
-  select(Id) %>%
-  pull()
-
-sequencing_run <- bs_run %>%
-  select(Name) %>%
-  pull()
-
-run_stats <- system2("ssh", c("-tt", ec2_hostname,
-                              shQuote(paste("bs run seqstats --id", bs_run_id), type = "sh")),
-                     stdout = TRUE, stderr = TRUE) %>%
-  head(-1) %>%
-  list(run_stats = .) %>%
-  as.data.frame()
-
-run_cd <- run_stats %>%
-  filter(grepl("SequencingStatsCompact.ClusterDensity", run_stats)) %>%
-  # cluster density seems to be reported in the millions. If there is no scientific notation, divide by 1000
-  mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
-         run_stats = ifelse(grepl("e", run_stats),
-                            as.numeric(gsub("e.*", "", run_stats))*1000,
-                            as.numeric(run_stats)/1000)) %>%
-  pull()
-
-run_q30 <- run_stats %>%
-  filter(grepl("SequencingStatsCompact.PercentGtQ30 ", run_stats)) %>%
-  mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
-         run_stats = as.numeric(run_stats)/100) %>%
-  pull()
-
-run_pf <- run_stats %>%
-  filter(grepl("SequencingStatsCompact.PercentPf", run_stats)) %>%
-  mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
-         run_stats = as.numeric(run_stats)) %>%
-  pull()
-
-run_error <- run_stats %>%
-  filter(grepl("SequencingStatsCompact.ErrorRate ", run_stats)) %>%
-  mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
-         run_stats = as.numeric(run_stats)/100) %>%
-  pull()
-
-#######################
-# Load run sample sheet
-#######################
-
-run_samplesheet_fp <- list.files(here("metadata", "munge"), pattern = "SampleSheet", full.names = TRUE)[1]
-samplesheet_exists <- file.exists(run_samplesheet_fp)
-
-if(samplesheet_exists) {
-
-  message("\n*****")
-  message("There is already an existing 'SampleSheet' file in the metadata/munge directory")
-  message("Using this sheet to generate the metadata...")
-  message("*****")
-  Sys.sleep(10)
-
-} else {
-
-  dir.create(here("metadata", "munge"), showWarnings = FALSE)
-  run_samplesheet_fp <- here("metadata", "munge", "SampleSheet.csv")
-  temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/", sequencing_run, "/")
-  bs_dl_cmd <- paste("bs download runs --id", bs_run_id, "--output", temporary_seq_run_fp,
-                     "--exclude '*' --include 'SampleSheet*'")
-
-  # Download the run from BaseSpace onto a running EC2 instance
-  download_bs_sheet_session <- paste0("down-bs-sheet-", session_suffix)
-  submit_screen_job(message2display = "Downloading SampleSheet from BaseSpace",
-                    ec2_login = ec2_hostname,
-                    screen_session_name = download_bs_sheet_session,
-                    screen_log_fp = tmp_screen_fp,
-                    command2run = bs_dl_cmd
-  )
-
-  check_screen_job(message2display = "Checking BaseSpace download job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = download_bs_sheet_session,
-                   screen_log_fp = tmp_screen_fp)
-
-  # Get name of the final SampleSheet if there is more than 1
-  list_sample_sheets <- system2("ssh", c(ec2_hostname,
-                                         shQuote(
-                                           paste0("ls ", temporary_seq_run_fp, "SampleSheet*")
-                                         )),
-                                stdout = TRUE, stderr = TRUE) %>%
-    tail(1)
-
-  # Download the SampleSheet from EC2 instance
-  run_in_terminal(paste("scp",
-                        paste0(ec2_hostname, ":", list_sample_sheets),
-                        run_samplesheet_fp)
-  )
-}
-
-run_sample_sheet <- load_sample_sheet(run_samplesheet_fp)
-
-instrument_type <- data.frame(values = unlist(run_sample_sheet$Header)) %>%
-  mutate(col_names = gsub(",.*", "", values)) %>%
-  mutate(col_names = gsub(" ", "_", col_names)) %>%
-  mutate(values = gsub(".*,", "", values)) %>%
-  filter(grepl("instrument_type|InstrumentType", col_names, ignore.case = TRUE)) %>%
-  select(values) %>%
-  pull()
-
-read_length <- data.frame(values = unlist(run_sample_sheet$Reads)) %>%
-  filter(!grepl("^Index[1|2]Cycles,", values)) %>%
-  mutate(values = gsub(".*,", "", values)) %>%
-  pull() %>%
-  unique()
-
-if(instrument_type != selected_sequencer_type) {
-  message("\n*****")
-  message("The SampleSheet.csv for this ", sequencing_date, " run has the instrument set as ", instrument_type)
-  message("The rest of this script will continue and processing this project as a ", instrument_type, " run")
-  message("If this was not the correct sequencer used for this project, double check the sequencing date or select the appropriate selected_sequencer_type in this Rscript")
-  message("*****")
-
-  Sys.sleep(10)
-}
-
-instrument_regex <- case_when(instrument_type == "MiSeq" ~ "M",
-                              instrument_type == "NextSeq2000" ~ "VH")
-
-if(!read_length %in% c(76, 151)) {
-  stop(simpleError("The read length is not 76 or 151 bp. Check the sample sheet from the sequencing run folder"))
-}
-
 ##################
 # Load index sheet
 ##################
@@ -495,6 +330,171 @@ for(sheet_name in other_sheets) {
   other_data <- bind_rows(other_data, other_sheet) %>%
     select(-c(sample_type, age))
 
+}
+
+###############
+# Get run stats
+###############
+
+yymmdd <- gsub("^..|-", "", sequencing_date)
+sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
+                             selected_sequencer_type == "NextSeq2000" ~ "VH")
+seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
+intended_sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
+
+record_prefix <- "Record__"
+
+run_cd <- NA
+run_q30 <- NA
+run_pf <- NA
+run_error <- NA
+
+# Get the run id from BaseSpace
+bs_run <- system2("ssh", c("-tt", ec2_hostname,
+                           shQuote("bs list runs -f csv", type = "sh")),
+                  stdout = TRUE, stderr = TRUE) %>%
+  head(-1) %>%
+  str_split(",") %>%
+  do.call("rbind", .) %>%
+  as.data.frame() %>%
+  `colnames<-`(.[1, ]) %>%
+  slice(-1) %>%
+  filter(grepl(paste0("^", intended_sequencing_folder_regex), Name)) %>%
+  filter(grepl(paste0("^", record_prefix, selected_sequencer_type, "_", sequencing_date), ExperimentName))
+
+if(nrow(bs_run) > 1) {
+  stop(simpleError("\nThere are two sequencing runs that matched this date on the same sequencer!!!\n"))
+} else if (nrow(bs_run) == 0) {
+  stop(simpleError(paste0("\nThere is no record on BaseSpace for this date: ", sequencing_date,
+                          "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
+                          "\nThe sequencer type could also be wrong: ", selected_sequencer_type)))
+}
+
+bs_run_id <- bs_run %>%
+  select(Id) %>%
+  pull()
+
+sequencing_run <- bs_run %>%
+  select(Name) %>%
+  pull()
+
+run_stats <- system2("ssh", c("-tt", ec2_hostname,
+                              shQuote(paste("bs run seqstats --id", bs_run_id), type = "sh")),
+                     stdout = TRUE, stderr = TRUE) %>%
+  head(-1) %>%
+  list(run_stats = .) %>%
+  as.data.frame()
+
+run_cd <- run_stats %>%
+  filter(grepl("SequencingStatsCompact.ClusterDensity", run_stats)) %>%
+  # cluster density seems to be reported in the millions. If there is no scientific notation, divide by 1000
+  mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+         run_stats = ifelse(grepl("e", run_stats),
+                            as.numeric(gsub("e.*", "", run_stats))*1000,
+                            as.numeric(run_stats)/1000)) %>%
+  pull()
+
+run_q30 <- run_stats %>%
+  filter(grepl("SequencingStatsCompact.PercentGtQ30 ", run_stats)) %>%
+  mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+         run_stats = as.numeric(run_stats)/100) %>%
+  pull()
+
+run_pf <- run_stats %>%
+  filter(grepl("SequencingStatsCompact.PercentPf", run_stats)) %>%
+  mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+         run_stats = as.numeric(run_stats)) %>%
+  pull()
+
+run_error <- run_stats %>%
+  filter(grepl("SequencingStatsCompact.ErrorRate ", run_stats)) %>%
+  mutate(run_stats = gsub(".*\\| | .*", "", run_stats),
+         run_stats = as.numeric(run_stats)/100) %>%
+  pull()
+
+#######################
+# Load run sample sheet
+#######################
+
+run_samplesheet_fp <- list.files(here("metadata", "munge"), pattern = "SampleSheet", full.names = TRUE)[1]
+samplesheet_exists <- file.exists(run_samplesheet_fp)
+
+if(samplesheet_exists) {
+
+  message("\n*****")
+  message("There is already an existing 'SampleSheet' file in the metadata/munge directory")
+  message("Using this sheet to generate the metadata...")
+  message("*****")
+  Sys.sleep(10)
+
+} else {
+
+  dir.create(here("metadata", "munge"), showWarnings = FALSE)
+  run_samplesheet_fp <- here("metadata", "munge", "SampleSheet.csv")
+  temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/", sequencing_run, "/")
+  bs_dl_cmd <- paste("bs download runs --id", bs_run_id, "--output", temporary_seq_run_fp,
+                     "--exclude '*' --include 'SampleSheet*'")
+
+  # Download the run from BaseSpace onto a running EC2 instance
+  download_bs_sheet_session <- paste0("down-bs-sheet-", session_suffix)
+  submit_screen_job(message2display = "Downloading SampleSheet from BaseSpace",
+                    ec2_login = ec2_hostname,
+                    screen_session_name = download_bs_sheet_session,
+                    screen_log_fp = tmp_screen_fp,
+                    command2run = bs_dl_cmd
+  )
+
+  check_screen_job(message2display = "Checking BaseSpace download job",
+                   ec2_login = ec2_hostname,
+                   screen_session_name = download_bs_sheet_session,
+                   screen_log_fp = tmp_screen_fp)
+
+  # Get name of the final SampleSheet if there is more than 1
+  list_sample_sheets <- system2("ssh", c(ec2_hostname,
+                                         shQuote(
+                                           paste0("ls ", temporary_seq_run_fp, "SampleSheet*")
+                                         )),
+                                stdout = TRUE, stderr = TRUE) %>%
+    tail(1)
+
+  # Download the SampleSheet from EC2 instance
+  run_in_terminal(paste("scp",
+                        paste0(ec2_hostname, ":", list_sample_sheets),
+                        run_samplesheet_fp)
+  )
+}
+
+run_sample_sheet <- load_sample_sheet(run_samplesheet_fp)
+
+instrument_type <- data.frame(values = unlist(run_sample_sheet$Header)) %>%
+  mutate(col_names = gsub(",.*", "", values)) %>%
+  mutate(col_names = gsub(" ", "_", col_names)) %>%
+  mutate(values = gsub(".*,", "", values)) %>%
+  filter(grepl("instrument_type|InstrumentType", col_names, ignore.case = TRUE)) %>%
+  select(values) %>%
+  pull()
+
+read_length <- data.frame(values = unlist(run_sample_sheet$Reads)) %>%
+  filter(!grepl("^Index[1|2]Cycles,", values)) %>%
+  mutate(values = gsub(".*,", "", values)) %>%
+  pull() %>%
+  unique()
+
+if(instrument_type != selected_sequencer_type) {
+  message("\n*****")
+  message("The SampleSheet.csv for this ", sequencing_date, " run has the instrument set as ", instrument_type)
+  message("The rest of this script will continue and processing this project as a ", instrument_type, " run")
+  message("If this was not the correct sequencer used for this project, double check the sequencing date or select the appropriate selected_sequencer_type in this Rscript")
+  message("*****")
+
+  Sys.sleep(10)
+}
+
+instrument_regex <- case_when(instrument_type == "MiSeq" ~ "M",
+                              instrument_type == "NextSeq2000" ~ "VH")
+
+if(!read_length %in% c(76, 151)) {
+  stop(simpleError("The read length is not 76 or 151 bp. Check the sample sheet from the sequencing run folder"))
 }
 
 ###########################

@@ -93,6 +93,120 @@ barcodes <- tryCatch(
   }
 )
 
+#####################################
+# Load the latest 5 ddPCR run results
+#####################################
+
+failed_regex <- "test|exclude"
+
+ddPCR_files <- list.files(ddPCR_run_fp, pattern = ".*_ww_sequencing_metadata.csv", full.names = TRUE, recursive = TRUE)
+ddPCR_files <- tail(ddPCR_files[!grepl(failed_regex, ddPCR_files)], 100)
+
+ddPCR_data <- ddPCR_files %>%
+  data.frame(FileName = .) %>%
+  group_by(FileName) %>%
+  do(read_delim(.$FileName,
+                col_types = cols("sample_received_date" = col_character(),
+                                 "sample_collect_date" = col_character()))) %>%
+  ungroup() %>%
+  mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName)),
+         sample_received_date = as.Date(parse_date_time(sample_received_date, c("ymd", "mdy"))),
+         sample_collect_date = as.Date(parse_date_time(sample_collect_date, c("ymd", "mdy"))),
+         uniq_sample_name = ifelse((is.na(uniq_sample_name) | uniq_sample_name == ""),
+                                   paste(sample_type_acronym, sample_received_date, sample_group, sep = "-"),
+                                   uniq_sample_name)) %>%
+  filter(!is.na(sample_group)) %>%
+  group_by(sample_group, sample_received_date) %>%
+  #get the latest run only
+  filter(ddpcr_analysis_date == max(ddpcr_analysis_date)) %>%
+  ungroup() %>%
+  select(-FileName) %>%
+  unique()
+
+########################################
+# Load the environmental samples, if any
+########################################
+
+env_fp <- max(list.files(here("metadata", "extra_metadata"), pattern = "environmental_samples.csv", full.names = TRUE))
+
+if(!is.na(env_fp)) {
+
+  env_data <- read_csv(env_fp) %>%
+    #use the Tuesday of the sequencing week as the sample_received_date
+    mutate(sample_received_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
+    select(uniq_sample_name = sample_name, sample_group = sample_name,
+           sample_received_date, environmental_site) %>%
+    #filter rows where sample_id is NA
+    filter(!is.na(sample_group)) %>%
+    #filter empty columns
+    select(where(function(x) any(!is.na(x))),
+           !matches("^\\.\\.\\."))
+} else{
+
+  env_data <- data.frame(uniq_sample_name = NA_character_,
+                         sample_group = NA_character_,
+                         sample_received_date = NA_character_,
+                         environmental_site = NA_character_)
+}
+
+###################################
+# Load index and sample info sheets
+###################################
+
+index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
+
+if(identical(index_sheet_fp, character(0))) {
+  shared_index_sheet_list <- list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "wastewater", str_sub(sequencing_date, 1, 4)),
+                                        pattern = "sequencing_metadata_sheet", full.names = TRUE) %>%
+    data.frame(files = .) %>%
+    mutate(posted_dates = gsub(".*([0-9-]{8}).*", "\\1", files))
+
+  shared_index_fp <- shared_index_sheet_list %>%
+    filter(grepl(format(as.Date(sequencing_date), format = "%m-%d-%y"), files)) %>%
+    select(files) %>%
+    pull()
+
+  if(identical(shared_index_fp, character(0))) {
+    if(nrow(shared_index_sheet_list) == 0) {
+      stop(simpleError("\nCannot find files in the shared drive\nAre you connected to the shared drive?"))
+    } else {
+      posted_dates <- shared_index_sheet_list %>%
+        tail(5) %>%
+        select(posted_dates) %>%
+        pull() %>%
+        paste0(collapse = "\n")
+
+      stop(simpleError(paste0("\nCannot find the index sheet with the expected date of ", format(as.Date(sequencing_date), format = "%m-%d-%y"),
+                              "\nHere are the dates of the posted index sheets in the shared drive:\n",
+                              posted_dates)))
+    }
+  }
+
+  file.copy(shared_index_fp, here("metadata", "munge"))
+  index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
+}
+
+read_sheet <- function(fp, sheet_name) {
+  tryCatch(
+    {
+      read_excel(fp, sheet = sheet_name) %>%
+        #filter rows where sample_id is NA
+        filter(!is.na(sample_name)) %>%
+        #filter empty columns
+        select(where(function(x) any(!is.na(x)))) %>%
+        select(!matches("^\\.\\.\\.")) %>%
+        mutate(across(matches("_col$|coord$"), ~ str_replace_all(., "\\d+", function(m) sprintf("%02d", as.numeric(m))))) %>%
+        mutate(plate_coord = gsub("^0", "", plate_coord))
+    },
+    error = function(e) {
+      stop (simpleError("The sample index file from the wet lab scientists may be missing or mis-formatted"))
+    }
+  )
+}
+
+index_sheet <- read_sheet(index_sheet_fp, "Index")
+sample_info_sheet <- read_sheet(index_sheet_fp, "Sample Info")
+
 ###############
 # Get run stats
 ###############
@@ -257,120 +371,6 @@ instrument_regex <- case_when(instrument_type == "MiSeq" ~ "M",
 if(!read_length %in% c(76, 151)) {
   stop(simpleError("The read length is not 76 or 151 bp. Check the sample sheet from the sequencing run folder"))
 }
-
-#####################################
-# Load the latest 5 ddPCR run results
-#####################################
-
-failed_regex <- "test|exclude"
-
-ddPCR_files <- list.files(ddPCR_run_fp, pattern = ".*_ww_sequencing_metadata.csv", full.names = TRUE, recursive = TRUE)
-ddPCR_files <- tail(ddPCR_files[!grepl(failed_regex, ddPCR_files)], 100)
-
-ddPCR_data <- ddPCR_files %>%
-  data.frame(FileName = .) %>%
-  group_by(FileName) %>%
-  do(read_delim(.$FileName,
-                col_types = cols("sample_received_date" = col_character(),
-                                 "sample_collect_date" = col_character()))) %>%
-  ungroup() %>%
-  mutate(ddpcr_analysis_date = as.Date(gsub(paste0(ddPCR_run_fp, "/|_.*"), "", FileName)),
-         sample_received_date = as.Date(parse_date_time(sample_received_date, c("ymd", "mdy"))),
-         sample_collect_date = as.Date(parse_date_time(sample_collect_date, c("ymd", "mdy"))),
-         uniq_sample_name = ifelse((is.na(uniq_sample_name) | uniq_sample_name == ""),
-                                   paste(sample_type_acronym, sample_received_date, sample_group, sep = "-"),
-                                   uniq_sample_name)) %>%
-  filter(!is.na(sample_group)) %>%
-  group_by(sample_group, sample_received_date) %>%
-  #get the latest run only
-  filter(ddpcr_analysis_date == max(ddpcr_analysis_date)) %>%
-  ungroup() %>%
-  select(-FileName) %>%
-  unique()
-
-########################################
-# Load the environmental samples, if any
-########################################
-
-env_fp <- max(list.files(here("metadata", "extra_metadata"), pattern = "environmental_samples.csv", full.names = TRUE))
-
-if(!is.na(env_fp)) {
-
-  env_data <- read_csv(env_fp) %>%
-    #use the Tuesday of the sequencing week as the sample_received_date
-    mutate(sample_received_date = as.Date(cut(as.POSIXct(sequencing_date), "week")) + 1) %>%
-    select(uniq_sample_name = sample_name, sample_group = sample_name,
-           sample_received_date, environmental_site) %>%
-    #filter rows where sample_id is NA
-    filter(!is.na(sample_group)) %>%
-    #filter empty columns
-    select(where(function(x) any(!is.na(x))),
-           !matches("^\\.\\.\\."))
-} else{
-
-  env_data <- data.frame(uniq_sample_name = NA_character_,
-                         sample_group = NA_character_,
-                         sample_received_date = NA_character_,
-                         environmental_site = NA_character_)
-}
-
-###################################
-# Load index and sample info sheets
-###################################
-
-index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
-
-if(identical(index_sheet_fp, character(0))) {
-  shared_index_sheet_list <- list.files(file.path(shared_drive_fp, "Sequencing_files", "3_Sample_Sheets", "wastewater", str_sub(sequencing_date, 1, 4)),
-                                        pattern = "sequencing_metadata_sheet", full.names = TRUE) %>%
-    data.frame(files = .) %>%
-    mutate(posted_dates = gsub(".*([0-9-]{8}).*", "\\1", files))
-
-  shared_index_fp <- shared_index_sheet_list %>%
-    filter(grepl(format(as.Date(sequencing_date), format = "%m-%d-%y"), files)) %>%
-    select(files) %>%
-    pull()
-
-  if(identical(shared_index_fp, character(0))) {
-    if(nrow(shared_index_sheet_list) == 0) {
-      stop(simpleError("\nCannot find files in the shared drive\nAre you connected to the shared drive?"))
-    } else {
-      posted_dates <- shared_index_sheet_list %>%
-        tail(5) %>%
-        select(posted_dates) %>%
-        pull() %>%
-        paste0(collapse = "\n")
-
-      stop(simpleError(paste0("\nCannot find the index sheet with the expected date of ", format(as.Date(sequencing_date), format = "%m-%d-%y"),
-                              "\nHere are the dates of the posted index sheets in the shared drive:\n",
-                              posted_dates)))
-    }
-  }
-
-  file.copy(shared_index_fp, here("metadata", "munge"))
-  index_sheet_fp <- list.files(here("metadata", "munge"), pattern = ".xlsx", full.names = TRUE)
-}
-
-read_sheet <- function(fp, sheet_name) {
-  tryCatch(
-    {
-      read_excel(fp, sheet = sheet_name) %>%
-        #filter rows where sample_id is NA
-        filter(!is.na(sample_name)) %>%
-        #filter empty columns
-        select(where(function(x) any(!is.na(x)))) %>%
-        select(!matches("^\\.\\.\\.")) %>%
-        mutate(across(matches("_col$|coord$"), ~ str_replace_all(., "\\d+", function(m) sprintf("%02d", as.numeric(m))))) %>%
-        mutate(plate_coord = gsub("^0", "", plate_coord))
-    },
-    error = function(e) {
-      stop (simpleError("The sample index file from the wet lab scientists may be missing or mis-formatted"))
-    }
-  )
-}
-
-index_sheet <- read_sheet(index_sheet_fp, "Index")
-sample_info_sheet <- read_sheet(index_sheet_fp, "Sample Info")
 
 ####################################
 # Merge index and sample info sheets
