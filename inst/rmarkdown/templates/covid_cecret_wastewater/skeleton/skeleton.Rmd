@@ -194,7 +194,10 @@ for(i in pdf_fp){
   file.copy(i, file.path(copy_to, project_name), overwrite = TRUE)
 }
 
-file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = TRUE, overwrite = TRUE)
+if(!file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = TRUE, overwrite = TRUE)) {
+  stop(paste("Could not copy file to", file.path(copy_to, project_name),
+             "\nMaybe the shared drive is not connected"))
+}
 
 file.copy(here("upload", "lims"), file.path(copy_to, project_name), recursive = TRUE, overwrite = TRUE)
 
