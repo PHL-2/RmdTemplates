@@ -214,7 +214,10 @@ PHI_file_fp <- list.files(here("metadata"), pattern = "_PHI.csv", full.names = T
 copy_to <- file.path(shared_drive_fp, "Sequencing_results", "COVIDSeq", "nasal_swabs")
 dir.create(file.path(copy_to, project_name, "metadata"), recursive = TRUE)
 
-file.copy(PHI_file_fp, file.path(copy_to, project_name, "metadata"), overwrite = TRUE)
+if(!file.copy(PHI_file_fp, file.path(copy_to, project_name, "metadata"), overwrite = TRUE)) {
+  stop(paste("Could not copy file to", file.path(copy_to, project_name, "metadata"),
+             "\nMaybe the shared drive is not connected"))
+}
 
 pdf_fp <- here("output", list.files(here("output"), pattern = ".pdf"))
 for(i in pdf_fp){
