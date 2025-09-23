@@ -172,8 +172,23 @@ cecret_workflow_version <- read_delim(cecret_software_fp, delim = " ", col_names
                               software == "barcode" ~ "freyja-dataset",
                               TRUE ~ software))
 
+nf_profile_software_version <- read_csv(software_version_fp) %>%
+  filter(grepl("kraken2_db|primer_set", software)) %>%
+  unique()
+
+nf_artic_version <- nf_profile_software_version %>%
+  filter(software == "primer_set") %>%
+  select(version) %>%
+  mutate(version = gsub("ncov_", "", version)) %>%
+  pull()
+
+if(nf_artic_version != artic_primer_scheme) {
+    stop(simpleError("The primer_set setting in the Nextflow config file does not match the selected primer set in this RStudio project. Investigate!!"))
+}
+
 bcl_version %>%
   rbind(cecret_workflow_version) %>%
+  rbind(nf_profile_software_version) %>%
   write_csv(file = software_version_fp)
 
 ```
@@ -589,81 +604,6 @@ cecret_aggregate <- here("data", "processed_cecret", "cecret_results.csv") %>%
          nextclade_qc_overallstatus = "nextclade_qc.overallStatus") %>%
   as.data.frame() %>%
   select(-all_of(cecret_software_select))
-
-```
-
-```{r load nextflow cecret profile, eval = import_data}
-
-nf_cecret_profile <- here("data", "processed_cecret", "nextflow.config") %>%
-  read_csv(col_names = FALSE)
-
-profile_write <- data.frame()
-
-open_brack_count <- 0
-record_settings <- FALSE
-record_profile <- FALSE
-
-for(current_line in 1:nrow(nf_cecret_profile)) {
-  
-  if(grepl("^aws \\{$|^docker \\{$", nf_cecret_profile[current_line,])) {
-    open_brack_count <- 0
-    record_settings <- TRUE
-  }
-  
-  if(grepl(paste0("^", cecret_profile, " \\{$"), nf_cecret_profile[current_line,])) {
-    open_brack_count <- 0
-    record_profile <- TRUE
-    profile_write <- rbind(profile_write, data.frame(X1 = "profiles {"))
-  }
-  
-  if(grepl("\\{", nf_cecret_profile[current_line,])) {
-    open_brack_count <- open_brack_count + 1
-  }
-  
-  if(grepl("\\}", nf_cecret_profile[current_line,])) {
-    open_brack_count <- open_brack_count - 1
-  }
-  
-  if(record_settings | record_profile) {
-    if(open_brack_count > 0) {
-      profile_write <- rbind(profile_write, nf_cecret_profile[current_line,])
-    } else if(open_brack_count == 0) {
-      profile_write <- rbind(profile_write, data.frame(X1 = "}"))
-      
-      if(record_profile) {
-        profile_write <- rbind(profile_write, data.frame(X1 = "}"))
-      }
-      
-      record_settings <- FALSE
-      record_profile <- FALSE
-    }
-  }
-}
-  
-profile_write %>%
-  write_csv(file = here("data", paste0(sequencing_date, "_nextflow.config")), col_names = FALSE)
-
-profile_software_version <- profile_write %>%
-  filter(grepl("kraken2_db|primer_set", X1)) %>%
-  separate(col = "X1", into = c("software", "version"), sep = " = ") %>%
-  mutate(pipeline = "UPHL-BioNGS-Cecret",
-         version = gsub("'", "", version),
-         version = gsub("/$", "", version),
-         version = gsub(".*/", "", version)) %>%
-  select(pipeline, software, version)
-
-nf_artic_version <- profile_software_version %>%
-  filter(software == "primer_set") %>%
-  select(version) %>%
-  mutate(version = gsub("ncov_", "", version)) %>%
-  pull()
-
-if(nf_artic_version != artic_primer_scheme) {
-    stop(simpleError("The primer_set setting in the Nextflow config file does not match the selected primer set in this RStudio project. Investigate!!"))
-}
-
-profile_software_version %>%
-  write_csv(file = software_version_fp, append = TRUE)
 
 ```
 
