@@ -38,8 +38,6 @@ tryCatch(
 # Project specific variables
 ############################
 
-
-
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
@@ -48,11 +46,6 @@ if(sequencing_date == "") {
 } else if (is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
   stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
 }
-
-
-#####################################
-# AWS and Nextflow specific variables
-#####################################
 
 # If this sample sheet is missing, get it from AWS S3 bucket
 sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = "SampleSheet_v2.csv")
@@ -63,29 +56,193 @@ if(length(sample_sheet_fn) > 1) {
 
 instrument_type <- gsub("^[0-9-]*_(MiSeq|NextSeq2000)_.*", "\\1", sample_sheet_fn)
 
+# suffix for the screen session log names
+session_suffix <- tolower(paste(instrument_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
+
+# temporary directory to hold the screen log files
+tmp_screen_path <- paste("~", ".tmp_screen", instrument_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
+
 sequencer_regex <- case_when(instrument_type == "MiSeq" ~ "M",
                              instrument_type == "NextSeq2000" ~ "VH")
 
 intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*")
 
-nf_demux_samplesheet_path <- paste(s3_run_bucket, sequencing_date,
-                                   tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, "nf_demux_samplesheet.csv", sep = "_")), sep = "/")
-
-bclconvert_output_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sep = "/")
-
-workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), instrument_type, sep = "/")
-
-# temporary directory to hold the screen log files
-tmp_screen_fp <- paste("~", ".tmp_screen", instrument_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
-
-session_suffix <- tolower(paste(instrument_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
-
-nf_s3_bucket_dir <- paste0(s3_nextflow_work_bucket, "/demux_", sample_type_acronym, "_", sequencing_date)
-
-# temporary directory to hold the sequencing run download
+# temporary directory to hold the sequencing run download on EC2
 ec2_tmp_fp <- "~/tmp_bs_dl"
 
-data_output_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/data")
+data_output_path <- paste0(ec2_tmp_fp, "/", session_suffix, "/data")
+
+#####################################
+# AWS and Nextflow specific variables
+#####################################
+
+nf_headnode_definition <- "nf-headnode"
+
+nf_headnode_script <- paste(s3_aux_files_bucket, "external_scripts", "bash", "batch_create_nf_headnode.sh", sep = "/")
+
+nf_config_fp <- paste(s3_aux_files_bucket, "external_scripts", "nextflow", nf_config_fn, sep = "/")
+
+# S3 paths
+nf_demux_bucket_path <- paste0(s3_nextflow_work_bucket, "/demux_", sample_type_acronym, "_", sequencing_date)
+nf_demux_output_path <- paste(s3_fastq_bucket, sequencing_date, sample_type_acronym, prj_description, "processed_bclconvert", sep = "/")
+
+nf_cecret_bucket_path <- paste0(s3_nextflow_work_bucket, "/cecret_", sample_type_acronym, "_", sequencing_date)
+nf_cecret_output_path <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, paste0(sequencing_date, "_", prj_description), instrument_type, sep = "/")
+
+nf_tag_s3_bucket_path <- paste0(s3_nextflow_work_bucket, "/tag_objects_", sample_type_acronym, "_", sequencing_date)
+
+if(nchar(nf_base_container) == 0 | !is.character(nf_base_container)) {
+  nf_base_container <- "staphb/ivar:1.4.1"
+}
+
+######################################
+# Download and extract nextflow config
+######################################
+
+nextflow_profiles <- list(base = "phl2_main",
+                          demux = "phl2_nfcore_demux",
+                          cecret = paste0("phl2_cecret_", sample_type_acronym))
+
+nf_config <- system2("ssh", c("-tt", ec2_hostname,
+                              shQuote(paste("aws s3 cp", nf_config_fp,
+                                            paste0(ec2_tmp_fp, "/", session_suffix, "/"),
+                                            # add echo to buffer the cat output of the config file
+                                            "&& echo && cat", paste(ec2_tmp_fp, session_suffix, nf_config_fn, sep = "/"), "&& echo"), type = "sh")),
+                     stdout = TRUE, stderr = TRUE) %>%
+  data.frame(stdout = .) %>%
+  # system2 stdout appends a CR at the end of each line that needs to be removed
+  mutate(stdout = gsub("\r$", "", stdout)) %>%
+  filter(stdout != "",
+         !grepl("Completed [0-9]|^Connection to .* closed.", stdout))
+
+profile_write <- data.frame(to_write = character())
+num_profiles_2_record <- length(nextflow_profiles)
+open_brack_count <- 0
+declared_profile <- FALSE
+record_settings <- FALSE
+record_profile <- FALSE
+
+for(current_line in 1:nrow(nf_config)) {
+
+  if(grepl("aws \\{$|docker \\{$", nf_config[current_line,])) {
+    open_brack_count <- 0
+    record_settings <- TRUE
+  }
+
+  if(grepl(paste0(nextflow_profiles, " \\{$", collapse = "|"), nf_config[current_line,])) {
+    open_brack_count <- 0
+    record_profile <- TRUE
+    num_profiles_2_record <- num_profiles_2_record - 1
+
+    if(!declared_profile) {
+      declared_profile <- TRUE
+      profile_write <- rbind(profile_write, data.frame(to_write = "profiles {"))
+    }
+  }
+
+  if(grepl("\\{", nf_config[current_line,])) {
+    open_brack_count <- open_brack_count + 1
+  }
+
+  if(grepl("\\}", nf_config[current_line,])) {
+    open_brack_count <- open_brack_count - 1
+  }
+
+  if(record_settings | record_profile) {
+    if(open_brack_count > 0) {
+      profile_write <- rbind(profile_write, nf_config[current_line,])
+    } else if(open_brack_count == 0) {
+      profile_write <- rbind(profile_write, data.frame(to_write = "}"))
+
+      if(declared_profile & num_profiles_2_record == 0) {
+        profile_write <- rbind(profile_write, data.frame(to_write = "}"))
+        declared_profile <- FALSE
+      }
+
+      record_settings <- FALSE
+      record_profile <- FALSE
+    }
+  }
+}
+
+nf_config_settings <- profile_write %>%
+  filter(!grepl("^\\s+}|^}$", to_write)) %>%
+  mutate(stripped = str_trim(to_write),
+         config_indents = get_indents(to_write),
+         config_indents = factor(config_indents, levels = str_sort(unique(config_indents))),
+         config_indents = paste0("config", as.numeric(config_indents)),
+         row_id = row_number()) %>%
+  select(-to_write) %>%
+  pivot_wider(names_from = "config_indents", values_from = "stripped", values_fill = NA) %>%
+  select(-row_id) %>%
+  t() %>%
+  as.data.frame() %>%
+  fill(everything(), .direction = "down") %>%
+  t() %>%
+  as.data.frame() %>%
+  fill(starts_with("config"), .direction = "down")
+
+aws_region <- nf_config_settings %>%
+  filter(grepl("aws", config1),
+         grepl("region", config2)) %>%
+  select(config2) %>%
+  mutate(config2 = gsub("^.*'([/A-Za-z0-9_-]*)'$", "\\1", config2)) %>%
+  pull()
+
+ami_aws_cli <- nf_config_settings %>%
+  filter(grepl("aws", config1),
+         grepl("batch", config2),
+         grepl("cliPath", config3)) %>%
+  select(config3) %>%
+  mutate(config3 = gsub("^.*'([/A-Za-z0-9_-]*)'$", "\\1", config3)) %>%
+  pull()
+
+jq_list <- nf_config_settings %>%
+  filter(grepl("profiles", config1),
+         grepl("process", config3),
+         grepl("queue", config4)) %>%
+  mutate(config4 = gsub("^.*'([/A-Za-z0-9_-]*)'$", "\\1", config4))
+
+nf_demux_jq <- jq_list %>%
+  filter(grepl(nextflow_profiles$demux, config2)) %>%
+  select(config4) %>%
+  pull()
+
+nf_cecret_jq  <- jq_list %>%
+  filter(grepl(nextflow_profiles$cecret, config2)) %>%
+  select(config4) %>%
+  pull()
+
+nf_general_jq  <- jq_list %>%
+  filter(grepl(nextflow_profiles$base, config2)) %>%
+  select(config4) %>%
+  pull()
+
+nextflow_config_fp <- here("data", paste0(sequencing_date, "_nextflow.config"))
+
+profile_write %>%
+  write_csv(file = nextflow_config_fp, col_names = FALSE, quote = "none")
+
+software_version_fp <- here("data", paste0(sequencing_date, "_software_version.csv"))
+
+nf_profile_software_version <- profile_write %>%
+  filter(grepl("kraken2_db|primer_set", to_write)) %>%
+  separate(col = "to_write", into = c("software", "version"), sep = " = ") %>%
+  mutate(pipeline = "UPHL-BioNGS-Cecret",
+         version = gsub("'", "", version),
+         version = gsub("/$", "", version),
+         version = gsub(".*/", "", version)) %>%
+  select(pipeline, software, version)
+
+nf_profile_software_version %>%
+  write_csv(file = software_version_fp)
+
+################
+# Demultiplexing
+################
+
+nf_demux_samplesheet_path <- paste(s3_run_bucket, sequencing_date,
+                                   tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, "nf_demux_samplesheet.csv", sep = "_")), sep = "/")
 
 # Demultiplexing
 demux_session <- paste0("nf-demux-", session_suffix)
@@ -97,11 +254,11 @@ submit_screen_job(message2display = "Demultiplexing with BCLConvert",
                                       "nextflow run nf-core/demultiplex",
                                       "-c ~/.nextflow/config",
                                       "-profile", demux_profile,
-                                      "-bucket-dir", nf_s3_bucket_dir,
+                                      "-bucket-dir", nf_demux_bucket_path,
                                       "-resume",
                                       "-r 1.3.2",
                                       "--input", nf_demux_samplesheet_path,
-                                      "--outdir", bclconvert_output_path)
+                                      "--outdir", nf_demux_output_path)
 )
 
 check_screen_job(message2display = "Checking BCLConvert job",
@@ -109,7 +266,7 @@ check_screen_job(message2display = "Checking BCLConvert job",
 
 # Checking the demultiplexing results
 aws_s3_fastq_files_bucketdir <- system2("ssh", c("-tt", ec2_hostname,
-                                                 shQuote(paste("aws s3 ls", nf_s3_bucket_dir, "--recursive",
+                                                 shQuote(paste("aws s3 ls", nf_demux_bucket_path, "--recursive",
                                                                "| grep 'R1_001.fastq.gz$'"), type = "sh")),
                                         stdout = TRUE, stderr = TRUE) %>%
   head(-1)
@@ -136,7 +293,7 @@ if(nrow(fastq_file_sizes_bucketdir) > 0) {
   rm_work_bclconvert_session <- paste0("rm-bclconvert-workdir-", session_suffix)
   submit_screen_job(message2display = "Removing empty FASTQ files from working bucket",
                     screen_session_name = rm_work_bclconvert_session,
-                    command2run = paste("aws s3 rm", nf_s3_bucket_dir,
+                    command2run = paste("aws s3 rm", nf_demux_bucket_path,
                                         "--recursive",
                                         "--exclude '*'",
                                         paste0("--include '*", fastq_file_sizes_bucketdir$filename, "*.fastq.gz*'",
@@ -149,7 +306,7 @@ if(nrow(fastq_file_sizes_bucketdir) > 0) {
   rm_out_bclconvert_session <- paste0("rm-bclconvert-outdir-", session_suffix)
   submit_screen_job(message2display = "Removing recently demultiplexed FASTQ files in outdir",
                     screen_session_name = rm_out_bclconvert_session,
-                    command2run = paste("aws s3 rm", bclconvert_output_path,
+                    command2run = paste("aws s3 rm", nf_demux_output_path,
                                         "--recursive",
                                         "--exclude '*'",
                                         paste0("--include '", intended_sequencing_folder_regex, "'"))
@@ -165,8 +322,8 @@ if(nrow(fastq_file_sizes_bucketdir) > 0) {
     write_csv(here("metadata", paste(sequencing_date, prj_description, "initial_samples_no_reads.csv", sep = "_")))
 
   stop(simpleError(paste("Number of samples that had no reads:", nrow(fastq_file_sizes_bucketdir),
-                         "\n\nThese samples are held in", nf_s3_bucket_dir,
-                         "\nand could not be moved to", bclconvert_output_path,
+                         "\n\nThese samples are held in", nf_demux_bucket_path,
+                         "\nand could not be moved to", nf_demux_output_path,
                          "\n\nIf the number of samples that have no reads corresponds to the total number of samples for the sequencing run,",
                          "\nthe wrong barcode index may have been used. Please check that the correct IDT set are used for the barcodes",
                          "\n\nOtherwise, some samples may not have reads even with the correct barcodes used (negative controls or just no DNA present in the sample)",
@@ -175,13 +332,13 @@ if(nrow(fastq_file_sizes_bucketdir) > 0) {
 }
 
 aws_s3_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
-                                       shQuote(paste("aws s3 ls", bclconvert_output_path, "--recursive",
+                                       shQuote(paste("aws s3 ls", nf_demux_output_path, "--recursive",
                                                      "| grep 'R1_001.fastq.gz$'"), type = "sh")),
                               stdout = TRUE, stderr = TRUE) %>%
   head(-1)
 
 if(identical(aws_s3_fastq_files, character(0))) {
-  stop(simpleError(paste("\nSomething went wrong! No FASTQ files found in", bclconvert_output_path)))
+  stop(simpleError(paste("\nSomething went wrong! No FASTQ files found in", nf_demux_output_path)))
 }
 
 fastq_file_sizes <- aws_s3_fastq_files %>%
@@ -205,7 +362,7 @@ fastq_file_sizes <- aws_s3_fastq_files %>%
   ungroup()
 
 if(nrow(fastq_file_sizes) == 0) {
-  stop(simpleError(paste0("\nThere were no FastQ files found at path ", bclconvert_output_path,
+  stop(simpleError(paste0("\nThere were no FastQ files found at path ", nf_demux_output_path,
                           "\nCheck to see if there was an issue with the demultiplexing of the run\n")))
 }
 
@@ -216,7 +373,7 @@ if(any(fastq_file_sizes$bytes <= 23)) {
     filter(!grepl("Undetermined", filename),
            bytes <= 23)
 
-  stop(simpleError(paste("\nThese SampleIDs had no reads in", bclconvert_output_path, "\n",
+  stop(simpleError(paste("\nThese SampleIDs had no reads in", nf_demux_output_path, "\n",
                          paste0("\"", paste0(sample_id_no_reads$filename, collapse = "\", \""), "\""),
                          "\n\nPlease investigate!!")))
 }
@@ -235,8 +392,8 @@ if(remove_undetermined_file) {
   submit_screen_job(message2display = "Moving Undetermined files out of input filepath",
                     screen_session_name = undetermined_mv_session,
                     command2run = paste("aws s3 mv",
-                                        paste(bclconvert_output_path, instrument_run_id, sep = "/"),
-                                        paste(bclconvert_output_path, "Undetermined", instrument_run_id, sep = "/"),
+                                        paste(nf_demux_output_path, instrument_run_id, sep = "/"),
+                                        paste(nf_demux_output_path, "Undetermined", instrument_run_id, sep = "/"),
                                         "--recursive",
                                         "--exclude '*'",
                                         "--include '*Undetermined_S0_*_001.fastq.gz'")
@@ -257,7 +414,7 @@ if(remove_undetermined_file) {
   }
 }
 
-fastq_path <- paste(bclconvert_output_path, instrument_run_id, sep = "/")
+fastq_path <- paste(nf_demux_output_path, instrument_run_id, sep = "/")
 
 # Download most recent Nextclade dataset for lineage assignment
 if (nextclade_dataset_version != "") {
@@ -306,14 +463,14 @@ submit_screen_job(message2display = "Processing data through Cecret pipeline",
                                       "-r", cecret_version,
                                       "-resume",
                                       "--reads", fastq_path,
-                                      "--outdir", paste(workflow_output_fp, "processed_cecret", sep = "/"))
+                                      "--outdir", paste(nf_cecret_output_path, "processed_cecret", sep = "/"))
 )
 
 check_screen_job(message2display = "Checking Cecret job",
                  screen_session_name = cecret_session)
 
 # Download BCLConvert options
-bcl_file_download_command <- c("s3 cp", dirname(bclconvert_output_path))
+bcl_file_download_command <- c("s3 cp", dirname(nf_demux_output_path))
 bcl_file_download_param <- c("--recursive",
                              "--exclude '*'",
                              "--include '*/software_versions.yml'",
@@ -337,7 +494,7 @@ cecret_file_patterns <- c("software_versions.yml",
                           ".depth.txt",
                           "cecret_results.csv")
 
-cecret_file_download_command <- c("s3 cp", workflow_output_fp)
+cecret_file_download_command <- c("s3 cp", nf_cecret_output_path)
 cecret_file_download_param <- c("--recursive", "--exclude '*'",
                                 paste0("--include '*", cecret_file_patterns, collapse = " ", "'"))
 
@@ -345,10 +502,10 @@ cecret_file_download_param <- c("--recursive", "--exclude '*'",
 download_bclconvert_session <- paste0("down-bclconvert-", session_suffix)
 submit_screen_job(message2display = "Downloading BCLConvert data",
                   screen_session_name = download_bclconvert_session,
-                  command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
+                  command2run = paste("mkdir -p", paste0(data_output_path, ";"),
                                       "aws",
                                       paste0(bcl_file_download_command, collapse = " "),
-                                      data_output_fp,
+                                      data_output_path,
                                       paste0(bcl_file_download_param, collapse = " "))
 )
 
@@ -359,10 +516,10 @@ check_screen_job(message2display = "Checking BCLConvert download job",
 download_cecret_session <- paste0("down-cecret-", session_suffix)
 submit_screen_job(message2display = "Downloading Cecret data",
                   screen_session_name = download_cecret_session,
-                  command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
+                  command2run = paste("mkdir -p", paste0(data_output_path, ";"),
                                       "aws",
                                       paste0(cecret_file_download_command, collapse = " "),
-                                      data_output_fp,
+                                      data_output_path,
                                       paste0(cecret_file_download_param, collapse = " "))
 )
 
@@ -370,14 +527,8 @@ check_screen_job(message2display = "Checking Cecret download job",
                  screen_session_name = download_cecret_session)
 
 # Download data from EC2 instance to local
-run_in_terminal(paste("scp -r", paste0(ec2_hostname, ":", data_output_fp),
+run_in_terminal(paste("scp -r", paste0(ec2_hostname, ":", data_output_path),
                       here())
-)
-
-# Download Nextflow config file for profile (use terminal because of proxy login issue)
-# If SSH is not working, copy a nextflow.config from an older run and paste into data/processed_cecret as nextflow.config
-run_in_terminal(paste("scp", paste0(ec2_hostname, ":~/.nextflow/config"),
-                      here("data", "processed_cecret", "nextflow.config"))
 )
 
 # Tag intermediate processed files for deletion after 90 days
@@ -391,7 +542,7 @@ file_patterns_not_tagged <- c(gsub("\\.", "\\\\.", cecret_file_patterns),
                               "_filtered_R[12]\\.fastq\\.gz")
 
 aws_s3_cecret_intermediate_files <- system2("ssh", c("-tt", ec2_hostname,
-                                                     shQuote(paste("aws s3 ls", workflow_output_fp, "--recursive",
+                                                     shQuote(paste("aws s3 ls", nf_cecret_output_path, "--recursive",
                                                                    "| grep -ve", #reverse grep files with these patterns
                                                                    paste0("'", paste0(file_patterns_not_tagged, collapse = "' -e '"), "'")),
                                                              type = "sh")),
