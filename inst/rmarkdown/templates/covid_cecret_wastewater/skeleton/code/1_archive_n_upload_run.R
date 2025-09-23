@@ -31,9 +31,9 @@ tryCatch(
   }
 )
 
-#############
-# Load config
-#############
+###############
+# Load R config
+###############
 
 #this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
@@ -105,16 +105,12 @@ run_in_terminal(paste("scp", tarball_script,
 
 sequencing_tarball_session <- paste0("creating-tarball-", session_suffix)
 submit_screen_job(message2display = "Creating tarball of the sequencing run folder",
-                  ec2_login = ec2_hostname,
                   screen_session_name = sequencing_tarball_session,
-                  screen_log_fp = tmp_screen_fp,
                   command2run = paste("bash", paste0(tmp_screen_fp, "/create-tarball/", basename(tarball_script)),
                                       paste(tarball_script_options, collapse = " "))
 )
 
 check_screen_job(message2display = "Checking tar job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = sequencing_tarball_session,
-                 screen_log_fp = tmp_screen_fp)
+                 screen_session_name = sequencing_tarball_session)
 
 message("\nRscript finished successfully!")

@@ -29,9 +29,9 @@ tryCatch(
   }
 )
 
-#############
-# Load config
-#############
+###############
+# Load R config
+###############
 
 #this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(

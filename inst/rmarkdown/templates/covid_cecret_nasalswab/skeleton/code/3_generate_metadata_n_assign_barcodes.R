@@ -37,9 +37,9 @@ if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(s
   stop(simpleError(paste0("Please use the 'YYYY-MM-DD' format for this RStudio project date. This date should correspond to the desired sequencing run date")))
 }
 
-###################################################
+################
 # Load functions
-###################################################
+################
 
 #this file needs to sit in a [aux_files/r_scripts/functions] directory path above this project directory
 tryCatch(
@@ -51,9 +51,9 @@ tryCatch(
   }
 )
 
-###################################################
-# Load config
-###################################################
+###############
+# Load R config
+###############
 
 #this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
@@ -438,16 +438,12 @@ if(samplesheet_exists) {
   # Download the run from BaseSpace onto a running EC2 instance
   download_bs_sheet_session <- paste0("down-bs-sheet-", session_suffix)
   submit_screen_job(message2display = "Downloading SampleSheet from BaseSpace",
-                    ec2_login = ec2_hostname,
                     screen_session_name = download_bs_sheet_session,
-                    screen_log_fp = tmp_screen_fp,
                     command2run = bs_dl_cmd
   )
 
   check_screen_job(message2display = "Checking BaseSpace download job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = download_bs_sheet_session,
-                   screen_log_fp = tmp_screen_fp)
+                   screen_session_name = download_bs_sheet_session)
 
   # Get name of the final SampleSheet if there is more than 1
   list_sample_sheets <- system2("ssh", c(ec2_hostname,
@@ -891,9 +887,7 @@ run_in_terminal(paste("scp", sample_sheet_fp, nf_demux_samplesheet_fp,
 
 upload_samplesheet_session <- paste0("up-samplesheet-", session_suffix)
 submit_screen_job(message2display = "Uploading sample sheets to S3",
-                  ec2_login = ec2_hostname,
                   screen_session_name = upload_samplesheet_session,
-                  screen_log_fp = tmp_screen_fp,
                   command2run = paste("aws s3 cp",
                                       ec2_tmp_session_dir,
                                       s3_run_bucket_fp,
@@ -904,9 +898,7 @@ submit_screen_job(message2display = "Uploading sample sheets to S3",
 )
 
 check_screen_job(message2display = "Checking sample sheet upload job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = upload_samplesheet_session,
-                 screen_log_fp = tmp_screen_fp)
+                 screen_session_name = upload_samplesheet_session)
 
 ################################
 # Write sheet to metadata folder
