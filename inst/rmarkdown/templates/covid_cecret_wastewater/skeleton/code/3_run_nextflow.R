@@ -6,22 +6,6 @@ library(readr)
 
 #This Rscript submits the relevant jobs to Nextflow once the sequencing run has been uploaded
 
-#########################
-# AWS and sequencing date
-#########################
-
-#sequencing date of the run folder should match the RStudio project date
-sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
-
-# temporary directory to hold the sequencing run download
-ec2_tmp_fp <- "~/tmp_bs_dl"
-
-if(sequencing_date == "") {
-  stop (simpleError(paste0("Please fill in the correct sequencing date or short project description in ", here("code"), "/4_run_nextflow.R")))
-} else if (is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
-  stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
-}
-
 ################
 # Load functions
 ################
@@ -36,9 +20,9 @@ tryCatch(
   }
 )
 
-#############
-# Load config
-#############
+###############
+# Load R config
+###############
 
 #this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
@@ -50,9 +34,24 @@ tryCatch(
   }
 )
 
-#############
-# Submit jobs
-#############
+############################
+# Project specific variables
+############################
+
+
+
+#sequencing date of the run folder should match the RStudio project date
+sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
+
+if(sequencing_date == "") {
+  stop (simpleError(paste0("Please fill in the correct sequencing date or short project description in ", here("code"), "/4_run_nextflow.R")))
+} else if (is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
+  stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
+}
+
+#####################################
+# AWS and Nextflow specific variables
+#####################################
 
 # If this sample sheet is missing, get it from AWS S3 bucket
 sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = "SampleSheet_v2.csv")
@@ -82,15 +81,16 @@ session_suffix <- tolower(paste(instrument_type, sample_type_acronym, pathogen_a
 
 nf_s3_bucket_dir <- paste0(s3_nextflow_work_bucket, "/demux_", sample_type_acronym, "_", sequencing_date)
 
+# temporary directory to hold the sequencing run download
+ec2_tmp_fp <- "~/tmp_bs_dl"
+
 data_output_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/data")
 
 # Demultiplexing
 demux_session <- paste0("nf-demux-", session_suffix)
 demux_session_fp <- paste0(tmp_screen_fp, "/", demux_session, ";")
 submit_screen_job(message2display = "Demultiplexing with BCLConvert",
-                  ec2_login = ec2_hostname,
                   screen_session_name = demux_session,
-                  screen_log_fp = tmp_screen_fp,
                   command2run = paste("mkdir -p", demux_session_fp,
                                       "cd", demux_session_fp,
                                       "nextflow run nf-core/demultiplex",
@@ -104,9 +104,7 @@ submit_screen_job(message2display = "Demultiplexing with BCLConvert",
 )
 
 check_screen_job(message2display = "Checking BCLConvert job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = demux_session,
-                 screen_log_fp = tmp_screen_fp)
+                 screen_session_name = demux_session)
 
 # Checking the demultiplexing results
 aws_s3_fastq_files_bucketdir <- system2("ssh", c("-tt", ec2_hostname,
@@ -137,9 +135,7 @@ if(nrow(fastq_file_sizes_bucketdir) > 0) {
 
   rm_work_bclconvert_session <- paste0("rm-bclconvert-workdir-", session_suffix)
   submit_screen_job(message2display = "Removing empty FASTQ files from working bucket",
-                    ec2_login = ec2_hostname,
                     screen_session_name = rm_work_bclconvert_session,
-                    screen_log_fp = tmp_screen_fp,
                     command2run = paste("aws s3 rm", nf_s3_bucket_dir,
                                         "--recursive",
                                         "--exclude '*'",
@@ -148,15 +144,11 @@ if(nrow(fastq_file_sizes_bucketdir) > 0) {
   )
 
   check_screen_job(message2display = "Checking remove workdir FASTQ job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = rm_work_bclconvert_session,
-                   screen_log_fp = tmp_screen_fp)
+                   screen_session_name = rm_work_bclconvert_session)
 
   rm_out_bclconvert_session <- paste0("rm-bclconvert-outdir-", session_suffix)
   submit_screen_job(message2display = "Removing recently demultiplexed FASTQ files in outdir",
-                    ec2_login = ec2_hostname,
                     screen_session_name = rm_out_bclconvert_session,
-                    screen_log_fp = tmp_screen_fp,
                     command2run = paste("aws s3 rm", bclconvert_output_path,
                                         "--recursive",
                                         "--exclude '*'",
@@ -164,9 +156,7 @@ if(nrow(fastq_file_sizes_bucketdir) > 0) {
   )
 
   check_screen_job(message2display = "Checking remove outdir FASTQ job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = rm_out_bclconvert_session,
-                   screen_log_fp = tmp_screen_fp)
+                   screen_session_name = rm_out_bclconvert_session)
 
   message("\nSampleIDs with no reads: ", paste0("\"", paste0(fastq_file_sizes_bucketdir$filename, collapse = "\", \""), "\"\n"))
 
@@ -244,9 +234,7 @@ if(remove_undetermined_file) {
   # Move the Undetermined file to another bucket path
   undetermined_mv_session <- paste0("undetermined-mv-", session_suffix)
   submit_screen_job(message2display = "Moving Undetermined files out of input filepath",
-                    ec2_login = ec2_hostname,
                     screen_session_name = undetermined_mv_session,
-                    screen_log_fp = tmp_screen_fp,
                     command2run = paste("aws s3 mv",
                                         paste(bclconvert_output_path, instrument_run_id, sep = "/"),
                                         paste(bclconvert_output_path, "Undetermined", instrument_run_id, sep = "/"),
@@ -256,9 +244,7 @@ if(remove_undetermined_file) {
   )
 
   check_screen_job(message2display = "Checking Undetermined move job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = undetermined_mv_session,
-                   screen_log_fp = tmp_screen_fp)
+                   screen_session_name = undetermined_mv_session)
 } else {
   undetermined_bytes <- fastq_file_sizes %>%
     filter(grepl("Undetermined", filename)) %>%
@@ -297,9 +283,7 @@ if(!is_nf_concat_samplesheet_empty) {
 
   # Upload concat fastq samplesheet
   submit_screen_job(message2display = "Uploading samplesheet to S3",
-                    ec2_login = ec2_hostname,
                     screen_session_name = upload_concat_session,
-                    screen_log_fp = tmp_screen_fp,
                     command2run = paste("aws s3 cp",
                                         remote_upload_concat_fp,
                                         paste0(bclconvert_output_path, "/nf_samplesheets/"),
@@ -309,9 +293,7 @@ if(!is_nf_concat_samplesheet_empty) {
   )
 
   check_screen_job(message2display = "Checking samplesheet upload job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = upload_concat_session,
-                   screen_log_fp = tmp_screen_fp)
+                   screen_session_name = upload_concat_session)
 
   # Copy the concat nextflow pipeline to EC2
   concat_session <- paste0("nf-concat-fastq-", session_suffix)
@@ -324,9 +306,7 @@ if(!is_nf_concat_samplesheet_empty) {
 
   # Run nextflow merge fastq file pipeline
   submit_screen_job(message2display = "Concatenating FASTQ files",
-                    ec2_login = ec2_hostname,
                     screen_session_name = concat_session,
-                    screen_log_fp = tmp_screen_fp,
                     command2run = paste("cd", paste0(remote_concat_fp, ";"),
                                         "nextflow run concat_fastq.nf",
                                         "-profile", cecret_profile,
@@ -337,9 +317,7 @@ if(!is_nf_concat_samplesheet_empty) {
   )
 
   check_screen_job(message2display = "Checking concatenating FASTQ job",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = concat_session,
-                   screen_log_fp = tmp_screen_fp)
+                   screen_session_name = concat_session)
 
   # Checking the merged file sizes
   aws_s3_merged_fastq_files <- system2("ssh", c("-tt", ec2_hostname,
@@ -392,9 +370,7 @@ if (nextclade_dataset_version != "") {
 
 update_nextclade_session <- paste0("update-nextclade-", session_suffix)
 submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
-                  ec2_login = ec2_hostname,
                   screen_session_name = update_nextclade_session,
-                  screen_log_fp = tmp_screen_fp,
                   command2run = paste("mkdir -p ~/.local/bin/;",
                                       "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ~/.local/bin/nextclade;",
                                       "chmod +x ~/.local/bin/nextclade;",
@@ -405,33 +381,25 @@ submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
 )
 
 check_screen_job(message2display = "Checking Nextclade download job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = update_nextclade_session,
-                 screen_log_fp = tmp_screen_fp)
+                 screen_session_name = update_nextclade_session)
 
 # Update the Cecret pipeline? Not always necessary if using a stable version
 if(update_freyja_and_cecret_pipeline) {
   update_cecret_session <- paste0("update-cecret-", session_suffix)
   submit_screen_job(message2display = "Updating Cecret pipeline",
-                    ec2_login = ec2_hostname,
                     screen_session_name = update_cecret_session,
-                    screen_log_fp = tmp_screen_fp,
                     command2run = "nextflow pull UPHL-BioNGS/Cecret -r master"
   )
 
   check_screen_job(message2display = "Checking Cecret update",
-                   ec2_login = ec2_hostname,
-                   screen_session_name = update_cecret_session,
-                   screen_log_fp = tmp_screen_fp)
+                   screen_session_name = update_cecret_session)
 }
 
 # Cecret pipeline
 cecret_session <- paste0("nf-cecret-", session_suffix)
 cecret_session_fp <- paste0(tmp_screen_fp, "/", cecret_session, ";")
 submit_screen_job(message2display = "Processing data through Cecret pipeline",
-                  ec2_login = ec2_hostname,
                   screen_session_name = cecret_session,
-                  screen_log_fp = tmp_screen_fp,
                   command2run = paste("mkdir -p", cecret_session_fp,
                                       "cd", cecret_session_fp,
                                       "nextflow run UPHL-BioNGS/Cecret",
@@ -444,9 +412,7 @@ submit_screen_job(message2display = "Processing data through Cecret pipeline",
 )
 
 check_screen_job(message2display = "Checking Cecret job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = cecret_session,
-                 screen_log_fp = tmp_screen_fp)
+                 screen_session_name = cecret_session)
 
 # Download BCLConvert options
 bcl_file_download_command <- c("s3 cp", dirname(bclconvert_output_path))
@@ -480,9 +446,7 @@ cecret_file_download_param <- c("--recursive", "--exclude '*'",
 # Download BCLConvert data
 download_bclconvert_session <- paste0("down-bclconvert-", session_suffix)
 submit_screen_job(message2display = "Downloading BCLConvert data",
-                  ec2_login = ec2_hostname,
                   screen_session_name = download_bclconvert_session,
-                  screen_log_fp = tmp_screen_fp,
                   command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
                                       "aws",
                                       paste0(bcl_file_download_command, collapse = " "),
@@ -491,16 +455,12 @@ submit_screen_job(message2display = "Downloading BCLConvert data",
 )
 
 check_screen_job(message2display = "Checking BCLConvert download job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = download_bclconvert_session,
-                 screen_log_fp = tmp_screen_fp)
+                 screen_session_name = download_bclconvert_session)
 
 # Download Cecret data
 download_cecret_session <- paste0("down-cecret-", session_suffix)
 submit_screen_job(message2display = "Downloading Cecret data",
-                  ec2_login = ec2_hostname,
                   screen_session_name = download_cecret_session,
-                  screen_log_fp = tmp_screen_fp,
                   command2run = paste("mkdir -p", paste0(data_output_fp, ";"),
                                       "aws",
                                       paste0(cecret_file_download_command, collapse = " "),
@@ -509,9 +469,7 @@ submit_screen_job(message2display = "Downloading Cecret data",
 )
 
 check_screen_job(message2display = "Checking Cecret download job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = download_cecret_session,
-                 screen_log_fp = tmp_screen_fp)
+                 screen_session_name = download_cecret_session)
 
 # Download data from EC2 instance to local
 run_in_terminal(paste("scp -r", paste0(ec2_hostname, ":", data_output_fp),
@@ -575,9 +533,7 @@ if(identical(aws_s3_cecret_intermediate_files, character(0))) {
 
   # Run nextflow tag objects pipeline
   submit_screen_job(message2display = "Tagging S3 objects for eventual removal",
-                    ec2_login = ec2_hostname,
                     screen_session_name = tag_s3_session,
-                    screen_log_fp = tmp_screen_fp,
                     command2run = paste("cd", paste0(remote_tag_fp, ";"),
                                         "nextflow run tag_s3_objects.nf",
                                         "-bucket-dir", paste0(s3_nextflow_work_bucket, "/tag_objects_", sample_type_acronym, "_", sequencing_date),
@@ -589,17 +545,13 @@ if(identical(aws_s3_cecret_intermediate_files, character(0))) {
   )
 
   # check_screen_job(message2display = "Checking S3 tagging job",
-  #                  ec2_login = ec2_hostname,
-  #                  screen_session_name = tag_s3_session,
-  #                  screen_log_fp = tmp_screen_fp)
+  #                  screen_session_name = tag_s3_session)
 }
 
 # Clean up environment
 clean_tmp_session <- paste0("clean-tmp-", session_suffix)
 submit_screen_job(message2display = "Cleaning up run from temporary folder",
-                  ec2_login = ec2_hostname,
                   screen_session_name = clean_tmp_session,
-                  screen_log_fp = tmp_screen_fp,
                   command2run = paste("rm -rf",
                                       paste0(ec2_tmp_fp, "/", session_suffix, "/;"),
                                       "echo 'Here are the files in the tmp directory:';",
@@ -607,8 +559,6 @@ submit_screen_job(message2display = "Cleaning up run from temporary folder",
 )
 
 check_screen_job(message2display = "Checking delete job",
-                 ec2_login = ec2_hostname,
-                 screen_session_name = clean_tmp_session,
-                 screen_log_fp = tmp_screen_fp)
+                 screen_session_name = clean_tmp_session)
 
 message("\nRscript finished successfully!")
