@@ -1,3 +1,5 @@
+nextflow.enable.dsl=2
+
 if (!params.concat_samplesheet) {
   exit 1, 'Concatenating input samplesheet file not found!'
 }
@@ -21,8 +23,8 @@ def create_fastq_channel(LinkedHashMap row) {
 }
 
 process concat_fastq {
-    publishDir path: "${params.s3_outdir}", mode: 'copy', overwrite: true
-    container 'staphb/multiqc:1.19'
+    publishDir path: "${params.s3_outdir}", mode: 'copy'
+    container "${params.use_container}"
 
     input:
     tuple val(meta), path(reads, stageAs: "input*/*")
