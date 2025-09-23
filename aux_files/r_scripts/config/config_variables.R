@@ -20,6 +20,8 @@ s3_nextflow_output_bucket <- "s3://"
 s3_nextflow_work_bucket <- "s3://"
 # s3 bucket holding reference data files
 s3_reference_bucket <- "s3://"
+# s3 bucket holding external scripts
+s3_aux_files_bucket <- "s3://aux-files"
 
 ##################
 # AWS EC2 settings
@@ -40,9 +42,12 @@ miseq_hostname <- ""
 # Nextflow settings
 ###################
 
-# Nextflow profiles to use for the demultiplexing and Cecret pipelines (should be defined in the .nextflow/config file)
-demux_profile <- ""
-cecret_profile <- ""
+# Nextflow config file name that should be deposited at [s3_aux_files_bucket]/external_scripts/nextflow/
+# This file contains the Nextflow profiles to use for the demultiplexing and Cecret pipelines
+nf_config_fn <- "config"
+
+# AWS ECR container to use for nextflow headnode and other processes
+nf_base_container <- "123456789.dkr.ecr.[aws-region].amazonaws.com/image:version"
 
 ####################
 # GISAID credentials
