@@ -197,7 +197,7 @@ run_in_terminal <- function(command2run = "", command2print = "") {
 submit_screen_job <- function(message2display = "Running function to submit screen job",
                               ec2_login = ec2_hostname, # variable defined in R config file
                               screen_session_name = "",
-                              screen_log_fp = "~/.tmp_screen",
+                              screen_log_fp = tmp_screen_fp, # variable defined in running Rscript
                               command2run = "",
                               window_height = 40,
                               window_length = 120) {
@@ -236,7 +236,8 @@ submit_screen_job <- function(message2display = "Running function to submit scre
 check_screen_job <- function(message2display = "Running function to check screen job",
                              ec2_login = ec2_hostname, # variable defined in R config file
                              screen_session_name = "",
-                             screen_log_fp = "~/.tmp_screen") {
+                             # screen_log_fp is defined in the running Rscript
+                             screen_log_fp = tmp_screen_fp) {
 
   if(is.na(screen_session_name)) {
     stop(simpleError("screen_session_name cannot be NA"))
