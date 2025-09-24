@@ -204,6 +204,19 @@ if(nrow(PHL_data) > 0) {
     as.data.frame()
 }
 
+if(any(grepl("Unknown", PHL_data$gender)) | any(is.na(PHL_data$host_age_bin))) {
+
+  missing_meta <- PHL_data %>%
+    filter(grepl("Unknown", gender) | is.na(host_age_bin)) %>%
+    select(sample_name) %>%
+    pull()
+
+  stop(simpleError(paste("Something might be wrong with the metadata. All the patient ages and genders should be present\n",
+                         "Please fill in the missing information age or gender information\n",
+                         "Sample(s) in question:\n",
+                         paste0(missing_meta, collapse = ", "))))
+}
+
 ###################################################################################
 # Load the metadata sheet from epidemiologists and merge with sample metadata sheet
 # Make sure these sheets are not uploaded to GitHub
@@ -675,7 +688,6 @@ if(ncol(epi_sample_not_found > 0)) {
 
     stop(simpleError(paste0(epi_sample_not_found, collapse = ", ")))
   }
-
 }
 
 missing_metadata_non_ctrl_samples <- metadata_sheet %>%
