@@ -121,7 +121,7 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
           Process = droplevels(factor(Process, level = c("Concentrated", "Unconcentrated", "Non-processed", "Unspiked","Dilution", "Frozen", "QuickExtract"))),
           `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
           Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
-          Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d")),
+          Sample_date = as.Date(parse_date_time(Sample_date, orders = c("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d"))),
           SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType)
     )
 } else {
@@ -154,7 +154,7 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
           Process = droplevels(factor(Process, level = c("Concentrated", "Unconcentrated", "Non-processed", "Unspiked","Dilution", "Frozen", "QuickExtract"))),
           `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
           Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
-          Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d")),
+          Sample_date = as.Date(parse_date_time(Sample_date, orders = c("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d"))),
           SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType)
     )
 }
