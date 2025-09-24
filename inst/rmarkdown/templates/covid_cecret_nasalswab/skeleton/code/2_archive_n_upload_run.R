@@ -67,7 +67,7 @@ tmp_screen_fp <- paste("~", ".tmp_screen", selected_sequencer_type, paste0(sampl
 
 session_suffix <- tolower(paste(selected_sequencer_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
 
-tarball_script <- file.path(dirname(here()), "aux_files", "external_scripts", "bash", "create_tarball.sh")
+tarball_script <- paste(s3_aux_files_bucket, "external_scripts", "bash", "create_tarball.sh", sep = "/")
 
 tarball_script_options <- c("-t", ec2_tmp_fp,
                             "-i", selected_sequencer_type,
@@ -97,11 +97,9 @@ if(is.null(check_run_on_s3)) {
 }
 
 message("\nRun on S3 not found. Continuing to create tarball")
-mk_remote_dir(ec2_hostname, paste0(tmp_screen_fp, "/create-tarball"))
-
-run_in_terminal(paste("scp", tarball_script,
-                      paste0(ec2_hostname, ":", paste0(tmp_screen_fp, "/create-tarball")))
-)
+system2("ssh", c("-tt", ec2_hostname,
+                 shQuote(paste("aws s3 cp", tarball_script, paste0(tmp_screen_fp, "/create-tarball/")), type = "sh")),
+        stdout = TRUE, stderr = TRUE)
 
 sequencing_tarball_session <- paste0("creating-tarball-", session_suffix)
 submit_screen_job(message2display = "Creating tarball of the sequencing run folder",
