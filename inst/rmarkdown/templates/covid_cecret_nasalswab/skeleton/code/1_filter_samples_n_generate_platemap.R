@@ -173,6 +173,19 @@ if(ncol(PHL_data) == 1) {
                            "\nSample(s) in question:", paste0(non_positive_PHL_results[, "SPECIMEN_NUMBER"], collapse = ", "), sep = "\n")))
   }
 
+  if(any(c(is.na(PHL_data$GENDER) | PHL_data$GENDER == "" | is.na(PHL_data$age) | PHL_data$age == ""), na.rm = TRUE)) {
+
+    missing_meta <- PHL_data %>%
+      filter(is.na(GENDER) | GENDER == "" | is.na(age) | age == "") %>%
+      select(sample_name) %>%
+      pull()
+
+    stop(simpleError(paste("Something might be wrong with the metadata. All the patient ages and genders should be present\n",
+                           "Please fill in the missing information age or gender information\n",
+                           "Sample(s) in question:\n",
+                           paste0(missing_meta, collapse = ", "))))
+  }
+
   show_samps <- TRUE
 }
 
