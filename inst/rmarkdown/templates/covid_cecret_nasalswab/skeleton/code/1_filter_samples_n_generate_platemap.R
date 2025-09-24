@@ -177,11 +177,11 @@ if(ncol(PHL_data) == 1) {
 
     missing_meta <- PHL_data %>%
       filter(is.na(GENDER) | GENDER == "" | is.na(age) | age == "") %>%
-      select(sample_name) %>%
+      select(SPECIMEN_NUMBER) %>%
       pull()
 
-    stop(simpleError(paste("Something might be wrong with the metadata. All the patient ages and genders should be present\n",
-                           "Please fill in the missing information age or gender information\n",
+    stop(simpleError(paste("Some samples are missing patient age or gender\n",
+                           "Please fill in the missing information\n",
                            "Sample(s) in question:\n",
                            paste0(missing_meta, collapse = ", "))))
   }
