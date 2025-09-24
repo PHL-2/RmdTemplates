@@ -63,7 +63,7 @@ sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_patte
 s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
 # temporary directory to hold the screen log files
-tmp_screen_fp <- paste("~", ".tmp_screen", selected_sequencer_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
+tmp_screen_path <- paste("~", ".tmp_screen", selected_sequencer_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
 
 session_suffix <- tolower(paste(selected_sequencer_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
 
@@ -98,13 +98,13 @@ if(is.null(check_run_on_s3)) {
 
 message("\nRun on S3 not found. Continuing to create tarball")
 system2("ssh", c("-tt", ec2_hostname,
-                 shQuote(paste("aws s3 cp", tarball_script, paste0(tmp_screen_fp, "/create-tarball/")), type = "sh")),
+                 shQuote(paste("aws s3 cp", tarball_script, paste0(tmp_screen_path, "/bash_scripts/")), type = "sh")),
         stdout = TRUE, stderr = TRUE)
 
 sequencing_tarball_session <- paste0("creating-tarball-", session_suffix)
 submit_screen_job(message2display = "Creating tarball of the sequencing run folder",
                   screen_session_name = sequencing_tarball_session,
-                  command2run = paste("bash", paste0(tmp_screen_fp, "/create-tarball/", basename(tarball_script)),
+                  command2run = paste("bash", paste0(tmp_screen_path, "/bash_scripts/", basename(tarball_script)),
                                       paste(tarball_script_options, collapse = " "))
 )
 

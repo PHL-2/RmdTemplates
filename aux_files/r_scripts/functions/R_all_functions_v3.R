@@ -197,7 +197,7 @@ run_in_terminal <- function(command2run = "", command2print = "") {
 submit_screen_job <- function(message2display = "Running function to submit screen job",
                               ec2_login = ec2_hostname, # variable defined in R config file
                               screen_session_name = "",
-                              screen_log_fp = tmp_screen_fp, # variable defined in running Rscript
+                              screen_log_fp = tmp_screen_path, # variable defined in running Rscript
                               command2run = "",
                               window_height = 40,
                               window_length = 120) {
@@ -236,8 +236,8 @@ submit_screen_job <- function(message2display = "Running function to submit scre
 check_screen_job <- function(message2display = "Running function to check screen job",
                              ec2_login = ec2_hostname, # variable defined in R config file
                              screen_session_name = "",
-                             # screen_log_fp is defined in the running Rscript
-                             screen_log_fp = tmp_screen_fp) {
+                             # tmp_screen_path is defined in the running Rscript
+                             screen_log_fp = tmp_screen_path) {
 
   if(is.na(screen_session_name)) {
     stop(simpleError("screen_session_name cannot be NA"))
@@ -316,14 +316,12 @@ nf_headnode_screen_job <- function(batch_job_queue,
                                                "'")
   )
 
-  session_path <- paste0(tmp_screen_path, "/", screen_job_arg$screen_session_name)
-
   submit_screen_job(message2display = screen_job_arg$message2display,
                     screen_session_name = screen_job_arg$screen_session_name,
                     window_height = window_height,
                     window_length = window_length,
-                    command2run = paste("aws s3 cp", batch_script, paste0(session_path, "/"), "--only-show-errors;",
-                                        "cd", session_path, "&&",
+                    command2run = paste("aws s3 cp", batch_script, paste0(tmp_screen_path, "/bash_scripts/"), "--only-show-errors;",
+                                        "cd", paste0(tmp_screen_path, "/bash_scripts/"), "&&",
                                         "bash", basename(batch_script),
                                         paste(nf_headnode_script_options, collapse = " ")))
 
