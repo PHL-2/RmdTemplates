@@ -821,7 +821,7 @@ seqsender <- s_toPlot %>%
          collection_year = format(collection_date, format = "%Y"),
          #GISAID name format needs to be hCoV-19/country/state-[sample_id without a year]/sample collection year (collection year may be different from sequence year)
          `gs-sample_name` = paste0("hCoV-19/USA/PA-", gsub(str_sub(project_name, 1, 4), "", sequence_name), "/", collection_year),
-         `gs-covv_gender` = ifelse(is.na(gender)|`gs-covv_orig_lab` == "Temple University", "Unknown", gender),
+         `gs-covv_sex` = ifelse(is.na(gender)|`gs-covv_orig_lab` == "Temple University", "Unknown", gender),
          `gs-covv_patient_age` = ifelse(is.na(host_age_bin)|`gs-covv_orig_lab` == "Temple University", "Unknown", host_age_bin),
          `gs-covv_seq_technology` = case_when(instrument_type == "MiSeq" ~ "Illumina MiSeq",
                                               instrument_type == "NextSeq2000" ~ "Illumina NextSeq 2000",
@@ -849,7 +849,7 @@ seqsender <- s_toPlot %>%
          `bs2-isolate` = `bs1-sample_name`,
          `bs3-isolation_source` = `gs-covv_specimen`,
          `bs4-host` = host_scientific_name,
-         `bs5-host_sex` = ifelse(`gs-covv_gender` == "Unknown", "Not provided", `gs-covv_gender`),
+         `bs5-host_sex` = ifelse(`gs-covv_sex` == "Unknown", "Not provided", `gs-covv_sex`),
          `bs6-host_age` = ifelse(`gs-covv_patient_age` == "Unknown", "Not provided", `gs-covv_patient_age`),
          `bs7-host_disease` = host_disease,
          #bs8-geo_loc_name

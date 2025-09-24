@@ -1086,7 +1086,7 @@ if(nrow(seqsender) != 0 & sample_collect_date_found) {
            #gs-covv_location
            #gs-covv_add_location
            #gs-covv_host
-           #gs-covv_gender
+           #gs-covv_sex
            #gs-covv_patient_age
            #gs-covv_patient_status
            #gs-covv_specimen
