@@ -223,8 +223,6 @@ nextflow_config_fp <- here("data", paste0(sequencing_date, "_nextflow.config"))
 profile_write %>%
   write_csv(file = nextflow_config_fp, col_names = FALSE, quote = "none")
 
-software_version_fp <- here("data", paste0(sequencing_date, "_software_version.csv"))
-
 nf_profile_software_version <- profile_write %>%
   filter(grepl("kraken2_db|primer_set", to_write)) %>%
   separate(col = "to_write", into = c("software", "version"), sep = " = ") %>%
@@ -234,8 +232,13 @@ nf_profile_software_version <- profile_write %>%
          version = gsub(".*/", "", version)) %>%
   select(pipeline, software, version)
 
-nf_profile_software_version %>%
-  write_csv(file = software_version_fp)
+software_version_fp <- here("data", paste0(sequencing_date, "_software_version.csv"))
+
+# Don't overwrite the software version file, if it exists
+if(!file.exists(run_samplesheet_fp)) {
+  nf_profile_software_version %>%
+    write_csv(file = software_version_fp)
+}
 
 #######################################
 # Demultiplex run and check FASTQ files
