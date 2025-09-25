@@ -827,7 +827,7 @@ seqsender <- s_toPlot %>%
                                               instrument_type == "NextSeq2000" ~ "Illumina NextSeq 2000",
                                               TRUE ~ NA_character_),
          `gs-covv_assembly_method` = paste0("UPHL-BioNGS Cecret ", software_version$Cecret),
-         `gs-covv_orig_lab_addr` = case_when(`gs-covv_orig_lab` == "Philadelphia Department of Public Health" ~ "1930 South Broad Street, Philadelphia, PA 19145, USA",
+         `gs-covv_orig_lab_addr` = case_when(`gs-covv_orig_lab` == "Philadelphia Department of Public Health" ~ "1101 Market Street, Floor 13, Philadelphia, PA 19107, USA",
                                              `gs-covv_orig_lab` == "Temple University" ~ "1801 North Broad Street, Philadelphia, PA 19122, USA",
                                              TRUE ~ "Unknown"),
          `gs-covv_subm_sample_id` = sequence_name,
