@@ -235,7 +235,7 @@ nf_profile_software_version <- profile_write %>%
 software_version_fp <- here("data", paste0(sequencing_date, "_software_version.csv"))
 
 # Don't overwrite the software version file, if it exists
-if(!file.exists(run_samplesheet_fp)) {
+if(!file.exists(software_version_fp)) {
   nf_profile_software_version %>%
     write_csv(file = software_version_fp)
 }
