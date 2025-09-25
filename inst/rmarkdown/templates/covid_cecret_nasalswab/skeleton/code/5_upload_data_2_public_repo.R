@@ -365,7 +365,7 @@ ssh_seqsender_cmd("submit --biosample --sra")
 ssh_seqsender_cmd("submit --genbank")
 
 #download submission file
-download_submission_log <- system2("scp", c(paste0(ec2_hostname, ":", submission_path, "/submission_log.csv"), here()))
+download_submission_log <- system2("scp", c(paste0(ec2_hostname, ":", ec2_home_fp, "/", submission_path, "/submission_log.csv"), here()))
 ssh_command_check(download_submission_log)
 
 new_submission_log <- read_csv(here("submission_log.csv")) %>%
