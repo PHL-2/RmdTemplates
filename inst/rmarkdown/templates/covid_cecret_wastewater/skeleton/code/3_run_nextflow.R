@@ -101,7 +101,7 @@ if(nchar(nf_base_container) == 0 | !is.character(nf_base_container)) {
 
 nextflow_profiles <- list(base = "phl2_main",
                           demux = "phl2_nfcore_demux",
-                          cecret = paste0("phl2_cecret_", sample_type_acronym))
+                          cecret = tolower(paste0("phl2_cecret_", sample_type_acronym)))
 
 nf_config <- system2("ssh", c("-tt", ec2_hostname,
                               shQuote(paste("aws s3 cp", nf_config_fp,
