@@ -160,7 +160,10 @@ if [[ "$register_job_def" == "false" && "$describe_job_def" == "false" ]]; then
       --query 'jobs[0].container.logStreamName' --output text)
     if [[ "$LOG_STREAM" != "None" ]]; then
       echo -e "\nLog stream: $LOG_STREAM"
-      sleep 20
+      sleep 10
+      echo -e "If you need more information about the job, run the following command:\n"
+      echo -e "\033[31maws logs tail /aws/batch/job --log-stream-names $LOG_STREAM --since 6000s --format short\033[0m\n\n"
+      sleep 10
       break
     fi
     echo -ne "\rWaiting for headnode to start up..."
@@ -203,7 +206,7 @@ if [[ "$register_job_def" == "false" && "$describe_job_def" == "false" ]]; then
       echo -e "\nJob finished with status: $STATUS"
       exit 1
     fi
-  
+
     sleep 55
   done
 fi
