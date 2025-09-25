@@ -317,10 +317,6 @@ if(nrow(fastq_file_sizes_bucketdir) > 0) {
 
   message("\nSampleIDs with no reads: ", paste0("\"", paste0(fastq_file_sizes_bucketdir$filename, collapse = "\", \""), "\"\n"))
 
-  fastq_file_sizes_bucketdir %>%
-    select(sample_id = filename) %>%
-    write_csv(here("metadata", paste(sequencing_date, prj_description, "initial_samples_no_reads.csv", sep = "_")))
-
   stop(simpleError(paste("Number of samples that had no reads:", nrow(fastq_file_sizes_bucketdir),
                          "\n\nThese samples are held in", nf_demux_bucket_path,
                          "\nand could not be moved to", nf_demux_output_path,
@@ -421,7 +417,7 @@ fastq_path <- paste(nf_demux_output_path, instrument_run_id, sep = "/")
 # Wastewater-specific workflow: concat replicate fastq files to make merged fastq
 #################################################################################
 
-nf_concat_sample_sheet_pattern <- "nf_concat_fastq_samplesheet.csv"
+nf_concat_fastq_samplesheet_pattern <- "nf_concat_fastq_samplesheet.csv"
 
 local_concat_samplesheet_fp <- here("metadata", "munge",
                                     tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, nf_concat_fastq_samplesheet_pattern, sep = "_")))
