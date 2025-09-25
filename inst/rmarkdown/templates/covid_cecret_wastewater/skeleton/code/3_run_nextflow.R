@@ -241,7 +241,7 @@ nf_profile_software_version %>%
 # Demultiplex run and check FASTQ files
 #######################################
 
-nf_demux_samplesheet_path <- paste(s3_run_bucket, sequencing_date,
+nf_demux_samplesheet_fp <- paste(s3_run_bucket, sequencing_date,
                                    tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, "nf_demux_samplesheet.csv", sep = "_")), sep = "/")
 
 demux_session <- paste0("nf-demux-", session_suffix)
