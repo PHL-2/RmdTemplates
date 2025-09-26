@@ -59,18 +59,18 @@ instrument_type <- gsub("^[0-9-]*_(MiSeq|NextSeq2000)_.*", "\\1", sample_sheet_f
 # suffix for the screen session log names
 session_suffix <- tolower(paste(instrument_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
 
-# temporary directory to hold the screen log files
-tmp_screen_path <- paste("~", ".tmp_screen", instrument_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
-
 sequencer_regex <- case_when(instrument_type == "MiSeq" ~ "M",
                              instrument_type == "NextSeq2000" ~ "VH")
 
 intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*")
 
-# temporary directory to hold the sequencing run download on EC2
-ec2_tmp_fp <- "~/tmp_bs_dl"
+# temporary directory to hold the screen log files and files for uploading
+tmp_screen_path <- paste("~", ".tmp_screen", instrument_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
+staging_path <- paste0(tmp_screen_path, "/staging/")
 
-data_output_path <- paste0(ec2_tmp_fp, "/", session_suffix, "/data")
+# temporary directory to hold the sequencing run download on EC2
+ec2_tmp_fp <- "~/tmp_bs_dl/"
+data_output_path <- paste0(ec2_tmp_fp, session_suffix, "/data/")
 
 #####################################
 # AWS and Nextflow specific variables
@@ -105,9 +105,9 @@ nextflow_profiles <- list(base = "phl2_main",
 
 nf_config <- system2("ssh", c("-tt", ec2_hostname,
                               shQuote(paste("aws s3 cp", nf_config_fp,
-                                            paste0(ec2_tmp_fp, "/", session_suffix, "/"),
+                                            staging_path,
                                             # add echo to buffer the cat output of the config file
-                                            "&& echo && cat", paste(ec2_tmp_fp, session_suffix, nf_config_fn, sep = "/"), "&& echo"), type = "sh")),
+                                            "&& echo && cat", paste0(staging_path, nf_config_fn), "&& echo"), type = "sh")),
                      stdout = TRUE, stderr = TRUE) %>%
   data.frame(stdout = .) %>%
   # system2 stdout appends a CR at the end of each line that needs to be removed
@@ -425,12 +425,10 @@ if (nextclade_dataset_version != "") {
 }
 
 update_nextclade_session <- paste0("update-nextclade-", session_suffix)
-update_nextclade_session_path <- paste(tmp_screen_path, update_nextclade_session, sep = "/")
-mk_remote_dir(ec2_hostname, update_nextclade_session_path)
 
 submit_screen_job(message2display = "Downloading Nextclade SARS-CoV-2 data",
                   screen_session_name = update_nextclade_session,
-                  command2run = paste("cd", paste0(update_nextclade_session_path, ";"),
+                  command2run = paste("cd", paste0(staging_path, ";"),
                                       "wget -q https://github.com/nextstrain/nextclade/releases/latest/download/nextclade-x86_64-unknown-linux-gnu -O ./nextclade;",
                                       "chmod +x ./nextclade;",
                                       "./nextclade --version;",
@@ -502,9 +500,7 @@ cecret_file_download_param <- c("--recursive", "--exclude '*'",
 download_bclconvert_session <- paste0("down-bclconvert-", session_suffix)
 submit_screen_job(message2display = "Downloading BCLConvert data",
                   screen_session_name = download_bclconvert_session,
-                  command2run = paste("mkdir -p", paste0(data_output_path, ";"),
-                                      "aws s3 cp",
-                                      dirname(nf_demux_output_path),
+                  command2run = paste("aws s3 cp", dirname(nf_demux_output_path),
                                       data_output_path,
                                       paste0(bcl_file_download_param, collapse = " "))
 )
@@ -516,8 +512,7 @@ check_screen_job(message2display = "Checking BCLConvert download job",
 download_cecret_session <- paste0("down-cecret-", session_suffix)
 submit_screen_job(message2display = "Downloading Cecret data",
                   screen_session_name = download_cecret_session,
-                  command2run = paste("mkdir -p", paste0(data_output_path, ";"),
-                                      "aws s3 cp", nf_cecret_output_path,
+                  command2run = paste("aws s3 cp", nf_cecret_output_path,
                                       data_output_path,
                                       paste0(cecret_file_download_param, collapse = " "))
 )
@@ -619,7 +614,7 @@ clean_tmp_session <- paste0("clean-tmp-", session_suffix)
 submit_screen_job(message2display = "Cleaning up run from temporary folder",
                   screen_session_name = clean_tmp_session,
                   command2run = paste("rm -rf",
-                                      paste0(ec2_tmp_fp, "/", session_suffix, "/;"),
+                                      paste0(ec2_tmp_fp, session_suffix, "/;"),
                                       "echo 'Here are the files in the tmp directory:';",
                                       "ls", ec2_tmp_fp)
 )
