@@ -436,7 +436,7 @@ if(!is_nf_concat_samplesheet_empty) {
   upload_concat_session <- paste0("up-concat-", session_suffix)
 
   # Transfer sample sheet
-  run_in_terminal(paste("scp", local_concat_samplesheet_fp, staging_path))
+  run_in_terminal(paste("scp", local_concat_samplesheet_fp, paste0(ec2_hostname, ":", staging_path)))
 
   # Upload concat fastq samplesheet
   submit_screen_job(message2display = "Uploading samplesheet to S3",
