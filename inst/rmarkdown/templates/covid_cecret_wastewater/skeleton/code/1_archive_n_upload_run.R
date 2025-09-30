@@ -45,39 +45,39 @@ if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(s
 yymmdd <- gsub("^..|-", "", sequencing_date)
 seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
 
-selected_sequencer_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
+instrument_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
 
 #these Rscripts don't account for two runs that have the same sample types, processed on the same date, on both machines, and the samples need to be processed through the same pipeline
-sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
-                             selected_sequencer_type == "NextSeq2000" ~ "VH")
+sequencer_regex <- case_when(instrument_type == "MiSeq" ~ "M",
+                             instrument_type == "NextSeq2000" ~ "VH")
 
 sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern)
 
-session_suffix <- tolower(paste(selected_sequencer_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
+session_suffix <- tolower(paste(instrument_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
 
 s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
 # temporary directory to hold the screen log files and files for uploading
-tmp_screen_path <- paste("~", ".tmp_screen", selected_sequencer_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
+tmp_screen_path <- paste("~", ".tmp_screen", instrument_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
 
 staging_path <- paste0(tmp_screen_path, "/staging/archive_n_upload_run/")
 
 tarball_script <- paste(s3_aux_files_bucket, "external_scripts", "bash", "create_tarball.sh", sep = "/")
 
 tarball_script_options <- c("-t", staging_path,
-                            "-i", selected_sequencer_type,
+                            "-i", instrument_type,
                             "-d", sequencing_date,
                             case_when(run_uploaded_2_basespace ~ "-b",
                                       TRUE ~ ""),
-                            "-n", case_when(selected_sequencer_type == "MiSeq" ~ miseq_hostname,
-                                            selected_sequencer_type == "NextSeq2000" ~ nextseq_hostname,
+                            "-n", case_when(instrument_type == "MiSeq" ~ miseq_hostname,
+                                            instrument_type == "NextSeq2000" ~ nextseq_hostname,
                                             TRUE ~ ""),
                             "-s", s3_run_bucket,
                             "-r", "Record__",
                             "-o",
                             "-c")
 
-message(paste("Checking if a", selected_sequencer_type, "run from", sequencing_date, "exists in S3"))
+message(paste("Checking if a", instrument_type, "run from", sequencing_date, "exists in S3"))
 check_run_on_s3 <- system2("ssh", c(ec2_hostname,
                                     shQuote(
                                       paste0("aws s3 ls ", s3_run_bucket_fp,
@@ -87,7 +87,7 @@ check_run_on_s3 <- system2("ssh", c(ec2_hostname,
   attr("status") #if run found, returns null. if no run, returns 1
 
 if(is.null(check_run_on_s3)) {
-  stop(simpleError(paste("Existing", selected_sequencer_type, "run detected in", s3_run_bucket_fp,
+  stop(simpleError(paste("Existing", instrument_type, "run detected in", s3_run_bucket_fp,
                          "\nTo create a new tarball, manually delete this run in", s3_run_bucket_fp)))
 }
 

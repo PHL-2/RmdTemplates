@@ -20,17 +20,17 @@ sample_group_controls <- c("PBS", "oldWW", "ZeptoSC2")
 
 sample_group_sites <- c("NorthEast", "SouthEast", "SouthWest")
 
-selected_sequencer_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
+instrument_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
 
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
 # temporary directory to hold the screen log files
-tmp_screen_path <- paste("~", ".tmp_screen", selected_sequencer_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
+tmp_screen_path <- paste("~", ".tmp_screen", instrument_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
 
 staging_path <- paste0(tmp_screen_path, "/staging/generate_metadata_n_assign_barcodes/")
 
-session_suffix <- tolower(paste(selected_sequencer_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
+session_suffix <- tolower(paste(instrument_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
 
 #file location of the nextera udi indices
 barcode_fp <- file.path(dirname(here()), "aux_files", "illumina_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
@@ -211,8 +211,8 @@ sample_info_sheet <- read_sheet(index_sheet_fp, "Sample Info")
 ###############
 
 yymmdd <- gsub("^..|-", "", sequencing_date)
-sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
-                             selected_sequencer_type == "NextSeq2000" ~ "VH")
+sequencer_regex <- case_when(instrument_type == "MiSeq" ~ "M",
+                             instrument_type == "NextSeq2000" ~ "VH")
 seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
 intended_sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
 
@@ -234,14 +234,14 @@ bs_run <- system2("ssh", c("-tt", ec2_hostname,
   `colnames<-`(.[1, ]) %>%
   slice(-1) %>%
   filter(grepl(paste0("^", intended_sequencing_folder_regex), Name)) %>%
-  filter(grepl(paste0("^", record_prefix, selected_sequencer_type, "_", sequencing_date), ExperimentName))
+  filter(grepl(paste0("^", record_prefix, instrument_type, "_", sequencing_date), ExperimentName))
 
 if(nrow(bs_run) > 1) {
   stop(simpleError("\nThere are two sequencing runs that matched this date on the same sequencer!!!\n"))
 } else if (nrow(bs_run) == 0) {
   stop(simpleError(paste0("\nThere is no record on BaseSpace for this date: ", sequencing_date,
                           "\nCheck if the date of this Rproject matches with the uploaded sequencing run",
-                          "\nThe sequencer type could also be wrong: ", selected_sequencer_type)))
+                          "\nThe sequencer type could also be wrong: ", instrument_type)))
 }
 
 bs_run_id <- bs_run %>%
@@ -336,7 +336,7 @@ if(samplesheet_exists) {
 
 run_sample_sheet <- load_sample_sheet(run_samplesheet_fp)
 
-instrument_type <- data.frame(values = unlist(run_sample_sheet$Header)) %>%
+instrument_type_on_sample_sheet <- data.frame(values = unlist(run_sample_sheet$Header)) %>%
   mutate(col_names = gsub(",.*", "", values)) %>%
   mutate(col_names = gsub(" ", "_", col_names)) %>%
   mutate(values = gsub(".*,", "", values)) %>%
@@ -350,14 +350,12 @@ read_length <- data.frame(values = unlist(run_sample_sheet$Reads)) %>%
   pull() %>%
   unique()
 
-if(instrument_type != selected_sequencer_type) {
-  message("\n*****")
-  message("The SampleSheet.csv for this ", sequencing_date, " run has the instrument set as ", instrument_type)
-  message("The rest of this script will continue and processing this project as a ", instrument_type, " run")
-  message("If this was not the correct sequencer used for this project, double check the sequencing date or select the appropriate selected_sequencer_type in this Rscript")
-  message("*****")
-
-  Sys.sleep(10)
+if(instrument_type_on_sample_sheet != instrument_type) {
+  stop(simpleError(paste0("\n*****",
+                          "\nThe SampleSheet.csv for this ", sequencing_date, " run has the instrument set as ", instrument_type_on_sample_sheet,
+                          "\nHowever, this analysis script is expecting the sequencer to be the ", instrument_type, " based on the sequencer_select variable in the main Rmd file",
+                          "\nPlease identify where this error is coming from and make the appropriate corrections",
+                          "\n*****")))
 }
 
 instrument_regex <- case_when(instrument_type == "MiSeq" ~ "M",
