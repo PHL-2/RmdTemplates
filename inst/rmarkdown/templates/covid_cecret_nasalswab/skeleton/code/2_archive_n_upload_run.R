@@ -60,7 +60,7 @@ s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 # temporary directory to hold the screen log files and files for uploading
 tmp_screen_path <- paste("~", ".tmp_screen", selected_sequencer_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
 
-staging_path <- paste0(tmp_screen_path, "/staging/")
+staging_path <- paste0(tmp_screen_path, "/staging/archive_n_upload_run/")
 
 tarball_script <- paste(s3_aux_files_bucket, "external_scripts", "bash", "create_tarball.sh", sep = "/")
 
