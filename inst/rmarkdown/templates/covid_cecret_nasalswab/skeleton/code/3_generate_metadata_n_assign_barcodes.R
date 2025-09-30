@@ -25,10 +25,9 @@ sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 # temporary directory to hold the screen log files
 tmp_screen_path <- paste("~", ".tmp_screen", selected_sequencer_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
 
-session_suffix <- tolower(paste(selected_sequencer_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
+staging_path <- paste0(tmp_screen_path, "/staging/generate_metadata_n_assign_barcodes/")
 
-# temporary directory to hold the sequencing run download
-ec2_tmp_fp <- "~/tmp_bs_dl"
+session_suffix <- tolower(paste(selected_sequencer_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
 
 #file location of the nextera udi indices
 barcode_fp <- file.path(dirname(here()), "aux_files", "illumina_references", "nextera-dna-udi-samplesheet-MiSeq-flex-set-a-d-2x151-384-samples.csv")
@@ -431,7 +430,7 @@ if(samplesheet_exists) {
 
   dir.create(here("metadata", "munge"), showWarnings = FALSE)
   run_samplesheet_fp <- here("metadata", "munge", "SampleSheet.csv")
-  temporary_seq_run_fp <- paste0(ec2_tmp_fp, "/", session_suffix, "/", sequencing_run, "/")
+  temporary_seq_run_fp <- paste0(staging_path, sequencing_run, "/")
   bs_dl_cmd <- paste("bs download runs --id", bs_run_id, "--output", temporary_seq_run_fp,
                      "--exclude '*' --include 'SampleSheet*'")
 
@@ -876,19 +875,17 @@ nf_demux_samplesheet %>%
 # Upload sample sheets to S3 bucket
 ###################################
 
-ec2_tmp_session_dir <- paste0(ec2_tmp_fp, "/", session_suffix, "/")
-
-mk_remote_dir(ec2_hostname, ec2_tmp_session_dir)
+mk_remote_dir(ec2_hostname, staging_path)
 
 run_in_terminal(paste("scp", sample_sheet_fp, nf_demux_samplesheet_fp,
-                      paste0(ec2_hostname, ":", ec2_tmp_session_dir))
+                      paste0(ec2_hostname, ":", staging_path))
 )
 
 upload_samplesheet_session <- paste0("up-samplesheet-", session_suffix)
 submit_screen_job(message2display = "Uploading sample sheets to S3",
                   screen_session_name = upload_samplesheet_session,
                   command2run = paste("aws s3 cp",
-                                      ec2_tmp_session_dir,
+                                      staging_path,
                                       s3_run_bucket_fp,
                                       "--recursive",
                                       "--exclude '*'",

@@ -66,11 +66,10 @@ intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "
 
 # temporary directory to hold the screen log files and files for uploading
 tmp_screen_path <- paste("~", ".tmp_screen", instrument_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
-staging_path <- paste0(tmp_screen_path, "/staging/")
 
-# temporary directory to hold the sequencing run download on EC2
-ec2_tmp_fp <- "~/tmp_bs_dl/"
-data_output_path <- paste0(ec2_tmp_fp, session_suffix, "/data/")
+staging_path <- paste0(tmp_screen_path, "/staging/run_nextflow/")
+
+data_output_path <- paste0(staging_path, "data/")
 
 #####################################
 # AWS and Nextflow specific variables
@@ -614,9 +613,9 @@ clean_tmp_session <- paste0("clean-tmp-", session_suffix)
 submit_screen_job(message2display = "Cleaning up run from temporary folder",
                   screen_session_name = clean_tmp_session,
                   command2run = paste("rm -rf",
-                                      paste0(ec2_tmp_fp, session_suffix, "/;"),
+                                      paste0(tmp_screen_path, "/staging/;"),
                                       "echo 'Here are the files in the tmp directory:';",
-                                      "ls", ec2_tmp_fp)
+                                      "ls", paste0(tmp_screen_path, "/staging/"))
 )
 
 check_screen_job(message2display = "Checking delete job",
