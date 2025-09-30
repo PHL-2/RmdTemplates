@@ -151,7 +151,7 @@ if(bioinformatician_name == "") {
 ####################################
 
 ec2_home_fp <- "/home/ec2-user"
-seqsender_upload_tmp_dir <- "tmp_data_ul"
+seqsender_upload_tmp_dir <- "tmp_seqsender_staging"
 workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, project_name, instrument_type, sep = "/")
 submission_path <- paste(seqsender_upload_tmp_dir, sample_type_acronym, sep = "/")
 input_submission_name <- paste(project_name, sample_type_acronym, sep = "_")
