@@ -3,20 +3,6 @@ library(dplyr)
 
 #This Rscript uploads the sequencing run folder and related files to S3 and makes a record of the run on BaseSpace
 
-####################
-# Selected variables
-####################
-
-# temporary directory to hold the sequencing run download
-ec2_tmp_fp <- "~/tmp_bs_dl"
-
-#sequencing date of the run folder should match the RStudio project date
-sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
-
-if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
-  stop(simpleError(paste0("Please use the 'YYYY-MM-DD' format for this RStudio project date. This date should correspond to the sequencing run date")))
-}
-
 ################
 # Load functions
 ################
@@ -49,6 +35,13 @@ tryCatch(
 # Set additional variables to check how to run this script
 ##########################################################
 
+#sequencing date of the run folder should match the RStudio project date
+sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
+
+if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
+  stop(simpleError(paste0("Please use the 'YYYY-MM-DD' format for this RStudio project date. This date should correspond to the sequencing run date")))
+}
+
 yymmdd <- gsub("^..|-", "", sequencing_date)
 seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
 
@@ -60,16 +53,18 @@ sequencer_regex <- case_when(selected_sequencer_type == "MiSeq" ~ "M",
 
 sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern)
 
+session_suffix <- tolower(paste(selected_sequencer_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
+
 s3_run_bucket_fp <- paste0(s3_run_bucket, "/", sequencing_date, "/")
 
-# temporary directory to hold the screen log files
+# temporary directory to hold the screen log files and files for uploading
 tmp_screen_path <- paste("~", ".tmp_screen", selected_sequencer_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
 
-session_suffix <- tolower(paste(selected_sequencer_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
+staging_path <- paste0(tmp_screen_path, "/staging/")
 
 tarball_script <- paste(s3_aux_files_bucket, "external_scripts", "bash", "create_tarball.sh", sep = "/")
 
-tarball_script_options <- c("-t", ec2_tmp_fp,
+tarball_script_options <- c("-t", staging_path,
                             "-i", selected_sequencer_type,
                             "-d", sequencing_date,
                             case_when(run_uploaded_2_basespace ~ "-b",
