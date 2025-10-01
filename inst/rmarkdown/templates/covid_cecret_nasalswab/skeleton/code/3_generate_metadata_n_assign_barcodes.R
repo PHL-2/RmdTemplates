@@ -564,8 +564,8 @@ multi_grep <- function(named_vector, col_name) {
 
 named_sample_type <- c("^Test-" = "Testing sample type",
                        "^NC-" = "Water control",
-                       "^BLANK[0-9]+$|^Blank[0-9]+$" = "Reagent control",
-                       "^PC[0-9]+$" = "Mock DNA positive control",
+                       "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
+                       "^PC[0-9]*$" = "Mock DNA positive control",
                        "^[A-Z0-9][0-9]+$" = "Nasal swab") #allow the Temple specimen IDs to be any number, once it passes 9
 
 metadata_sheet <- metadata_sheet %>%
