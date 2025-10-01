@@ -75,8 +75,12 @@ data_output_path <- paste0(staging_path, "data/")
 # AWS and Nextflow specific variables
 #####################################
 
+# the Batch job definition can be created using the batch_create_nf_headnode.sh script
+# the Docker image used by the job definition should be built from the Dockerfile in aux_files/docker_builds/nextflow/24.10.3
+# this image needs to be uploaded to an online repository and the URI can be passed to the -i option of the script
 nf_headnode_definition <- "nf-headnode"
 
+# batch_create_nf_headnode.sh will run on the dedicated instance defined in ec2_hostname and requires aws-cli to be installed
 nf_headnode_script <- paste(s3_aux_files_bucket, "external_scripts", "bash", "batch_create_nf_headnode.sh", sep = "/")
 
 nf_config_fp <- paste(s3_aux_files_bucket, "external_scripts", "nextflow", nf_config_fn, sep = "/")
