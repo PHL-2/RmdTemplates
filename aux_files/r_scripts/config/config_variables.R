@@ -9,8 +9,10 @@ epi_email <- NA
 # AWS S3 settings
 #################
 
+# The following s3_ variables are required for running the COVID_Cecret RmdTemplate
+# If these buckets do not already exist in the AWS environment, they will need to be created prior to running the Cecret templates
+
 # s3 bucket holding the raw sequencing data (including the md5sum file and the sample sheet)
-# this variable is mandatory if using the COVID_Cecret RmdTemplate
 s3_run_bucket <- "s3://"
 # s3 bucket holding the demultiplexed fastq files for each sample
 s3_fastq_bucket <- "s3://"
@@ -20,7 +22,7 @@ s3_nextflow_output_bucket <- "s3://"
 s3_nextflow_work_bucket <- "s3://"
 # s3 bucket holding reference data files
 s3_reference_bucket <- "s3://"
-# s3 bucket holding external scripts
+# s3 bucket holding all files in external_scripts
 s3_aux_files_bucket <- "s3://aux-files"
 
 ##################
