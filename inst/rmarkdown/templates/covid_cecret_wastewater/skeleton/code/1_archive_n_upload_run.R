@@ -43,7 +43,7 @@ if(sequencing_date == "" | is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(s
 }
 
 yymmdd <- gsub("^..|-", "", sequencing_date)
-seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
+seq_folder_pattern <- "[0-9]+_[0-9]+_[0-9A-Z-]+"
 
 instrument_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
 

@@ -213,7 +213,7 @@ sample_info_sheet <- read_sheet(index_sheet_fp, "Sample Info")
 yymmdd <- gsub("^..|-", "", sequencing_date)
 sequencer_regex <- case_when(instrument_type == "MiSeq" ~ "M",
                              instrument_type == "NextSeq2000" ~ "VH")
-seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
+seq_folder_pattern <- "[0-9]+_[0-9]+_[0-9A-Z-]+"
 intended_sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
 
 record_prefix <- "Record__"
@@ -384,7 +384,7 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
                                   (sample_group == "character(0)" | sample_group == "") ~ NA_character_,
                                   TRUE ~ sample_group),
          sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
-         uniq_sample_name = gsub("-Rep[0-9]*", "", sample_name),
+         uniq_sample_name = gsub("-Rep[0-9]+", "", sample_name),
          sequencing_date = sequencing_date,
          prj_descrip = prj_description,
          instrument_type = instrument_type,
@@ -445,9 +445,9 @@ multi_grep <- function(named_vector, col_name) {
 
 named_sample_type <- c("^Test-" = "Testing sample type",
                        "^NC-" = "Water control",
-                       "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
-                       "^PC[0-9]*$" = "Mock DNA positive control",
-                       "^[A-Z0-9][0-9]*$" = "Nasal swab",
+                       "^BLANK[0-9]+$|^Blank[0-9]+$" = "Reagent control",
+                       "^PC[0-9]+$" = "Mock DNA positive control",
+                       "^[A-Z0-9][0-9]+$" = "Nasal swab",
                        "^WW-" = "Wastewater")
 
 extra_cols2merge <- c("uniq_sample_name", "sample_group", "sample_received_date")

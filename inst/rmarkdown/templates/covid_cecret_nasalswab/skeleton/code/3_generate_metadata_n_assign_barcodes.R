@@ -338,7 +338,7 @@ for(sheet_name in other_sheets) {
 yymmdd <- gsub("^..|-", "", sequencing_date)
 sequencer_regex <- case_when(instrument_type == "MiSeq" ~ "M",
                              instrument_type == "NextSeq2000" ~ "VH")
-seq_folder_pattern <- "[0-9]*_[0-9]*_[0-9A-Z-]*"
+seq_folder_pattern <- "[0-9]+_[0-9]+_[0-9A-Z-]+"
 intended_sequencing_folder_regex <- paste0(yymmdd, "_", sequencer_regex, seq_folder_pattern, "$")
 
 record_prefix <- "Record__"
@@ -564,9 +564,9 @@ multi_grep <- function(named_vector, col_name) {
 
 named_sample_type <- c("^Test-" = "Testing sample type",
                        "^NC-" = "Water control",
-                       "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
-                       "^PC[0-9]*$" = "Mock DNA positive control",
-                       "^[A-Z0-9][0-9]*$" = "Nasal swab") #allow the Temple specimen IDs to be any number, once it passes 9
+                       "^BLANK[0-9]+$|^Blank[0-9]+$" = "Reagent control",
+                       "^PC[0-9]+$" = "Mock DNA positive control",
+                       "^[A-Z0-9][0-9]+$" = "Nasal swab") #allow the Temple specimen IDs to be any number, once it passes 9
 
 metadata_sheet <- metadata_sheet %>%
   mutate(sample_type = case_when(!(is.na(sample_type) | sample_type == "") ~ sample_type,

@@ -48,7 +48,7 @@ tryCatch(
 ############################
 
 # Look for this report in extra_metadata folder
-covid_test_fn <- "COVID_SEQ_[0-9]*.csv"
+covid_test_fn <- "COVID_SEQ_[0-9]+.csv"
 covid_test_fp <- list.files(here("metadata", "extra_metadata"), pattern = paste0("^", covid_test_fn, "$"), full.names = TRUE)
 
 # If the file does not exist, grab it from the shared drive
@@ -349,7 +349,7 @@ TU_samples <- filtered_TU_data %>%
 if(file.exists(shared_drive_fp)) {
 
   shared_environ_fp <- suppressWarnings(max(list.files(file.path(shared_drive_fp, "Sequencing_files", "2_Enviromental_samples", format(Sys.Date(), "%Y")),
-                                                       pattern = "^[0-9]*-[0-9]*-[0-9]*", full.names = TRUE, recursive = TRUE)))
+                                                       pattern = "^[0-9]+-[0-9]+-[0-9]+", full.names = TRUE, recursive = TRUE)))
 
   environmental_file_date <- as.Date(gsub("_.*", "", basename(shared_environ_fp)))
 
