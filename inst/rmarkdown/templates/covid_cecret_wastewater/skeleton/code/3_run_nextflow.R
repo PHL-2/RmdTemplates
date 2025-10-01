@@ -664,18 +664,16 @@ if(!identical(aws_s3_cecret_intermediate_files, character(0))) {
     write_csv(here("data", "processed_cecret", tag_filename), col_names = FALSE)
 
   upload_tag_s3_session <- paste0("up-tag-s3-", session_suffix)
-  upload_tag_s3_session_path <- paste(tmp_screen_path, upload_tag_s3_session, sep = "/")
 
-  mk_remote_dir(ec2_hostname, upload_tag_s3_session_path)
   run_in_terminal(paste("scp", here("data", "processed_cecret", tag_filename),
-                        paste0(ec2_hostname, ":", upload_tag_s3_session_path))
+                        paste0(ec2_hostname, ":", staging_path))
   )
 
   # Upload s3 tag samplesheet
   submit_screen_job(message2display = "Uploading tag sheet to S3",
                     screen_session_name = upload_tag_s3_session,
                     command2run = paste("aws s3 cp",
-                                        paste(upload_tag_s3_session_path, tag_filename, sep = "/"),
+                                        paste0(staging_path, tag_filename),
                                         nf_tag_s3_samplesheet_fp)
   )
 
@@ -709,7 +707,7 @@ clean_tmp_session <- paste0("clean-tmp-", session_suffix)
 submit_screen_job(message2display = "Cleaning up run from temporary folder",
                   screen_session_name = clean_tmp_session,
                   command2run = paste("rm -rf",
-                                      paste0(tmp_screen_path, "/staging/;"),
+                                      paste0(tmp_screen_path, "/staging/*;"),
                                       "echo 'Here are the files in the tmp directory:';",
                                       "ls", paste0(tmp_screen_path, "/staging/"))
 )
