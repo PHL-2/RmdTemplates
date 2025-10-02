@@ -62,7 +62,7 @@ session_suffix <- tolower(paste(instrument_type, sample_type_acronym, pathogen_a
 sequencer_regex <- case_when(instrument_type == "MiSeq" ~ "M",
                              instrument_type == "NextSeq2000" ~ "VH")
 
-intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]+_[0-9]+_[0-9A-Z-]+")
+intended_sequencing_folder_regex <- paste0(gsub("^..|-", "", sequencing_date), "_", sequencer_regex, "[0-9]*_[0-9]*_[0-9A-Z-]*")
 
 # temporary directory to hold the screen log files and files for uploading
 tmp_screen_path <- paste("~", ".tmp_screen", instrument_type, paste0(sample_type_acronym, "_", pathogen_acronym), basename(here()), sep = "/")
