@@ -153,7 +153,7 @@ for(current_line in 1:nrow(nf_config)) {
 
   if(record_settings | record_profile) {
     if(open_brack_count > 0) {
-      profile_write <- rbind(profile_write, nf_config[current_line,])
+      profile_write <- rbind(profile_write, data.frame(to_write = nf_config[current_line,]))
     } else if(open_brack_count == 0) {
       profile_write <- rbind(profile_write, data.frame(to_write = "}"))
 
