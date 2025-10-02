@@ -233,6 +233,7 @@ file.copy(here("upload", "lims"), file.path(copy_to, project_name), recursive = 
 ```{r GISAID GenBank BioSample SRA submission, message=TRUE, include=FALSE, eval=FALSE}
 
 #this script submits the data to NCBI and GISAID
+#run the {settings for processing the sequencing run} chunk above first
 
 #do a test upload first. change this to FALSE when SRA upload and gisaid upload testing is successful and you want to submit the files for real
 test_upload <- TRUE
