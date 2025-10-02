@@ -19,6 +19,8 @@ project_name <- basename(here())
 
 sequencing_date <- as.Date(gsub("_.*", "", project_name))
 
+remove_sample_number_regex <- "_S[0-9]+"
+
 ```
 
 ```{r load libraries}
@@ -290,7 +292,7 @@ fastqc <- lapply(fastqc_fps, function(f) {
   rm(read_all)
   
   read_qc <- read_tsv(f, skip = line_start, n_max = line_end)
-  read_qc$sample_id <- gsub(".*/|_S[0-9]+|_R[12].*", "", f)
+  read_qc$sample_id <- gsub(paste0(remove_sample_number_regex, "|.*/|_R[12].*"), "", f)
   read_qc$direction <- gsub(".*(R[12]).*", "\\1", f)
   return(read_qc)
   }) %>%
@@ -319,7 +321,7 @@ actual_read_lengths <- lapply(fastqc_fps, function(f) {
   rm(read_all)
   
   read_in_lengths <- read_tsv(f, skip = line_start, n_max = line_end)
-  read_in_lengths$sample_id <- gsub(".*/|_S[0-9]+|_R[12].*", "", f)
+  read_in_lengths$sample_id <- gsub(paste0(remove_sample_number_regex, "|.*/|_R[12].*"), "", f)
   read_in_lengths$direction <- gsub(".*(R[12]).*", "\\1", f)
   return(read_in_lengths)
   }) %>%
@@ -354,7 +356,7 @@ samtools_stat <- lapply(samtools_stats_fps, function(f) {
   
   summary_numbers <- read_tsv(f, skip = line_start, n_max = line_end,
                               col_names = c("SN", "samtools_stat", "samtools_stat_val", "comments"))
-  summary_numbers$sample_id <- gsub(".*/|_S[0-9]+|\\.stats\\.txt", "", f)
+  summary_numbers$sample_id <- gsub(paste0(remove_sample_number_regex, "|.*/|\\.stats\\.txt"), "", f)
   return(summary_numbers)
   }) %>%
   do.call("rbind", .) %>%
@@ -384,14 +386,14 @@ mapped_read_lengths <- lapply(samtools_stats_fps, function(f) {
   
   #some samples may have 0 reads
   if(line_end == 0) {
-    read_lengths <- data.frame(sample_id = gsub(".*/|_S[0-9]+|\\.stats\\.txt", "", f),
+    read_lengths <- data.frame(sample_id = gsub(paste0(remove_sample_number_regex, "|.*/|\\.stats\\.txt"), "", f),
                                RL = "RL",
                                samtools_read_length = 0,
                                count = 0)
   } else {
     read_lengths <- read_tsv(f, skip = line_start, n_max = line_end,
                               col_names = c("RL", "samtools_read_length", "count"))
-    read_lengths$sample_id <- gsub(".*/|_S[0-9]+|\\.stats\\.txt", "", f)
+    read_lengths$sample_id <- gsub(paste0(remove_sample_number_regex, "|.*/|\\.stats\\.txt"), "", f)
   }
 
   return(read_lengths)
@@ -426,7 +428,7 @@ amplicon_depth <- amplicon_fps %>%
   ungroup() %>%
   select(-FileName) %>%
   rename(sample_id = "bam") %>%
-  mutate(sample_id = gsub("_S[0-9]+|\\.primertrim\\.sorted\\.bam", "", sample_id)) %>%
+  mutate(sample_id = gsub(paste0(remove_sample_number_regex, "|\\.primertrim\\.sorted\\.bam"), "", sample_id)) %>%
   rename_with(function(x) paste0("amp_tile_", gsub(".*_", "", gsub("_INSERT$", "", x)), "_artic_", artic_primer_scheme), -sample_id)
 
 ```
@@ -445,7 +447,7 @@ slide_window_coverage <- coverage_fps %>%
   rename(position = "X2", map_per_position = "X3") %>%
   select(FileName, map_per_position, position) %>%
   mutate(sample_id = gsub(".*/", "", FileName),
-         sample_id = gsub("_S[0-9]+|\\.depth\\.txt", "", sample_id)) %>%
+         sample_id = gsub(paste0(remove_sample_number_regex, "|\\.depth\\.txt"), "", sample_id)) %>%
   select(-c(FileName)) %>%
   group_by(sample_id) %>%
   mutate(slide_window_100 = rollmean(map_per_position, k=100, fill = 0, align = 'right')) %>%
@@ -494,7 +496,7 @@ cov_stats <- cov_num_fps %>%
   do(read_delim(.$FileName, col_names = TRUE)) %>%
   ungroup() %>%
   rename(sample_id = "sample", aligned_reads = "numreads") %>%
-  mutate(sample_id = gsub("_S[0-9]+$", "", sample_id)) %>%
+  mutate(sample_id = gsub(remove_sample_number_regex, "", sample_id)) %>%
   select(sample_id, aligned_reads)
 
 ```
@@ -532,7 +534,7 @@ k2_raw <- k2_files_fps %>%
                            k2_top_rank,
                            paste0(k2_top_rank, " ", gsub("*[0-9]*", "", k2_rank), "__", k2_name))) %>%
   select(sample_id, k2_taxon, k2_props, k2_kmers) %>%
-  mutate(sample_id = gsub("_S[0-9]+$", "", sample_id))
+  mutate(sample_id = gsub(remove_sample_number_regex, "", sample_id))
 
 k2_sc2 <- k2_raw %>%
   # includes SARSr-CoV species and SARS-CoV-2 strain
@@ -562,7 +564,7 @@ next_clade <- nc_fp %>%
          nextclade_qc_overallstatus = "qc.overallStatus",
          nextclade_qc_overallscore = "qc.overallScore",
          nextclade_index = "index") %>%
-  mutate(sample_id = gsub("_S[0-9]+$", "", sample_id))
+  mutate(sample_id = gsub(remove_sample_number_regex, "", sample_id))
 
 ```
 
@@ -580,7 +582,7 @@ freyja <- freyja_fps %>%
   ungroup() %>%
   filter(!is.na(col_names)) %>%
   mutate(sample_id = gsub(".*/", "", FileName),
-         sample_id = gsub("_S[0-9]+|_demix.tsv", "", sample_id),
+         sample_id = gsub(paste0(remove_sample_number_regex, "|_demix.tsv"), "", sample_id),
          col_names = paste0("freyja_", col_names)) %>%
   select(sample_id, col_names, values) %>%
   pivot_wider(names_from = "col_names", values_from = "values")
@@ -594,8 +596,8 @@ snpdists_raw_fp <- here("data", "processed_cecret", "snp-dists", "snp-dists.txt"
 snpdists <- snpdists_raw_fp %>%
   read_csv() %>%
   rename(sample_id = 1) %>%
-  mutate(sample_id = gsub("_S[0-9]+$", "", sample_id)) %>%
-  rename_all(.funs = function(x) gsub("_S[0-9]+$", "", x)) %>%
+  mutate(sample_id = gsub(remove_sample_number_regex, "", sample_id)) %>%
+  rename_all(.funs = function(x) gsub(remove_sample_number_regex, "", x)) %>%
   pivot_longer(cols = -sample_id, names_to = "compared_to", values_to = "snps")
 
 snpdist_check <- snpdists %>%
@@ -640,7 +642,7 @@ list(cov_stats, coverage, s_gene_coverage, next_clade, freyja, amplicon_depth, s
   mutate(nextclade_clade_who = case_when((grepl("^B$|^B\\.[0-9]+", Nextclade_pango) & nextclade_clade == "19A") ~ "Reference", #Illumina PC
                                          (grepl("^A$|^A\\.[0-9]+", Nextclade_pango) & nextclade_clade == "19B") ~ "Reference", #ZeptoMetrix PC
                                          TRUE ~ nextclade_clade_who),
-         sample_id = gsub("_S[0-9]+$", "", sample_id),
+         sample_id = gsub(remove_sample_number_regex, "", sample_id),
          coverage_qc_status = case_when(pct_genome_coverage_over_10x >= 0.6 ~ "Good",
                                         pct_genome_coverage_over_10x < 0.6 ~ "Poor",
                                         TRUE ~ NA)) %>%
@@ -1500,8 +1502,8 @@ for(sites in coverage_loop) {
                                           TRUE ~ coverage_qc_status)) %>%
     mutate(coverage_qc_status = factor(coverage_qc_status, levels = names(ann_geom_values$linetype))) %>%
     mutate(parent_variant = case_when(is.na(Nextclade_pango) & !isControl ~ "no results",
-                                 is.na(Nextclade_pango) & isControl ~ "control",
-                                 TRUE ~ gsub("^([A-Za-z]+\\.[0-9]+).*", "\\1", Nextclade_pango))) %>%
+                                      is.na(Nextclade_pango) & isControl ~ "control",
+                                      TRUE ~ gsub("^([A-Za-z]+\\.[0-9]+).*", "\\1", Nextclade_pango))) %>%
     mutate(parent_variant = factor(parent_variant, levels = c(names(ann_geom_values$parent_variant), "no results", "control"))) %>%
     droplevels() %>%
     select(sample_id, sample_name, parent_variant, coverage_qc_status)
