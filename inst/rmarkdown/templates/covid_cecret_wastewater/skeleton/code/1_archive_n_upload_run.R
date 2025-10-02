@@ -78,12 +78,12 @@ tarball_script_options <- c("-t", staging_path,
                             "-c")
 
 message(paste("Checking if a", instrument_type, "run from", sequencing_date, "exists in S3"))
-check_run_on_s3 <- system2("ssh", c(ec2_hostname,
+check_run_on_s3 <- suppressWarnings(system2("ssh", c(ec2_hostname,
                                     shQuote(
                                       paste0("aws s3 ls ", s3_run_bucket_fp,
-                                                   " | grep ", sequencing_folder_regex, ".tar.gz")
+                                                   " | grep -E ", sequencing_folder_regex, ".tar.gz")
                                       )),
-                           stdout = TRUE, stderr = TRUE) %>%
+                           stdout = TRUE, stderr = TRUE)) %>%
   attr("status") #if run found, returns null. if no run, returns 1
 
 if(is.null(check_run_on_s3)) {
