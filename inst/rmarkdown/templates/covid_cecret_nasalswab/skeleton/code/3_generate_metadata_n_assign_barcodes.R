@@ -260,7 +260,7 @@ if(nrow(TU_data) > 0) {
 # Load the environmental samples
 ################################
 
-ENV_fp <- max(list.files(here("metadata", "extra_metadata"), pattern = "environmental_samples.csv", full.names = TRUE))
+ENV_fp <- suppressWarnings(max(list.files(here("metadata", "extra_metadata"), pattern = "environmental_samples.csv", full.names = TRUE)))
 
 if(!is.na(ENV_fp)) {
 

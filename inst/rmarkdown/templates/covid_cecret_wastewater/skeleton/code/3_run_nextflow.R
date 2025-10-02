@@ -291,7 +291,7 @@ fastq_file_sizes_bucketdir <- aws_s3_fastq_files_bucketdir %>%
          bytes <= 23) %>%
   group_by(filename) %>%
   mutate(file_num = n()) %>%
-  filter(!(file_num == 2 & grepl("^Undetermined", filename) & bytes == max(bytes))) %>%
+  filter(!(file_num == 2 & grepl("^Undetermined", filename) & bytes == suppressWarnings(max(bytes)))) %>%
   ungroup()
 
 if(nrow(fastq_file_sizes_bucketdir) > 0) {
@@ -361,7 +361,7 @@ fastq_file_sizes <- aws_s3_fastq_files %>%
   filter(!grepl("^GenericSampleID", filename)) %>%
   group_by(filename) %>%
   mutate(file_num = n()) %>%
-  filter(!(file_num == 2 & grepl("^Undetermined", filename) & bytes == max(bytes))) %>%
+  filter(!(file_num == 2 & grepl("^Undetermined", filename) & bytes == suppressWarnings(max(bytes)))) %>%
   ungroup()
 
 if(nrow(fastq_file_sizes) == 0) {

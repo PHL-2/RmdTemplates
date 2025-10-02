@@ -117,7 +117,7 @@ ddPCR_data <- ddPCR_files %>%
   filter(!is.na(sample_group)) %>%
   group_by(sample_group, sample_received_date) %>%
   #get the latest run only
-  filter(ddpcr_analysis_date == max(ddpcr_analysis_date)) %>%
+  filter(ddpcr_analysis_date == suppressWarnings(max(ddpcr_analysis_date))) %>%
   ungroup() %>%
   select(-FileName) %>%
   unique()
@@ -126,7 +126,7 @@ ddPCR_data <- ddPCR_files %>%
 # Load the environmental samples, if any
 ########################################
 
-env_fp <- max(list.files(here("metadata", "extra_metadata"), pattern = "environmental_samples.csv", full.names = TRUE))
+env_fp <- suppressWarnings(max(list.files(here("metadata", "extra_metadata"), pattern = "environmental_samples.csv", full.names = TRUE)))
 
 if(!is.na(env_fp)) {
 
