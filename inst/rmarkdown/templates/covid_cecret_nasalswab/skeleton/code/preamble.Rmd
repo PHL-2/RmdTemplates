@@ -946,7 +946,7 @@ all_sample_ids_from_seqsender <- seqsender_2_upload_fp %>%
 #check the csv file for the epi's
 if(have_phi) {
 
-  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = "_PHL2_sequencing_results.csv", recursive = TRUE, full.names = TRUE)
+  epi_2_upload_fp <- list.files(here("upload", "epi"), pattern = paste("PHL2", sample_type_acronym, "sequencing_results.csv", sep = "_"), recursive = TRUE, full.names = TRUE)
   
   epi_report <- epi_2_upload_fp %>%
     read_csv() %>%
