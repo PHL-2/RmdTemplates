@@ -122,10 +122,7 @@ sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = "SampleSheet_v2.csv")
 
 #get sequencer of the run
-instrument_type <- gsub("^[0-9-]*_(MiSeq|NextSeq2000)_.*", "\\1", sample_sheet_fn)
-
-#get sample type
-sample_type_acronym <- gsub(paste0("^[0-9-]*_", instrument_type, "_|_.*"), "", sample_sheet_fn)
+instrument_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
 
 authors <- gsub(", .*|,.*", "", bioinformatician_name)
 
@@ -134,12 +131,6 @@ if(sequencing_date == "") {
   stop (simpleError(paste0("Please fill in the correct sequencing date or short project description")))
 } else if (is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
   stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
-}
-
-if(length(sample_sheet_fn) > 1) {
-  stop(simpleError("There are more than 2 sample sheets detected!! Please delete the incorrect one"))
-} else if(length(sample_sheet_fn) == 0) {
-  stop(simpleError("Sample sheet with suffix '_SampleSheet_v2.csv' is missing. Download this file manually from AWS S3 bucket"))
 }
 
 if(bioinformatician_name == "") {
