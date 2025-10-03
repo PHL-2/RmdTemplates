@@ -446,7 +446,7 @@ multi_grep <- function(named_vector, col_name) {
 named_sample_type <- c("^Test-" = "Testing sample type",
                        "^NC-" = "Water control",
                        "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
-                       "^PC[0-9]*$" = "Mock DNA positive control",
+                       "^PC-COVIDSeq[0-9]*$" = "Mock DNA positive control",
                        "^[A-Z0-9][0-9]+$" = "Nasal swab",
                        "^WW-" = "Wastewater")
 
@@ -868,11 +868,10 @@ if(create_platemap) {
   plate_view <- combined_list %>%
     filter(sample_name != "") %>%
     select(-grp) %>%
-    rbind(data.frame(sample_name = c("NC-pre-ARTIC", "NC-pre-library"))) %>%
+    rbind(data.frame(sample_name = c("NC-pre-ARTIC"))) %>%
     mutate(sample_order = row_number()) %>%
     merge(empty_plate, by = "sample_order", all = TRUE, sort = FALSE) %>%
-    mutate(sample_name = case_when(sample_order == 96 ~ "NC-corner",
-                                   is.na(sample_name) ~ "",
+    mutate(sample_name = case_when(is.na(sample_name) ~ "",
                                    TRUE ~ sample_name)) %>%
     arrange(sample_order)
 

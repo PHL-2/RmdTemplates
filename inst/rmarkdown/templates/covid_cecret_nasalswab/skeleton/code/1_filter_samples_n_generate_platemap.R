@@ -461,11 +461,10 @@ plate_view <- combined_list_first_half %>%
   mutate(number = cumsum(duplicated(sample_name)) + 1) %>%
   mutate(sample_name = ifelse(sample_name == "NC-pre-extract", paste0(sample_name, number), sample_name)) %>%
   select(-number) %>%
-  rbind(data.frame(sample_name = c("PC", "NC-pre-cDNA", "NC-pre-ARTIC"))) %>%
+  rbind(data.frame(sample_name = c("PC-COVIDSeq1", "NC-pre-cDNA1", "NC-pre-ARTIC1"))) %>%
   mutate(sample_order = row_number()) %>%
   merge(empty_plate, by = "sample_order", all = TRUE) %>%
-  mutate(sample_name = case_when(sample_order == 96 ~ "NC-corner",
-                                 is.na(sample_name) ~ "",
+  mutate(sample_name = case_when(is.na(sample_name) ~ "",
                                  TRUE ~ sample_name)) %>%
   arrange(sample_order)
 
