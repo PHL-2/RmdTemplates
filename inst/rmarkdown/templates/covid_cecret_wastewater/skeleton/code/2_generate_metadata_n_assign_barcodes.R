@@ -394,8 +394,9 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
          run_q30 = run_q30,
          run_pf = run_pf,
          run_error = run_error,
-         sample_received_date = str_extract(sample_name, pattern = "[0-9]{4}-[0,1][0-9]-[0-3][0-9]")) %>%
-  select(sample_id, everything())
+         sample_received_date = str_extract(sample_name, pattern = "[0-9]{4}-[0,1][0-9]-[0-3][0-9]"),
+         plate_position = gsub("^[0-9]*_", "", plate_coord)) %>%
+  select(sample_id, starts_with(c("sample", "plate", "idt")), everything()) %>%
 
 for(additional_sample_info in c("sample_collection_date", "PHL_sample_received_date")) {
   if(additional_sample_info %in% colnames(metadata_sheet)) {

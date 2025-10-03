@@ -518,8 +518,9 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
          run_cd = run_cd,
          run_q30 = run_q30,
          run_pf = run_pf,
-         run_error = run_error) %>%
-  select(sample_id, everything()) %>%
+         run_error = run_error,
+         plate_position = gsub("^[0-9]*_", "", plate_coord)) %>%
+  select(sample_id, starts_with(c("sample", "plate", "idt")), everything()) %>%
   arrange(plate, plate_col, plate_row)
 
 #####################################################################
