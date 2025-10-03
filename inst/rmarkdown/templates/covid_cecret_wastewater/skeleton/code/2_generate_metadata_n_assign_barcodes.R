@@ -447,8 +447,7 @@ multi_grep <- function(named_vector, col_name) {
 named_sample_type <- c("^Test-" = "Testing sample type",
                        "^NC-" = "Water control",
                        "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
-                       "^PC-COVIDSeq[0-9]*$" = "Mock DNA positive control",
-                       "^[A-Z0-9][0-9]+$" = "Nasal swab",
+                       "^PC-[0-9]*$" = "Mock DNA positive control",
                        "^WW-" = "Wastewater")
 
 extra_cols2merge <- c("uniq_sample_name", "sample_group", "sample_received_date")
