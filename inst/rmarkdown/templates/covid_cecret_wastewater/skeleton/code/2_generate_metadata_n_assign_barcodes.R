@@ -828,7 +828,7 @@ metadata_sheet %>%
 ######################################################
 
 if(create_platemap) {
-  dir.create(here("metadata", "for_scientists"))
+  dir.create(here("metadata", "for_scientists"), showWarnings = FALSE)
 
   empty_plate <- data.frame(plate_row = unlist(lapply(LETTERS[1:8], function(x) rep(x, 12))), plate_col = sprintf("%02d", rep(1:12, 8)), plate = 1) %>%
     mutate(plate_coord = paste0(plate, "_", plate_row, plate_col),

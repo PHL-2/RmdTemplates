@@ -883,7 +883,7 @@ freyja_average <- freyja_grouping %>%
 ```{r export data for epi}
 
 #write freyja results for epi's
-dir.create(here("upload", "epi"), recursive = TRUE)
+dir.create(here("upload", "epi"), recursive = TRUE, showWarnings = FALSE)
 epi_report_fp <- here("upload", "epi", paste(project_name, "PHL2", sample_type_acronym, "sequencing_results.csv", sep = "_"))
 
 #filter s_toReport to remove samples that have A lineage present
@@ -933,7 +933,7 @@ if(sample_collect_date_found) {
 ```{r file for lims}
 
 #write file for LIMS
-dir.create(here("upload", "lims"), recursive = TRUE)
+dir.create(here("upload", "lims"), recursive = TRUE, showWarnings = FALSE)
 lims_import_fp <- here("upload", "lims", paste(project_name, "PHL2", sample_type_acronym, "LIMS_import.csv", sep = "_"))
 
 fields4lims <- c("sample_id",
@@ -1053,7 +1053,7 @@ data_submit_metadata <- generate_common_metadata_fields(data_submit_metadata_fp)
   select(!starts_with(c("nwss-", "gb-"))) #currently no recommendation to submit wastewater data to GenBank
 #see why there warning here
 
-dir.create(here("upload", "seqsender"), recursive = TRUE)
+dir.create(here("upload", "seqsender"), recursive = TRUE, showWarnings = FALSE)
 
 fasta_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_fasta_upload_orig.csv", sep = "_"))
 fastq_seqsender_meta_fp <- here("upload", "seqsender", paste(project_name, "PHL2_seqsender_fastq_upload_orig.csv", sep = "_"))
@@ -1371,7 +1371,7 @@ names(ann_geom_values[["variants"]]) <- c(NA, "Unassigned", names(ann_geom_value
 
 ```{r save coverage png, eval=import_data}
 
-dir.create(here("data", "figures"), recursive = TRUE)
+dir.create(here("data", "figures"), recursive = TRUE, showWarnings = FALSE)
 
 SC2_annotation <- data.frame(ORF1a = "266-13468",
                              ORF1b = "13468-21555",

@@ -283,7 +283,7 @@ create_concat_consensus <- system2("ssh", c("-tt", ec2_hostname,
                                                            consensus_fasta_fp, ";"), type = "sh")),
                                    stdout = TRUE, stderr = TRUE)
 
-dir.create(here("upload", "fasta"))
+dir.create(here("upload", "fasta"), showWarnings = FALSE)
 
 download_consensus <- system2("scp", c(paste0(ec2_hostname, ":", consensus_fasta_fp),
                                        here("upload", "fasta/")),
@@ -300,7 +300,7 @@ ssh_command_check(upload_seqsender_files)
 
 ssh_seqsender_cmd("prep --gisaid", metadata = fasta_ec2_seqsender_meta_fp)
 
-dir.create(here("gisaid"))
+dir.create(here("gisaid"), showWarnings = FALSE)
 
 # check the seqsender file for GISAID accession numbers
 # if the seqsender file already has legit GISAID accession numbers, don't resubmit because GISAID already has these samples

@@ -147,7 +147,7 @@ report_only_cdc_lineages <- TRUE
 
 rstudioapi::documentSaveAll()
 library(here)
-dir.create(here("output"))
+dir.create(here("output"), showWarnings = FALSE)
 project_name <- basename(here())
 options("readr.show_col_types" = FALSE)
 
@@ -187,7 +187,7 @@ tryCatch(
 project_name <- basename(here())
 
 copy_to <- file.path(shared_drive_fp, "Sequencing_results", "COVIDSeq", "wastewater")
-dir.create(file.path(copy_to, project_name), recursive = TRUE)
+dir.create(file.path(copy_to, project_name), recursive = TRUE, showWarnings = FALSE)
 
 pdf_fp <- here("output", list.files(here("output"), pattern = ".pdf"))
 for(i in pdf_fp){

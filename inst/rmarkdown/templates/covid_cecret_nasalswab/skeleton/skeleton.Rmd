@@ -171,7 +171,7 @@ have_phi <- TRUE
 
 rstudioapi::documentSaveAll()
 library(here)
-dir.create(here("output"))
+dir.create(here("output"), showWarnings = FALSE)
 project_name <- basename(here())
 options("readr.show_col_types" = FALSE)
 
@@ -212,7 +212,7 @@ project_name <- basename(here())
 PHI_file_fp <- list.files(here("metadata"), pattern = "_PHI.csv", full.names = TRUE)
 
 copy_to <- file.path(shared_drive_fp, "Sequencing_results", "COVIDSeq", "nasal_swabs")
-dir.create(file.path(copy_to, project_name, "metadata"), recursive = TRUE)
+dir.create(file.path(copy_to, project_name, "metadata"), recursive = TRUE, showWarnings = FALSE)
 
 if(!file.copy(PHI_file_fp, file.path(copy_to, project_name, "metadata"), overwrite = TRUE)) {
   stop(paste("Could not copy file to", file.path(copy_to, project_name, "metadata"),

@@ -697,7 +697,7 @@ lims_import_fp <- here("upload", "lims", paste(project_name, "PHL2", sample_type
 
 ```{r export data to epi, eval = have_phi}
 
-dir.create(here("upload", "epi"), recursive = TRUE)
+dir.create(here("upload", "epi"), recursive = TRUE, showWarnings = FALSE)
 
 if(length(PHI_file_fp) == 0) {
   stop(simpleError("You are missing the PHI file. Check the Admin fileshare for this file or generate it with the 2_generate_barcodes_IDT.R script"))
@@ -720,7 +720,7 @@ epi_report %>%
 
 ```{r file for lims, eval = have_phi}
 
-dir.create(here("upload", "lims"), recursive = TRUE)
+dir.create(here("upload", "lims"), recursive = TRUE, showWarnings = FALSE)
 
 fields4lims <- c("sample_id",
                  "accession_number" = "sample_name",
@@ -805,7 +805,7 @@ data2submit_metadata_fp <- file.path(dirname(here()), "aux_files", "data_submiss
 
 data2submit_metadata <- generate_common_metadata_fields(data2submit_metadata_fp)
 
-dir.create(here("upload", "seqsender"), recursive = TRUE)
+dir.create(here("upload", "seqsender"), recursive = TRUE, showWarnings = FALSE)
 
 # Export the data for seqsender upload to sra, genbank, and gisaid
 seqsender <- s_toPlot %>%
@@ -1117,7 +1117,7 @@ names(ann_geom_values[["variants"]]) <- c(NA, "Unassigned", names(ann_geom_value
 
 ```{r save coverage png, eval=import_data}
 
-dir.create(here("data", "figures"), recursive = TRUE)
+dir.create(here("data", "figures"), recursive = TRUE, showWarnings = FALSE)
 
 SC2_annotation <- data.frame(ORF1a = "266-13468",
                              ORF1b = "13468-21555",
@@ -1343,7 +1343,7 @@ freyja_sample_type <- freyja_grouping %>%
   ungroup() %>%
   droplevels()
 
-dir.create(here("upload", "freyja"), recursive = TRUE)
+dir.create(here("upload", "freyja"), recursive = TRUE, showWarnings = FALSE)
 
 freyja_sample_type %>%
   mutate(print_rel_abund = ifelse(!is.na(total_sd),
