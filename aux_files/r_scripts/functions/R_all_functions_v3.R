@@ -1,3 +1,8 @@
+## ===============
+##  Global options
+## ===============
+options("readr.show_col_types" = FALSE)
+
 ## =====================================================================
 ##  Order the factors of one column based on the other of another column
 ## =====================================================================
