@@ -498,4 +498,49 @@ if(copy_platemap) {
 
 write_csv(enviro_samples, file = here("metadata", "extra_metadata", paste0(format(Sys.time(), "%Y%m%d"), "_environmental_samples.csv")))
 
+###################################################################
+# Check if samples have already been run (need shared drive access)
+###################################################################
+
+if(file.exists(shared_drive_fp)) {
+
+  samp_names_2_check <- rbind(select(PHL_samples, sample_name),
+                              select(TU_samples, sample_name),
+                              older_samples,
+                              other_samples) %>%
+    select(sample_name) %>%
+    pull()
+
+  sequenced_accessions_fps <- list.files(file.path(shared_drive_fp, "Sequencing_results", "COVIDSeq", "nasal_swabs"),
+                                         pattern = "_PHI.csv",
+                                         recursive = TRUE,
+                                         full.names = TRUE)
+  sequenced_accessions_fps <- sequenced_accessions_fps[!grepl("not_reported_runs", sequenced_accessions_fps)]
+
+  sequenced_accessions <- sequenced_accessions_fps %>%
+    data_frame(FileName = .) %>%
+    group_by(FileName) %>%
+    do(read_csv(.$FileName, col_names = TRUE)) %>%
+    ungroup() %>%
+    mutate(sequencing_date = gsub(".*/|_.*", "", FileName),
+           samp_n_date = paste0(sequencing_date, " - ", sample_name)) %>%
+    arrange(sequencing_date) %>%
+    filter(sample_name %in% samp_names_2_check) %>%
+    select(samp_n_date) %>%
+    pull()
+
+  if(length(sequenced_accessions) > 0) {
+    stop(simpleError(paste0("\nThese samples have already been sequenced!\n",
+                            paste0(sequenced_accessions, collapse = "\n"))))
+  }
+
+} else{
+
+  message("\n*****")
+  message("Could not access shared drive path. Can't check if these samples have already been sequenced")
+  message("*****")
+  Sys.sleep(5)
+
+}
+
 message("\nRscript finished successfully!")
