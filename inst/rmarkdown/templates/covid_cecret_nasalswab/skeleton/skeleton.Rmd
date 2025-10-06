@@ -242,7 +242,6 @@ test_upload <- TRUE
 #should be in the format of PHL2-[sequencer]-[plate position]-[sequencing date]
 failed_sample_fasta <- c("")
 
-options("readr.show_col_types" = FALSE)
 source("code/5_upload_data_2_public_repo.R")
 
 ```

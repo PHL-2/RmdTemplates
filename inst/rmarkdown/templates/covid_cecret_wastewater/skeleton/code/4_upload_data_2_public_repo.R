@@ -118,9 +118,6 @@ seqsender_config_fp <- list.files(aux_seqsender_fp, pattern = "seqsender_ww_sc2_
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
-#if this sample sheet file is missing, download it manually from AWS S3 bucket
-sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = "SampleSheet_v2.csv")
-
 #get sequencer of the run
 instrument_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
 
