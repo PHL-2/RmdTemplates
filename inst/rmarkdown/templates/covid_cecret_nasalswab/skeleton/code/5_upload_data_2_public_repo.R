@@ -2,7 +2,7 @@ library(here)
 library(readr)
 library(tidyverse)
 
-lastest_seqsender_version_tested <- "v1.2.7"
+lastest_seqsender_version_tested <- "v1.3.4"
 
 #load constant variables
 tryCatch(
@@ -116,14 +116,8 @@ seqsender_config_fp <- list.files(aux_seqsender_fp, pattern = "seqsender_ns_sc2_
 #sequencing date of the run folder should match the RStudio project date
 sequencing_date <- gsub("_.*", "", basename(here())) #YYYY-MM-DD
 
-#if this sample sheet file is missing, download it manually from AWS S3 bucket
-sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = "SampleSheet_v2.csv")
-
 #get sequencer of the run
-instrument_type <- gsub("^[0-9-]*_(MiSeq|NextSeq2000)_.*", "\\1", sample_sheet_fn)
-
-#get sample type
-sample_type_acronym <- gsub(paste0("^[0-9-]*_", instrument_type, "_|_.*"), "", sample_sheet_fn)
+instrument_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
 
 authors <- gsub(", .*|,.*", "", bioinformatician_name)
 
@@ -132,12 +126,6 @@ if(sequencing_date == "") {
   stop (simpleError(paste0("Please fill in the correct sequencing date or short project description")))
 } else if (is.na(as.Date(sequencing_date, "%Y-%m-%d")) | nchar(sequencing_date) == 8) {
   stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
-}
-
-if(length(sample_sheet_fn) > 1) {
-  stop(simpleError("There are more than 2 sample sheets detected!! Please delete the incorrect one"))
-} else if(length(sample_sheet_fn) == 0) {
-  stop(simpleError("Sample sheet with suffix '_SampleSheet_v2.csv' is missing. Download this file manually from AWS S3 bucket"))
 }
 
 if(bioinformatician_name == "") {
@@ -149,7 +137,7 @@ if(bioinformatician_name == "") {
 ####################################
 
 ec2_home_fp <- "/home/ec2-user"
-seqsender_upload_tmp_dir <- "tmp_data_ul"
+seqsender_upload_tmp_dir <- "tmp_seqsender_staging"
 workflow_output_fp <- paste(s3_nextflow_output_bucket, "cecret", sample_type_acronym, project_name, instrument_type, sep = "/")
 submission_path <- paste(seqsender_upload_tmp_dir, sample_type_acronym, sep = "/")
 input_submission_name <- paste(project_name, sample_type_acronym, sep = "_")
@@ -247,12 +235,12 @@ ssh_command_check(aws_s3_cecret_download)
 
 create_concat_consensus <- system2("ssh", c("-tt", ec2_hostname,
                                             shQuote(paste0("mkdir -p ", dirname(consensus_fasta_fp), "; ",
-                                                           "sed -E 's/^N+|N+$|Consensus_|_S[0-9]*.consensus_threshold.*//g' ",
+                                                           "sed -E 's/^N+|N+$|Consensus_|_S[0-9]+.consensus_threshold.*//g' ",
                                                            ec2_upload_tmp_fp, "/processed_cecret/ivar_consensus/* > ",
                                                            consensus_fasta_fp, ";"), type = "sh")),
                                    stdout = TRUE, stderr = TRUE)
 
-dir.create(here("upload", "fasta"))
+dir.create(here("upload", "fasta"), showWarnings = FALSE)
 
 download_consensus <- system2("scp", c(paste0(ec2_hostname, ":", consensus_fasta_fp),
                                        here("upload", "fasta/")),
@@ -284,7 +272,7 @@ ssh_command_check(upload_seqsender_files)
 
 ssh_seqsender_cmd("prep --gisaid")
 
-dir.create(here("gisaid"))
+dir.create(here("gisaid"), showWarnings = FALSE)
 
 # check the seqsender file for GISAID accession numbers
 # if the seqsender file already has legit GISAID accession numbers, don't resubmit because GISAID already has these samples
@@ -365,7 +353,7 @@ ssh_seqsender_cmd("submit --biosample --sra")
 ssh_seqsender_cmd("submit --genbank")
 
 #download submission file
-download_submission_log <- system2("scp", c(paste0(ec2_hostname, ":", submission_path, "/submission_log.csv"), here()))
+download_submission_log <- system2("scp", c(paste0(ec2_hostname, ":", ec2_home_fp, "/", submission_path, "/submission_log.csv"), here()))
 ssh_command_check(download_submission_log)
 
 new_submission_log <- read_csv(here("submission_log.csv")) %>%

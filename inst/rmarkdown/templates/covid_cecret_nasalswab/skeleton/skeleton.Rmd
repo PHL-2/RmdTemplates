@@ -48,9 +48,6 @@ missing_samples <- c("")
 # set this to FALSE to not copy the platemap to the shared drive (such as when rerunning this script with updated extra metadata info)
 copy_platemap <- TRUE
 
-# set show_col_types to FALSE
-options("readr.show_col_types" = FALSE)
-
 #############################################################
 # 2_archive_n_upload_run.R (Sequencer and BaseSpace settings) 
 #############################################################
@@ -171,9 +168,8 @@ have_phi <- TRUE
 
 rstudioapi::documentSaveAll()
 library(here)
-dir.create(here("output"))
+dir.create(here("output"), showWarnings = FALSE)
 project_name <- basename(here())
-options("readr.show_col_types" = FALSE)
 
 qc_report_fp <- paste0(project_name, "_QC_Report.Rmd")
 qc_output_fp <- here("output", paste0(project_name, ".QC.report_gen.on.", Sys.Date(), ".pdf"))
@@ -192,7 +188,7 @@ rmarkdown::render(qc_report_fp, output_file = "README.md",
 
 ```
 
-```{r run R script, include=FALSE, eval=FALSE}
+```{r save pdf shared drive, include=FALSE, eval=FALSE}
 
 rstudioapi::documentSaveAll()
 library(here)
@@ -212,9 +208,12 @@ project_name <- basename(here())
 PHI_file_fp <- list.files(here("metadata"), pattern = "_PHI.csv", full.names = TRUE)
 
 copy_to <- file.path(shared_drive_fp, "Sequencing_results", "COVIDSeq", "nasal_swabs")
-dir.create(file.path(copy_to, project_name, "metadata"), recursive = TRUE)
+dir.create(file.path(copy_to, project_name, "metadata"), recursive = TRUE, showWarnings = FALSE)
 
-file.copy(PHI_file_fp, file.path(copy_to, project_name, "metadata"), overwrite = TRUE)
+if(!file.copy(PHI_file_fp, file.path(copy_to, project_name, "metadata"), overwrite = TRUE)) {
+  stop(paste("Could not copy file to", file.path(copy_to, project_name, "metadata"),
+             "\nMaybe the shared drive is not connected"))
+}
 
 pdf_fp <- here("output", list.files(here("output"), pattern = ".pdf"))
 for(i in pdf_fp){
@@ -230,6 +229,7 @@ file.copy(here("upload", "lims"), file.path(copy_to, project_name), recursive = 
 ```{r GISAID GenBank BioSample SRA submission, message=TRUE, include=FALSE, eval=FALSE}
 
 #this script submits the data to NCBI and GISAID
+#run the {settings for processing the sequencing run} chunk above first
 
 #do a test upload first. change this to FALSE when SRA upload and gisaid upload testing is successful and you want to submit the files for real
 test_upload <- TRUE

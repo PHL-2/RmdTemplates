@@ -1,0 +1,188 @@
+aws {
+  region = 'us-east-1'
+  client {
+    endpoint = ''
+  }
+  batch {
+    cliPath = '/home/ec2-user/miniconda/bin/aws'
+  }
+}
+docker {
+  enabled = true
+  runOptions = '-u $(id -u):$(id -g)'
+}
+profiles {
+  phl2_main {
+    process {
+      executor = 'awsbatch'
+      queue = ''
+      maxRetries = 3
+      memory = 4.GB
+      errorStrategy = {
+        sleep(Math.pow(2, task.attempt) * 150 as long)
+        return 'retry'
+      }
+      withName: 'concat_fastq' {
+        queue = ''
+      }
+    }
+  }
+  phl2_nfcore_demux {
+    process {
+      executor = 'awsbatch'
+      queue = ''
+      withName: 'BCLCONVERT' {
+        memory = {16.B * run_dir.size() < 128.GB ? 128.GB : 16.B * run_dir.size()}
+      }
+      withName: 'FALCO' {
+        ext.args = '--nogroup'
+      }
+      withName: 'MULTIQC' {
+        ext.when = false
+      }
+    }
+    params {
+      skip_tools = 'fastp'
+    }
+  }
+  phl2_cecret_ns {
+    process {
+      executor = 'awsbatch'
+      queue = ''
+      maxRetries = 3
+      errorStrategy = {
+        sleep(Math.pow(2, task.attempt) * 150 as long)
+        return 'retry'
+      }
+      withName: 'seqyclean' {
+        memory = {2.B * (reads[0].size() + reads[1].size()) < 2.GB ? 2.GB : 2.B * (reads[0].size() + reads[1].size())}
+      }
+      withName: 'samtools_stats' {
+        memory = {4.B * bam.size() < 2.GB ? 2.GB : 4.B * bam.size()}
+      }
+      withName: 'bwa' {
+        memory = {2.B * (reads[0].size() + reads[1].size()) < 4.GB ? 4.GB : 2.B * (reads[0].size() + reads[1].size())}
+      }
+      withName: 'sort' {
+        memory = {4.B * sam.size() < 4.GB ? 4.GB : 4.B * sam.size()}
+      }
+      withName: 'ivar_trim' {
+        memory = {4.B * bam.size() < 4.GB ? 4.GB : 4.B * bam.size()}
+      }
+      withName: 'filter' {
+        memory = {4.B * sam.size() < 4.GB ? 4.GB : 4.B * sam.size()}
+      }
+      withName: 'mafft' {
+        memory = 4.GB
+      }
+      withName: 'snpdists' {
+        memory = 4.GB
+      }
+      withName: 'aci' {
+        memory = 8.GB
+      }
+      withName: 'freyja_variants' {
+        container = 'staphb/freyja:latest'
+        memory = {4.B * bam.size() < 8.GB ? 8.GB : 4.B * bam.size()}
+      }
+      withName: 'freyja_demix' {
+        container = 'staphb/freyja:latest'
+        memory = {2.B * (variants[0].size() + variants[1].size()) < 16.GB ? 16.GB : 2.B * (variants[0].size() + variants[1].size())}
+      }
+      withName: 'kraken2' {
+        memory = 32.GB
+      }
+    }
+    params {
+      bcftools_variants = false
+      fastqc = false
+      ivar_variants = false
+      samtools_flagstat = false
+      samtools_ampliconstats = false
+      samtools_plot_ampliconstats = false
+      iqtree2 = false
+      heatcluster = false
+      freyja_aggregate = false
+      aci = true
+      samtools_stats = true
+      kraken2 = true
+      relatedness = true
+      filter = true
+      multiqc = true
+      primer_set = 'ncov_V5.3.2'
+      kraken2_db = ''
+      download_nextclade_dataset = false
+      predownloaded_nextclade_dataset = ''
+      samtools_depth_options = '-a'
+      minimum_depth = 30
+    }
+  }
+  phl2_cecret_ww {
+    process {
+      executor = 'awsbatch'
+      queue = ''
+      maxRetries = 3
+      memory = 4.GB
+      errorStrategy = {
+        sleep(Math.pow(2, task.attempt) * 150 as long)
+        return 'retry'
+      }
+      withName: 'seqyclean' {
+        memory = {2.B * (reads[0].size() + reads[1].size()) < 4.GB ? 4.GB : 2.B * (reads[0].size() + reads[1].size())}
+      }
+      withName: 'samtools_stats' {
+        memory = {2.B * bam.size() < 4.GB ? 4.GB : 2.B * bam.size()}
+      }
+      withName: 'bwa' {
+        memory = {2.B * (reads[0].size() + reads[1].size()) < 4.GB ? 4.GB : 2.B * (reads[0].size() + reads[1].size())}
+      }
+      withName: 'sort' {
+        memory = {2.B * sam.size() < 8.GB ? 8.GB : 2.B * sam.size()}
+      }
+      withName: 'ivar_trim' {
+        memory = {4.B * bam.size() < 8.GB ? 8.GB : 4.B * bam.size()}
+      }
+      withName: 'filter' {
+        memory = {2.B * sam.size() < 8.GB ? 8.GB : 2.B * sam.size()}
+      }
+      withName: 'aci' {
+        memory = 8.GB
+      }
+      withName: 'freyja_variants' {
+        container = 'staphb/freyja:latest'
+        memory = {4.B * bam.size() < 8.GB ? 8.GB : 4.B * bam.size()}
+      }
+      withName: 'freyja_demix' {
+        container = 'staphb/freyja:latest'
+        memory = {2.B * (variants[0].size() + variants[1].size()) < 16.GB ? 16.GB : 2.B * (variants[0].size() + variants[1].size())}
+      }
+      withName: 'kraken2' {
+        queue = ''
+        memory = 128.GB
+      }
+    }
+    params {
+      bcftools_variants = false
+      fastqc = false
+      ivar_variants = false
+      samtools_flagstat = false
+      samtools_ampliconstats = false
+      samtools_plot_ampliconstats = false
+      iqtree2 = false
+      heatcluster = false
+      freyja_aggregate = false
+      aci = true
+      samtools_stats = true
+      kraken2 = true
+      relatedness = true
+      filter = true
+      multiqc = true
+      primer_set = 'ncov_V5.3.2'
+      kraken2_db = ''
+      download_nextclade_dataset = false
+      predownloaded_nextclade_dataset = ''
+      samtools_depth_options = '-a'
+      minimum_depth = 10
+    }
+  }
+}

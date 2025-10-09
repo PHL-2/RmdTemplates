@@ -44,9 +44,6 @@ sample_type_acronym <- "WW"
 
 pathogen_acronym <- "SC2"
 
-# set show_col_types to FALSE
-options("readr.show_col_types" = FALSE)
-
 #################################################################
 # 2_generate_metadata_n_assign_barcodes.R (Sample sheet settings)
 #################################################################
@@ -147,9 +144,8 @@ report_only_cdc_lineages <- TRUE
 
 rstudioapi::documentSaveAll()
 library(here)
-dir.create(here("output"))
+dir.create(here("output"), showWarnings = FALSE)
 project_name <- basename(here())
-options("readr.show_col_types" = FALSE)
 
 qc_report_fp <- paste0(project_name, "_QC_Report.Rmd")
 qc_output_fp <- here("output", paste0(project_name, ".QC.report_gen.on.", Sys.Date(), ".pdf"))
@@ -168,7 +164,7 @@ rmarkdown::render(qc_report_fp, output_file = "README.md",
 
 ```
 
-```{r run R script, include=FALSE, eval=FALSE}
+```{r save pdf shared drive, include=FALSE, eval=FALSE}
 
 rstudioapi::documentSaveAll()
 library(here)
@@ -187,14 +183,17 @@ tryCatch(
 project_name <- basename(here())
 
 copy_to <- file.path(shared_drive_fp, "Sequencing_results", "COVIDSeq", "wastewater")
-dir.create(file.path(copy_to, project_name), recursive = TRUE)
+dir.create(file.path(copy_to, project_name), recursive = TRUE, showWarnings = FALSE)
 
 pdf_fp <- here("output", list.files(here("output"), pattern = ".pdf"))
 for(i in pdf_fp){
   file.copy(i, file.path(copy_to, project_name), overwrite = TRUE)
 }
 
-file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = TRUE, overwrite = TRUE)
+if(!file.copy(here("upload", "epi"), file.path(copy_to, project_name), recursive = TRUE, overwrite = TRUE)) {
+  stop(paste("Could not copy file to", file.path(copy_to, project_name),
+             "\nMaybe the shared drive is not connected"))
+}
 
 file.copy(here("upload", "lims"), file.path(copy_to, project_name), recursive = TRUE, overwrite = TRUE)
 
@@ -203,6 +202,7 @@ file.copy(here("upload", "lims"), file.path(copy_to, project_name), recursive = 
 ```{r GISAID BioSample SRA submission, message=TRUE, include=FALSE, eval=FALSE}
 
 #this script submits the data to NCBI and GISAID
+#run the {settings for processing the sequencing run} chunk above first
 
 #do a test upload first. change this to FALSE when SRA upload and gisaid upload testing is successful and you want to submit the files for real
 test_upload <- TRUE

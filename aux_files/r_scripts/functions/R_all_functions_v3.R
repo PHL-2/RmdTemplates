@@ -1,6 +1,11 @@
-## ======================================================================
-##   Order the factors of one column based on the other of another column
-## ======================================================================
+## ===============
+##  Global options
+## ===============
+options("readr.show_col_types" = FALSE)
+
+## =====================================================================
+##  Order the factors of one column based on the other of another column
+## =====================================================================
 
 ##this function is the same as:
 ##mutate(col2order = factor(col2order, levels = unique(col2order[order(sortingcol, decreasing = TRUE)])))
@@ -17,9 +22,9 @@ order_on_other_col <- function(df, col2order, sortingcol, decreasing = TRUE) {
 
 }
 
-## ========================================================
-##   Read in SampleSheet.csv file with loop. Returns a list
-## ========================================================
+## =======================================================
+##  Read in SampleSheet.csv file with loop. Returns a list
+## =======================================================
 
 load_sample_sheet <- function(fp) {
 
@@ -35,17 +40,17 @@ load_sample_sheet <- function(fp) {
 
 }
 
-## ========================
-##   End line with new line
-## ========================
+## =======================
+##  End line with new line
+## =======================
 
 start_w_newline <- function(string) {
   gsub("^", "\n", string)
 }
 
-## =========================================
-##   Function for turning tables into kables
-## =========================================
+## ========================================
+##  Function for turning tables into kables
+## ========================================
 
 kable_style <- function(data, font_sizing = 10) {
 
@@ -85,9 +90,9 @@ kable_style <- function(data, font_sizing = 10) {
 
 }
 
-## ==============================
-##   Filter samples for reporting
-## ==============================
+## =============================
+##  Filter samples for reporting
+## =============================
 
 filter4report <- function(data) {
 
@@ -116,9 +121,9 @@ filter4report <- function(data) {
 
 }
 
-## ============================================================
-##   Resubmit the shell script if proxy authentication required
-## ============================================================
+## ===========================================================
+##  Resubmit the shell script if proxy authentication required
+## ===========================================================
 
 cli_submit <- function(exe_path, bs_cli_command, sh_arguments, shQuote_type = "sh") {
 
@@ -152,9 +157,9 @@ cli_submit <- function(exe_path, bs_cli_command, sh_arguments, shQuote_type = "s
 
 }
 
-## =============================================================
-##   Read in Excel file with sheet name. Return NULL if no sheet
-## =============================================================
+## ============================================================
+##  Read in Excel file with sheet name. Return NULL if no sheet
+## ============================================================
 
 read_excel_safely <- function(file, sheet, skip_row = 0) {
 
@@ -164,9 +169,9 @@ read_excel_safely <- function(file, sheet, skip_row = 0) {
 
 }
 
-## ===================================================================================
-##   Run the following commands through the RStudio terminal (mainly for ssh commands)
-## ===================================================================================
+## ==================================================================================
+##  Run the following commands through the RStudio terminal (mainly for ssh commands)
+## ==================================================================================
 
 run_in_terminal <- function(command2run = "", command2print = "") {
 
@@ -190,14 +195,14 @@ run_in_terminal <- function(command2run = "", command2print = "") {
   rstudioapi::executeCommand("activateConsole")
 }
 
-## =============================================================================
-##   Use the run_in_terminal function to submit jobs to EC2 instance through ssh
-## =============================================================================
+## ============================================================================
+##  Use the run_in_terminal function to submit jobs to EC2 instance through ssh
+## ============================================================================
 
 submit_screen_job <- function(message2display = "Running function to submit screen job",
-                              ec2_login = "",
+                              ec2_login = ec2_hostname, # variable defined in R config file
                               screen_session_name = "",
-                              screen_log_fp = "~/.tmp_screen",
+                              screen_log_fp = tmp_screen_path, # variable defined in running Rscript
                               command2run = "",
                               window_height = 40,
                               window_length = 120) {
@@ -229,14 +234,15 @@ submit_screen_job <- function(message2display = "Running function to submit scre
                   command2run)
 }
 
-## =============================================================
-##   Use the run_in_terminal function to check on submitted jobs
-## =============================================================
+## ============================================================
+##  Use the run_in_terminal function to check on submitted jobs
+## ============================================================
 
 check_screen_job <- function(message2display = "Running function to check screen job",
-                             ec2_login = "",
+                             ec2_login = ec2_hostname, # variable defined in R config file
                              screen_session_name = "",
-                             screen_log_fp = "~/.tmp_screen") {
+                             # tmp_screen_path is defined in the running Rscript
+                             screen_log_fp = tmp_screen_path) {
 
   if(is.na(screen_session_name)) {
     stop(simpleError("screen_session_name cannot be NA"))
@@ -278,6 +284,52 @@ check_screen_job <- function(message2display = "Running function to check screen
                                       "tail --pid=$SCREEN_PID -f", paste0(screen_log_fp, "/", screen_session_name, ".screenlog;"),
                                       "sleep 15;",
                                       "fi"), type = "sh")))
+}
+
+## =============================================================================================================
+##  Use the submit_screen_job function and a custom bash script to submit nextflow jobs to headnode on AWS Batch
+## =============================================================================================================
+
+nf_headnode_screen_job <- function(batch_job_queue,
+                                   nf_bucket_dir,
+                                   # the following variables are defined in the running Rscript
+                                   batch_script = nf_headnode_script,
+                                   batch_job_definition = nf_headnode_definition,
+                                   batch_aws_clipath = ami_aws_cli,
+                                   batch_aws_region = aws_region,
+                                   batch_nf_config_fp = nf_config_fp,
+                                   window_height = 40, window_length = 120,
+                                   ...) {
+
+  screen_job_arg <- list(...)
+
+  nf_headnode_script_options <- c("-f", batch_job_definition,
+                                  "-n", screen_job_arg$screen_session_name,
+                                  "-q", batch_job_queue,
+                                  # command to run on the headnode
+                                  "-c", paste0("'",
+                                               # set aws region
+                                               batch_aws_clipath, " configure set region ", batch_aws_region, "; ",
+                                               # if exists, copy all files required for the workflow to resume
+                                               batch_aws_clipath, " s3 cp ", nf_bucket_dir, "/resume/ /data/ --recursive --only-show-errors; ",
+                                               # need to place the nextflow config file in root directory of the container to run correctly
+                                               batch_aws_clipath, " s3 cp ", batch_nf_config_fp, " /root/.nextflow/config --only-show-errors; ",
+                                               "stty rows ", window_height, " cols ", window_length, "; ",
+                                               screen_job_arg$command2run, "; ",
+                                               # save nextflow workdir and cache files in case pipeline needs to be resumed
+                                               batch_aws_clipath, " s3 cp /data/ ", nf_bucket_dir, "/resume/ --recursive --only-show-errors",
+                                               "'")
+  )
+
+  submit_screen_job(message2display = screen_job_arg$message2display,
+                    screen_session_name = screen_job_arg$screen_session_name,
+                    window_height = window_height,
+                    window_length = window_length,
+                    command2run = paste("aws s3 cp", batch_script, paste0(tmp_screen_path, "/bash_scripts/"), "--only-show-errors;",
+                                        "cd", paste0(tmp_screen_path, "/bash_scripts/"), "&&",
+                                        "bash", basename(batch_script),
+                                        paste(nf_headnode_script_options, collapse = " ")))
+
 }
 
 ## =============================================
@@ -404,4 +456,15 @@ mk_remote_dir <- function(ec2_login = "", remote_dir_2_make = "") {
   if(!grepl("^Connection to .* closed", remote_dir)) {
     stop(simpleError("Failed to make temporary directory in EC2 instance"))
   }
+}
+
+## ================================================
+##  Function to help parse the nextflow config file
+## ================================================
+
+get_indents <- function(line, indent_size = 1) {
+  only_indent_spaces <- gsub("^(\\s+).*", "\\1", line)
+  spaces <- ifelse(!grepl("^\\s", line), 0, nchar(only_indent_spaces))
+  indents <- ifelse(is.na(spaces), 0, spaces %/% indent_size)
+  return(indents)
 }

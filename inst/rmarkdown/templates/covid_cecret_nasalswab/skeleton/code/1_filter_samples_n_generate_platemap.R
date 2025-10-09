@@ -29,9 +29,9 @@ tryCatch(
   }
 )
 
-#############
-# Load config
-#############
+###############
+# Load R config
+###############
 
 #this file needs to sit in a [aux_files/r_scripts/config] directory path above this project directory
 tryCatch(
@@ -48,7 +48,7 @@ tryCatch(
 ############################
 
 # Look for this report in extra_metadata folder
-covid_test_fn <- "COVID_SEQ_[0-9]*.csv"
+covid_test_fn <- "COVID_SEQ_[0-9]+.csv"
 covid_test_fp <- list.files(here("metadata", "extra_metadata"), pattern = paste0("^", covid_test_fn, "$"), full.names = TRUE)
 
 # If the file does not exist, grab it from the shared drive
@@ -56,7 +56,7 @@ covid_test_fp <- list.files(here("metadata", "extra_metadata"), pattern = paste0
 if(length(covid_test_fp) == 0) {
 
   #path of latest covid report
-  shared_covid_test_fp <- max(list.files(file.path(shared_drive_fp, "Sequencing_OEL_reports"), pattern = paste0("^", covid_test_fn, "$"), full.names = TRUE))
+  shared_covid_test_fp <- suppressWarnings(max(list.files(file.path(shared_drive_fp, "Sequencing_OEL_reports"), pattern = paste0("^", covid_test_fn, "$"), full.names = TRUE)))
 
   #get date of report
   report_date <- as.Date(str_extract(shared_covid_test_fp, "[0-9]{6}"), tryFormats = c("%y%m%d"))
@@ -167,9 +167,23 @@ if(ncol(PHL_data) == 1) {
     stop(simpleError(paste("Some samples do not have a positive result or any result",
                            "It's possible that the epi's metadata are missing the following columns so the clinical results could not be merged:",
                            paste0(cols2merge, collapse = ", "),
+                           "\nThe latest date found in the clinical test metadata sheet from OEL is:", suppressWarnings(max(as.Date(covid_test_data$SPECIMEN_DATE, format = "%m/%d/%Y"), na.rm = TRUE)),
                            paste0("\nIf the test results are not missing, check with ", epi_name, " to see if these samples should still be sequenced"),
                            "If you want to proceed with sequencing these samples without the clinical data, comment out this stop message",
-                           "\nSample(s) in question:", non_positive_PHL_results[, "SPECIMEN_NUMBER"], sep = "\n")))
+                           "\nSample(s) in question:", paste0(non_positive_PHL_results[, "SPECIMEN_NUMBER"], collapse = ", "), sep = "\n")))
+  }
+
+  if(any(c(is.na(PHL_data$GENDER) | PHL_data$GENDER == "" | is.na(PHL_data$age) | PHL_data$age == ""), na.rm = TRUE)) {
+
+    missing_meta <- PHL_data %>%
+      filter(is.na(GENDER) | GENDER == "" | is.na(age) | age == "") %>%
+      select(SPECIMEN_NUMBER) %>%
+      pull()
+
+    stop(simpleError(paste("Some samples are missing patient age or gender\n",
+                           "Please fill in the missing information\n",
+                           "Sample(s) in question:\n",
+                           paste0(missing_meta, collapse = ", "))))
   }
 
   show_samps <- TRUE
@@ -335,7 +349,7 @@ TU_samples <- filtered_TU_data %>%
 if(file.exists(shared_drive_fp)) {
 
   shared_environ_fp <- suppressWarnings(max(list.files(file.path(shared_drive_fp, "Sequencing_files", "2_Enviromental_samples", format(Sys.Date(), "%Y")),
-                                                       pattern = "^[0-9]*-[0-9]*-[0-9]*", full.names = TRUE, recursive = TRUE)))
+                                                       pattern = "^[0-9]+-[0-9]+-[0-9]+", full.names = TRUE, recursive = TRUE)))
 
   environmental_file_date <- as.Date(gsub("_.*", "", basename(shared_environ_fp)))
 
@@ -447,11 +461,10 @@ plate_view <- combined_list_first_half %>%
   mutate(number = cumsum(duplicated(sample_name)) + 1) %>%
   mutate(sample_name = ifelse(sample_name == "NC-pre-extract", paste0(sample_name, number), sample_name)) %>%
   select(-number) %>%
-  rbind(data.frame(sample_name = c("PC", "NC-pre-cDNA", "NC-pre-ARTIC", "NC-pre-library"))) %>%
+  rbind(data.frame(sample_name = c("PC-COVIDSeq1", "NC-pre-cDNA1", "NC-pre-ARTIC1"))) %>%
   mutate(sample_order = row_number()) %>%
   merge(empty_plate, by = "sample_order", all = TRUE) %>%
-  mutate(sample_name = case_when(sample_order == 96 ~ "NC-corner",
-                                 is.na(sample_name) ~ "",
+  mutate(sample_name = case_when(is.na(sample_name) ~ "",
                                  TRUE ~ sample_name)) %>%
   arrange(sample_order)
 
@@ -484,3 +497,50 @@ if(copy_platemap) {
 }
 
 write_csv(enviro_samples, file = here("metadata", "extra_metadata", paste0(format(Sys.time(), "%Y%m%d"), "_environmental_samples.csv")))
+
+###################################################################
+# Check if samples have already been run (need shared drive access)
+###################################################################
+
+if(file.exists(shared_drive_fp)) {
+
+  samp_names_2_check <- rbind(select(PHL_samples, sample_name),
+                              select(TU_samples, sample_name),
+                              older_samples,
+                              other_samples) %>%
+    select(sample_name) %>%
+    pull()
+
+  sequenced_accessions_fps <- list.files(file.path(shared_drive_fp, "Sequencing_results", "COVIDSeq", "nasal_swabs"),
+                                         pattern = "_PHI.csv",
+                                         recursive = TRUE,
+                                         full.names = TRUE)
+  sequenced_accessions_fps <- sequenced_accessions_fps[!grepl("not_reported_runs", sequenced_accessions_fps)]
+
+  sequenced_accessions <- sequenced_accessions_fps %>%
+    data_frame(FileName = .) %>%
+    group_by(FileName) %>%
+    do(read_csv(.$FileName, col_names = TRUE)) %>%
+    ungroup() %>%
+    mutate(sequencing_date = gsub(".*/|_.*", "", FileName),
+           samp_n_date = paste0(sequencing_date, " - ", sample_name)) %>%
+    arrange(sequencing_date) %>%
+    filter(sample_name %in% samp_names_2_check) %>%
+    select(samp_n_date) %>%
+    pull()
+
+  if(length(sequenced_accessions) > 0) {
+    stop(simpleError(paste0("\nThese samples have already been sequenced!\n",
+                            paste0(sequenced_accessions, collapse = "\n"))))
+  }
+
+} else{
+
+  message("\n*****")
+  message("Could not access shared drive path. Can't check if these samples have already been sequenced")
+  message("*****")
+  Sys.sleep(5)
+
+}
+
+message("\nRscript finished successfully!")
