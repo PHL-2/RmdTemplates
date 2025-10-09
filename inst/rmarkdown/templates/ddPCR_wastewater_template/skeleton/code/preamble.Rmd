@@ -39,23 +39,35 @@ run_date <- as.Date(gsub("_.*", "", project_name))
 standardCheck <- list.files(
   path = here(), 
   pattern = "Analyzed.csv", 
-  full.names = TRUE) %>%
-  file.exists
+  full.names = TRUE,
+  recursive = TRUE) %>%
+  file.exists() %>%
+  any()
 
 ampCheck <- list.files(
   path = here(),
   pattern = "_Amplitude.csv",
   full.names = TRUE,
-  recursive = TRUE)  %>%
-  file.exists
+  recursive = TRUE) %>%
+  file.exists() %>%
+  any()
 
-useExportFolder <- !file.exists(ampCheck&importCheck, standardCheck)
+useExportFolder <- !any(ampCheck, standardCheck)
 
 if(useExportFolder) {
   print("No files found, checking export folder")
 } else {
   print(paste("Found", unlist(list.files(path = here(), pattern = "Analyzed.csv|Amplitude.csv", recursive = TRUE))))
 }
+
+if(standardCheck) {
+  ampCheck = FALSE
+}
+
+if(ampCheck) {
+  standardCheck = FALSE
+}
+
 
 ## Filepath to wastewater metadata in aux folder
 wwMeta_fp = file.path(dirname(here::here()), "aux_files")
@@ -138,73 +150,35 @@ if (file.exists(amplitudeRunfp)) { #check if amp data exists
 
 ```{r Reading ddPCR file and selecting useful columns, eval = standardCheck}
 
-source(file = file.path(here(), "code", "standard_input.R")) #reads in analyzed csv and creates d_pre
+copy_path = list.files(path = here(), pattern = "Analyzed.csv", recursive = TRUE, full.names = TRUE)
+
+source(file = file.path(here(), "code","scripts","standard_input.R")) #reads in analyzed csv and creates d_pre
 
 ```
 
 
 ```{r Reading in amplitude data, eval = ampCheck}
 
-source(file = file.path(here(), "code", "clustering_algorithm.R")) #reads in amplitude data, clusters data, then creates d_pre
+copyPathSampleInfo <- list.files(
+  path = file.path(here(), "input"),
+  pattern = "import.csv",
+  full.names = TRUE,
+  recursive = FALSE)
+
+copy_path = list.files(
+  path = here(), 
+  pattern = "Amplitude.csv", 
+  recursive = TRUE, 
+  full.names = TRUE)
+
+source(file = file.path(here(), "code", "scripts", "clustering_algorithm.R")) #reads in amplitude data, clusters data, then creates d_pre
 
 ```
 
-```{r editing d_pre}
+```{r}
 
-if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
-  d_pre <- d_pre %>%
-    select(
-      Well, Sample = `Sample description 1`, Spiked = `Sample description 2`, Sample_date = `Sample description 3`, Extra = `Sample description 4`, SampleType, Target, `Conc(copies/uL)` = `Conc(copies/µL)`, Droplet_count = `Accepted Droplets`, Positives, Negatives) %>%
-    #mutate(Sample = gsub(pattern = "dd_", replacement = "dd", x = Sample)) %>%
-    separate(Sample, into = c("Type", "Process"), sep = "_", remove = FALSE) %>%
-    filter(!is.na(Sample),
-           Sample != "Buffer") %>%
-    mutate(posDrops10k = Positives/Droplet_count * 10000 * 100,
-           Process = ifelse(is.na(Process), "Non-processed", Process),
-           Process = ifelse(grepl(pattern = "dil", x = Extra, ignore.case = T), "Dilution", Process),
-           Process = ifelse(Spiked == "Unspiked", "Unspiked", Process),
-           Process = droplevels(factor(Process, level = c("Concentrated", "Unconcentrated", "Non-processed", "Unspiked","Dilution", "Frozen", "QuickExtract"))),
-           `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
-           Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
-           Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d")),
-           SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType),
-           Target_present = Positives >= 3
-    )
-} else {
-  d_pre <- d_pre %>%
-    separate(Sample, into = c("Sample", "Spiked", "Sample_date", "Extra"), sep = "(?<=[A-Za-z])-(?!H2O|SC2)|(?<!ddPCR|PBS)-(?=[A-za-z])") %>%
-    pivot_longer(
-      cols = c("N2 Cp/uL","E Cp/uL","MHV Cp/uL","N2 Negatives","E Negatives","MHV Negatives","N2 Positives","E Positives","MHV Positives",),
-      names_to = c("Target", "secondary"),
-      names_sep = " ",
-      values_to = "value"
-    ) %>%
-    mutate(SampleType = ifelse(grepl(pattern = "SC2", x = Sample), "PosCtrl",
-                               ifelse(Sample == "PBS" | Sample == "oldWW" | Sample == "ddPCR-H2O", "NegCtrl", "Unknown"))) %>%
-    select(Well, Sample, Spiked, SampleType, Sample_date, Extra, Target, secondary, value, Droplets) %>%
-    pivot_wider(
-      id_cols = c("Well", "Sample", "Spiked", "SampleType","Sample_date", "Extra", "Target", "Droplets"),
-      names_from = "secondary",
-      values_from = "value"
-    ) %>%
-    rename(Droplet_count = "Droplets", `Conc(copies/uL)` = "Cp/uL") %>%
-    #mutate(Sample = gsub(pattern = "dd_", replacement = "dd", x = Sample)) %>%
-    separate(Sample, into = c("Type", "Process"), sep = "_", remove = FALSE) %>%
-    filter(!is.na(Sample),
-           Sample != "Buffer") %>%
-    mutate(percentage_positive = Positives/Droplet_count * 100,
-           Process = ifelse(is.na(Process), "Non-processed", Process),
-           Process = ifelse(grepl(pattern = "dil", x = Extra, ignore.case = T), "Dilution", Process),
-           Process = ifelse(Spiked == "Unspiked", "Unspiked", Process),
-           Spiked = ifelse(grepl(pattern = "Spiked", x = Type), "Unspiked", Spiked),
-           Process = droplevels(factor(Process, level = c("Concentrated", "Unconcentrated", "Non-processed", "Unspiked","Dilution", "Frozen", "QuickExtract"))),
-           `Conc(copies/uL)` = as.numeric(`Conc(copies/uL)`),
-           Lysed = as.factor(ifelse(grepl(pattern = "lyse", x = Extra, ignore.case = T), "Lysed", "Non-Lysed")),
-           Sample_date = as.Date(Sample_date, tryFormats = c("%m/%d/%Y", "%Y-%m-%d")),
-           SampleType = ifelse(SampleType == "NTC", "NegCtrl", SampleType),
-           Target_present = Positives >= 3
-    )
-}
+targetsInfo = d_pre$Target %>%
+  unique()
 
 ```
 
@@ -219,8 +193,7 @@ droplet_test_wells <- d_pre %>%
   unique()
 
 d <- d_pre %>%
-  filter(Droplet_count >= 10000,
-         !grepl(pattern = "Target", x = Target))
+  filter(Droplet_count >= 10000)
 
 ```
 
@@ -228,7 +201,7 @@ d <- d_pre %>%
 ```{r check variance}
 
 d_var <- d %>%
-  group_by(Type, Process, Spiked, Target, Sample_date) %>%
+  group_by(Sample, Spiked, Target, Sample_received) %>%
   summarise(avg_pos_droplets = mean(Positives),
             avg_conc = mean(`Conc(copies/uL)`),
             median_conc = median(`Conc(copies/uL)`),
@@ -248,7 +221,7 @@ d_var <- d %>%
   mutate(GESD_q = p.adjust(gesd, method="BH"))
 
 d_sd <- d %>%
-  left_join(d_var, by = c("Type", "Process", "Spiked", "Target", "Sample_date")) %>%
+  left_join(d_var, by = c("Sample", "Spiked", "Target", "Sample_received")) %>%
   mutate(sd_from_mean = abs(`Conc(copies/uL)` - avg_conc)/(sd_conc),
          outlier_median = abs(`Conc(copies/uL)` - median_conc)/mad_conc)
   
@@ -260,8 +233,7 @@ d_sd <- d %>%
 variance_test <- any(d_sd$outlier_median >= 9, na.rm = T) | any(d_sd$GESD_q <= 0.01, na.rm = T)
 
 signal_check <- d %>%
-  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-         Process == "Concentrated",
+  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Sample),
          Spiked == "Spiked",
          Target == icInfo #found in config file
          ) %>%
@@ -274,11 +246,10 @@ signal_check <- any(signal_check < 100)
 if (variance_test | signal_check) {
   wellsToRemove1 <- d_sd %>%
     filter(outlier_median >= 9| GESD_q <= 0.01, 
-           grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-           Process == "Concentrated",
+           grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Sample),
            Spiked == "Spiked",
            grepl(pattern = paste(targetsInfo, collapse = "|"), x = Target)) %>%
-    group_by(Type, Process, Spiked, Sample_date) %>%
+    group_by(Sample, Spiked, Sample_received) %>%
     filter(outlier_median >= 8) %>%
     select(Well) %>%
     distinct() %>%
@@ -287,11 +258,10 @@ if (variance_test | signal_check) {
   wellsToRemove2 <- d_sd %>%
     filter(Target == icInfo,
            Positives < 100,
-           grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-           Process == "Concentrated",
+           grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Sample),
            Spiked == "Spiked",
            ) %>%
-    group_by(Type, Process, Spiked, Sample_date) %>%
+    group_by(Sample, Spiked, Sample_received) %>%
     filter(Positives < 100 | outlier_median >= 8) %>%
     select(Well) %>%
     distinct() %>%
@@ -331,11 +301,11 @@ if (variance_test | signal_check) {
 ```{r Remove samples}
 
 ww_conc_result_summarised <- d %>%
-  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
-         Process == "Concentrated",
+  filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Sample),
+         #Process == "Concentrated",
          !(Well %in% wellsToRemove),
          ) %>%
-  group_by(Type, Process, Spiked, Target, Sample_date) %>%
+  group_by(Sample, Spiked, Target, Sample_received) %>%
   summarise(avg_pos_droplets = mean(Positives),
             avg_conc = mean(`Conc(copies/uL)`),
             sd_conc = sd(`Conc(copies/uL)`)) %>%
@@ -348,8 +318,8 @@ ww_conc_result_summarised <- d %>%
                                                end_concentration_vol = end_concentration_vol_uL,
                                                initial_concentration_vol = (init_concentration_vol_uL))
   ) %>%
-  filter(Process == "Concentrated",
-         Spiked == "Spiked",
+  filter(#Process == "Concentrated",
+         #Spiked == "Spiked",
          Target != icInfo) %>%
   mutate(stock_conc_GCuL = stock_concentration_calc(concentration = avg_conc, 
                                                rxn_vol = rxn_vol_uL, 
@@ -362,8 +332,8 @@ ww_conc_result_summarised <- d %>%
          stock_conc_GC1L = stock_conc_GCuL*1000*1000
     ) %>%
   ungroup() %>%
-  select(Type, Target, Sample_date, stock_conc_GCuL, stock_conc_GC1L) %>%
-  arrange(Sample_date, Type, Target)
+  select(Sample, Target, Sample_received, stock_conc_GCuL, stock_conc_GC1L) %>%
+  arrange(Sample_received, Sample, Target)
 
 ```
 
@@ -371,7 +341,7 @@ ww_conc_result_summarised <- d %>%
 ```{r data manip}
 
 num_dates <- d %>%
-  pull(Sample_date) %>%
+  pull(Sample_received) %>%
   unique() %>%
   length()
 
@@ -382,8 +352,8 @@ if (num_dates == 1) {
 }
 
 dControls <- d %>%
-  filter(!grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type)) %>%
-  mutate(exp_con = ifelse(grepl(pattern = "PCR", x = Type ,ignore.case = T), "ddPCR control", "Extraction control"))
+  filter(!grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Sample)) %>%
+  mutate(exp_con = ifelse(grepl(pattern = "PCR", x = Sample ,ignore.case = T), "ddPCR control", "Extraction control"))
 
 # dNeg <- dControls %>%
 #   filter(grepl(pattern = "oldww|ddPCR-H2O", x = Sample, ignore.case = T) | Process == "Unspiked")
@@ -391,7 +361,7 @@ dControls <- d %>%
 
 ### To be deleted?
 # threshold <- dNeg %>%
-  # group_by(Type, Process, Target, Sample_date) %>%
+  # group_by(Sample, Process, Target, Sample_received) %>%
   # summarize(
   #   n_samp = n(),
   #   avg_pos_drop = mean(Positives),
@@ -400,9 +370,9 @@ dControls <- d %>%
   #   )
 
 # dSamples <- d %>%
-#   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type),
+#   filter(grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Sample),
 #          Process == "Concentrated") %>%
-#   group_by(Type, Process, Spiked, Target, Sample_date) %>%
+#   group_by(Sample, Process, Spiked, Target, Sample_received) %>%
 #   summarise(avg_pos_droplets = mean(Positives),
 #             avg_conc = mean(`Conc(copies/uL)`),
 #             sd_conc = sd(`Conc(copies/uL)`)) %>%
@@ -419,10 +389,10 @@ dControls <- d %>%
 # 
 dUnspiked <- d %>%
   filter(Spiked == "Unspiked",
-         grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Type))
+         grepl(pattern = "NorthEast|SouthEast|SouthWest", x = Sample))
 
 # dControls_summarise <- dControls %>%
-#   group_by(Type, Process, Target, Spiked, Sample_date) %>%
+#   group_by(Sample, Process, Target, Spiked, Sample_received) %>%
 #   summarise(avg_pos_droplets = mean(Positives),
 #             avg_conc = mean(`Conc(copies/uL)`),
 #             sd_conc = sd(`Conc(copies/uL)`)) %>%
@@ -444,14 +414,14 @@ dUnspiked <- d %>%
 
 
 
-```{r}
+```{r result table}
 
 ww_conc_result <- d %>%
-  filter(Process == "Concentrated",
-         Spiked == "Spiked",
+  filter(#Process == "Concentrated",
+         #Spiked == "Spiked",
          Target != icInfo,
-         Type == "NorthEast" | Type == "SouthEast" | Type == "SouthWest") %>%
-  #left_join(sc2_n2, by = "Sample_date") %>%
+         Sample == "NorthEast" | Sample == "SouthEast" | Sample == "SouthWest") %>%
+  #left_join(sc2_n2, by = "Sample_received") %>%
   mutate(stock_conc_GCuL = stock_concentration_calc(concentration = `Conc(copies/uL)`, 
                                                rxn_vol = rxn_vol_uL, 
                                                input_vol = input_vol_uL, 
@@ -463,35 +433,64 @@ ww_conc_result <- d %>%
          stock_conc_GC1L = stock_conc_GCuL*1000*1000
     ) %>%
   ungroup() %>%
-  select(Well, Type, Target, Sample_date, stock_conc_GCuL, stock_conc_GC1L) %>%
-  arrange(Sample_date, Type, Target)
+  select(Well, Sample, Target, Sample_received, stock_conc_GCuL, stock_conc_GC1L) %>%
+  arrange(Sample_received, Sample, Target)
+
+```
+
+```{r}
+
+LIMS <- d_sd %>%
+  mutate(flag = ifelse((Sample == "NorthEast" | Sample == "SouthEast" | Sample == "SouthWest") & (outlier_median > 9) | Droplet_count < 10000, TRUE, FALSE),
+         flag = ifelse(is.na(GESD_q), FALSE, flag),
+         flagComment = case_when((outlier_median > 9) & flag ~ "outlier",
+                                 Droplet_count < 10000 ~ "<10000 droplets",
+                                 #(Target == "MHV" & Droplet_count < 100) ~ "Internal control failed"
+                                 ),
+         uniq_sample_name = paste0("WW-", Sample_received, "-", Sample),
+         #Pos10k = percentage_positive*100,
+         rxn_vol_uL = rxn_vol_uL, 
+         input_vol_uL = input_vol_uL, 
+         extraction_vol_uL = extraction_vol_uL, 
+         elution_vol_uL = elution_vol_uL,
+         end_concentration_vol_uL = end_concentration_vol_uL,
+         init_concentration_vol_uL = init_concentration_vol_uL
+         ) %>%
+  right_join(d_pre) %>%
+  select(Well, uniq_sample_name, Sample, Sample_received, Target, `Conc(copies/uL)`, Droplet_count, Positives, Negatives, pos10k, avg_conc, sd_conc, rxn_vol_uL, input_vol_uL, extraction_vol_uL, elution_vol_uL, end_concentration_vol_uL, init_concentration_vol_uL, outlier_median, flag, flagComment) %>%
+  arrange(Well)
+
+
+write_csv(LIMS, file = file.path(here(), "LIMSexport.csv"))
 
 ```
 
 
 ```{r summary table to file}
 
+
+#### Need to fix
 ww_site_metadata <- read_csv(ww_site_meta_fp)
 
 ww_nwss_metadata <- generate_common_metadata_fields(ww_nwss_meta_fp) %>%
   select(starts_with("nwss-")) %>%
   rename_at(vars(starts_with("nwss-")), ~ gsub("nwss-", "", .))
 
-wwMeta <- cbind(ww_site_metadata, ww_nwss_metadata) %>%
-  mutate(lod_sewage = round(LoD *
-                            (rxn_vol_uL/input_vol_uL) *
-                            (elution_vol_uL/extraction_vol_uL) *
-                            (end_concentration_vol_uL/init_concentration_vol_uL) *
-                            1000000, 2),
-         lod_ref = paste0("LLOD/1L = (0.2 cp/uL) * ",
-                          "(", rxn_vol_uL, " uL ddPCR rxn vol / ", input_vol_uL, " uL ddPCR input vol) * ",
-                          "(", elution_vol_uL, " uL extraction output vol / ", extraction_vol_uL, " uL extraction input vol) * ",
-                          "(", end_concentration_vol_uL, " uL concentration output vol / ", init_concentration_vol_uL, " uL concentration input vol) * ", 
-                          "1000000 uL / 1 L"))
+wwMeta <- cbind(ww_site_metadata, ww_nwss_metadata)
+  # mutate(lod_sewage = round(0.2 *
+  #                           (rxn_vol_uL/input_vol_uL) *
+  #                           (elution_vol_uL/extraction_vol_uL) *
+  #                           (end_concentration_vol_uL/init_concentration_vol_uL) *
+  #                           1000000, 2),
+  #        lod_ref = paste0("LLOD/1L = (0.2 cp/uL) * ",
+  #                         "(", rxn_vol_uL, " uL ddPCR rxn vol / ", input_vol_uL, " uL ddPCR input vol) * ",
+  #                         "(", elution_vol_uL, " uL extraction output vol / ", extraction_vol_uL, " uL extraction input vol) * ",
+  #                         "(", end_concentration_vol_uL, " uL concentration output vol / ", init_concentration_vol_uL, " uL concentration input vol) * ",
+  #                         "1000000 uL / 1 L"))
 
-towrite <- ww_SC2_conc_result_summarised %>%
+towrite <- ww_conc_result_summarised %>%
   ungroup() %>%
-  select(pcr_gene_target = Target, pcr_target_avg_conc = stock_conc_GC1L, sample_group = Type, sample_received_date = Sample_date) %>%
+  select(pcr_gene_target = Target, pcr_target_avg_conc = stock_conc_GC1L, sample_group = Sample, sample_received_date = Sample_received) %>%
   mutate(sample_collect_date = sample_received_date - days_between_collection,
          sample_id = paste("WW",
                            format(sample_collect_date, format = "%y%m%d"),
@@ -506,11 +505,11 @@ write_csv(towrite, "summary_tab.csv")
 ```{r concentration file for sequencing}
 
 sequencing_metadata <- d %>%
-  filter(grepl(pattern = "oldWW|ZeptoSC2|NorthEast|SouthEast|SouthWest", x = Type),
-         (Process == "Concentrated" | grepl("oldWW", Type)),
+  filter(grepl(pattern = "oldWW|Zepto|Twist|NorthEast|SouthEast|SouthWest", x = Sample),
+         #(Process == "Concentrated" | grepl("oldWW", Sample)),
          !(Well %in% wellsToRemove),
          !is.na(`Conc(copies/uL)`)) %>%
-  group_by(Type, Process, Spiked, Target, Sample_date) %>%
+  group_by(Sample, Spiked, Target, Sample_received) %>%
   summarise(avg_conc = mean(`Conc(copies/uL)`),
             ddpcr_replicates = n(),
             target_present = sum(Target_present)/ddpcr_replicates >= 0.5) %>%
@@ -530,9 +529,9 @@ sequencing_metadata <- d %>%
                             concentration == "stock_conc" ~ paste0(Target, "_gc/L"),
                             concentration == "target_present" ~ paste0(Target, "_present"),
                             TRUE ~ NA),
-         sample_collect_date = Sample_date - days_between_collection,
-         suffix = ifelse(grepl("oldWW|ZeptoSC2", Type), Type, gsub("[a-z]", "", Type)),
-         uniq_sample_name = paste("WW", Sample_date, Type, sep = "-"),
+         sample_collect_date = Sample_received - days_between_collection,
+         suffix = ifelse(grepl("oldWW|ZeptoSC2", Sample), Sample, gsub("[a-z]", "", Sample)),
+         uniq_sample_name = paste("WW", Sample_received, Sample, sep = "-"),
          `bs-ww_surv_system_sample_id` = paste("WW",
                              format(sample_collect_date, format = "%y%m%d"),
                              format(run_date, format = "%y%m%d"),
@@ -543,8 +542,8 @@ sequencing_metadata <- d %>%
          ddpcr_extraction_vol_uL = extraction_vol_uL,
          ddpcr_end_concentration_vol_uL = end_concentration_vol_uL,
          ddpcr_init_concentration_vol_uL = init_concentration_vol_uL) %>%
-  select(uniq_sample_name, `bs-ww_surv_system_sample_id`, sample_group = "Type",
-         sample_collect_date, sample_received_date = "Sample_date",
+  select(uniq_sample_name, `bs-ww_surv_system_sample_id`, sample_group = "Sample",
+         sample_collect_date, sample_received_date = "Sample_received",
          Target, values, starts_with("ddpcr_")) %>%
   pivot_wider(names_from = "Target", values_from = "values") %>%
   mutate(across(ends_with("_present"), ~as.logical(.))) %>%

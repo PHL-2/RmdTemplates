@@ -112,7 +112,7 @@ if(sum(grepl(pattern = "Sample description", x = colnames(d_pre)))>0) {
     #mutate(Sample = gsub(pattern = "dd_", replacement = "dd", x = Sample)) %>%
     separate(Sample, into = c("Type", "Process"), sep = "_", remove = FALSE) %>%
     filter(!is.na(Sample),
-          Sample != "Buffer",
+          #Sample != "Buffer",
           !grepl(pattern = "Target", x = Target)) %>%
     mutate(percentage_positive = Positives/Droplet_count * 100,
           Process = ifelse(is.na(Process), "Non-processed", Process),
