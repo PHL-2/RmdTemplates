@@ -14,7 +14,7 @@ library(stringr)
 
 index_length <- "10"
 
-sequencing_controls <- c("Water control", "Reagent control", "Mock DNA positive control")
+sequencing_controls <- c("Water control", "Mock DNA positive control")
 
 sample_group_controls <- c("PBS", "oldWW", "ZeptoSC2")
 
@@ -375,7 +375,6 @@ cols2merge <- c("sample_name", "plate", "plate_row", "plate_col", "plate_coord")
 metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = TRUE, sort = FALSE) %>%
   #add in barcodes
   merge(barcodes, by = "idt_plate_coord", all.x = TRUE, sort = FALSE) %>%
-  arrange(plate, plate_col, plate_row) %>%
   #find sample group from sample_name
   mutate(sample_group = gsub("^WW-([0-9-]+)|^WW-|-Rep.*$", "", sample_name),
          sample_group = case_when(sample_group == "NE" ~ "NorthEast",
@@ -397,6 +396,7 @@ metadata_sheet <- merge(index_sheet, sample_info_sheet, by = cols2merge, all = T
          sample_received_date = str_extract(sample_name, pattern = "[0-9]{4}-[0,1][0-9]-[0-3][0-9]"),
          plate_position = gsub("^[0-9]*_", "", plate_coord)) %>%
   select(sample_id, starts_with(c("sample", "plate", "idt")), everything()) %>%
+  arrange(plate, plate_col, plate_row)
 
 for(additional_sample_info in c("sample_collection_date", "PHL_sample_received_date")) {
   if(additional_sample_info %in% colnames(metadata_sheet)) {
@@ -444,10 +444,8 @@ multi_grep <- function(named_vector, col_name) {
   ret_vector
 }
 
-named_sample_type <- c("^Test-" = "Testing sample type",
-                       "^NC-" = "Water control",
-                       "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
-                       "^PC-[0-9]*$" = "Mock DNA positive control",
+named_sample_type <- c("^NC-.*[0-9]+$" = "Water control",
+                       "^PC-.*[0-9]+$" = "Mock DNA positive control",
                        "^WW-" = "Wastewater")
 
 extra_cols2merge <- c("uniq_sample_name", "sample_group", "sample_received_date")
@@ -792,6 +790,7 @@ merged_samples_metadata_sheet <- metadata_sheet %>%
          plate_row = idt_plate_row,
          plate_col = idt_plate_col,
          plate_coord = paste0(plate, "_", plate_row, plate_col),
+         plate_position = paste0(plate_row, plate_col),
          across(matches("_col$|coord$"), ~ str_replace_all(., "\\d+", function(m) sprintf("%02d", as.numeric(m)))),
          sample_id = gsub("_", "-", paste0("PHL2", "-", instrument_regex, "-", idt_plate_coord, "-", gsub("-", "", sequencing_date))),
          sample_name = paste0(uniq_sample_name, "-Merged"),

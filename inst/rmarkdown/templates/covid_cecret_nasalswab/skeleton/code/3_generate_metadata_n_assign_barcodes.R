@@ -563,10 +563,8 @@ multi_grep <- function(named_vector, col_name) {
   ret_vector
 }
 
-named_sample_type <- c("^Test-" = "Testing sample type",
-                       "^NC-" = "Water control",
-                       "^BLANK[0-9]*$|^Blank[0-9]*$" = "Reagent control",
-                       "^PC-[0-9]*$" = "Mock DNA positive control",
+named_sample_type <- c("^NC-" = "Water control",
+                       "^PC-" = "Mock DNA positive control",
                        "^[A-Z0-9][0-9]+$" = "Nasal swab") #allow the Temple specimen IDs to be any number, once it passes 9
 
 metadata_sheet <- metadata_sheet %>%
@@ -575,7 +573,7 @@ metadata_sheet <- metadata_sheet %>%
                                  (is.na(sample_type) | sample_type == "") ~ multi_grep(named_sample_type, sample_name),
                                  TRUE ~ NA)) %>%
   mutate(sample_collected_by = case_when(!(is.na(sample_collected_by) | sample_collected_by == "") ~ sample_collected_by,
-                                         grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ "Philadelphia Department of Public Health",
+                                         grepl("Water control|Mock DNA positive control", sample_type) ~ "Philadelphia Department of Public Health",
                                          TRUE ~ NA)) %>%
   mutate(PHL_sample_received_date = case_when(!(is.na(PHL_sample_received_date) | as.character(PHL_sample_received_date) == "") ~ as.Date(PHL_sample_received_date),
                                               #if it's a control, use Tuesday of the sequencing week if no date specified
@@ -604,7 +602,7 @@ metadata_sheet <- metadata_sheet %>%
                                TRUE ~ epi_name)) %>%
   mutate(requester_email = case_when(!(is.na(requester_email) | requester_email == "") ~ requester_email,
                                      TRUE ~ epi_email)) %>%
-  mutate(environmental_site = case_when(grepl("Water control|Reagent control|Mock DNA positive control", sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
+  mutate(environmental_site = case_when(grepl("Water control|Mock DNA positive control", sample_type) ~ paste0(sample_name, " - ", plate_row, plate_col),
                                         grepl("Environmental control", sample_type) ~ paste0(environmental_site, " - ", plate_row, plate_col),
                                         TRUE ~ environmental_site))
 
