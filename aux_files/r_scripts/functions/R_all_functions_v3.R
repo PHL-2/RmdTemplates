@@ -264,7 +264,7 @@ check_screen_job <- function(message2display = "Running function to check screen
 
   # monitor the screen log file
   run_in_terminal(paste("echo", paste0("'", message2display, "';"),
-                        "ssh -tt", ec2_login,
+                        "ssh -o ServerAliveInterval=60 -tt", ec2_login,
                         shQuote(paste("sleep 5;",
                                       "SCREEN_PID=`screen -ls | grep", screen_session_name, "| cut -f1 -d'.' | sed 's/\\W//g'`;",
                                       "if test -z ${SCREEN_PID};",
@@ -283,7 +283,15 @@ check_screen_job <- function(message2display = "Running function to check screen
                                       "echo '\n';",
                                       "tail --pid=$SCREEN_PID -f", paste0(screen_log_fp, "/", screen_session_name, ".screenlog;"),
                                       "sleep 15;",
-                                      "fi"), type = "sh")))
+                                      "fi;",
+                                      # Nextflow-specific check: error if the screen log does not display SUCCEEDED
+                                      "if [[", screen_session_name, "== 'nf-'* ]];",
+                                      "then if tail -n 1", paste0(screen_log_fp, "/", screen_session_name, ".screenlog"), "| grep -q 'Job finished with status: SUCCEEDED';",
+                                      "then exit 0;",
+                                      "else exit 1;",
+                                      "fi;",
+                                      "fi"), type = "sh")),
+                  command2print = paste0("cat ", screen_log_fp, "/", screen_session_name, ".screenlog"))
 }
 
 ## =============================================================================================================
@@ -316,8 +324,11 @@ nf_headnode_screen_job <- function(batch_job_queue,
                                                batch_aws_clipath, " s3 cp ", batch_nf_config_fp, " /root/.nextflow/config --only-show-errors; ",
                                                "stty rows ", window_height, " cols ", window_length, "; ",
                                                screen_job_arg$command2run, "; ",
+                                               "nf_exit_code=\\$?; ",
                                                # save nextflow workdir and cache files in case pipeline needs to be resumed
-                                               batch_aws_clipath, " s3 cp /data/ ", nf_bucket_dir, "/resume/ --recursive --only-show-errors",
+                                               batch_aws_clipath, " s3 cp /data/ ", nf_bucket_dir, "/resume/ --recursive --only-show-errors; ",
+                                               "echo Nextflow exited with code: \\$nf_exit_code; ",
+                                               "exit \\$nf_exit_code",
                                                "'")
   )
 
