@@ -283,15 +283,23 @@ check_screen_job <- function(message2display = "Running function to check screen
                                       "echo '\n';",
                                       "tail --pid=$SCREEN_PID -f", paste0(screen_log_fp, "/", screen_session_name, ".screenlog;"),
                                       "sleep 15;",
-                                      "fi;",
-                                      # Nextflow-specific check: error if the screen log does not display SUCCEEDED
-                                      "if [[", screen_session_name, "== 'nf-'* ]];",
-                                      "then if tail -n 1", paste0(screen_log_fp, "/", screen_session_name, ".screenlog"), "| grep -q 'Job finished with status: SUCCEEDED';",
-                                      "then exit 0;",
-                                      "else exit 1;",
-                                      "fi;",
-                                      "fi"), type = "sh")),
-                  command2print = paste0("cat ", screen_log_fp, "/", screen_session_name, ".screenlog"))
+                                      "fi"), type = "sh")))
+
+  # For Nextflow-specific submissions, check if the screen log does not display SUCCEEDED and throw an error
+  # (exclude the nf-core demultiplex pipeline because there are already checks in place after the pipeline finishes)
+  if(grepl("^nf-", screen_session_name)) {
+    if(!grepl("^nf-demux-", screen_session_name)) {
+      run_in_terminal(paste("echo", paste0("'Checking Nextflow exit code';"),
+                            "ssh -o ServerAliveInterval=60 -tt", ec2_login,
+                            shQuote(paste("sleep 5;",
+                                          "if tail -n 1", paste0(screen_log_fp, "/", screen_session_name, ".screenlog"), "| grep -q 'Job finished with status: SUCCEEDED';",
+                                          "then exit 0;",
+                                          "else exit 1;",
+                                          "fi"), type = "sh")),
+                      command2print = paste0("cat ", screen_log_fp, "/", screen_session_name, ".screenlog"))
+    }
+  }
+
 }
 
 ## =============================================================================================================
