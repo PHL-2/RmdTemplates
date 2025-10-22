@@ -53,8 +53,11 @@ sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = "SampleSheet_
 if(length(sample_sheet_fn) > 1) {
   stop(simpleError("\nThere are more than 2 sample sheets detected!! Please delete the incorrect one"))
 } else if(identical(sample_sheet_fn, character(0))) {
-  stop(simpleError(paste("\nNo SampleSheet_v2.csv found. Please download it from", paste0(s3_run_bucket, "/", sequencing_date, "/"),
-                         "\nOr rerun the 2nd script to generate it")))
+  stop(simpleError(paste("\nNo SampleSheet_v2.csv found. Please download it from:\n",
+                         paste0(s3_run_bucket, "/", sequencing_date, "/"),
+                         "\nAnd place it in:\n",
+                         here("metadata", "munge/"),
+                         "\n\nOr rerun the 2nd script to generate it")))
 }
 
 instrument_type <- gsub("^[0-9-]+_(MiSeq|NextSeq2000)_.*", "\\1", sample_sheet_fn)
