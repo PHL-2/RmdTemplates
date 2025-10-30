@@ -47,20 +47,7 @@ if(sequencing_date == "") {
   stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
 }
 
-# If this sample sheet is missing, get it from AWS S3 bucket
-sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = "SampleSheet_v2.csv")
-
-if(length(sample_sheet_fn) > 1) {
-  stop(simpleError("\nThere are more than 2 sample sheets detected!! Please delete the incorrect one"))
-} else if(identical(sample_sheet_fn, character(0))) {
-  stop(simpleError(paste("\nNo SampleSheet_v2.csv found. Please download it from:\n",
-                         paste0(s3_run_bucket, "/", sequencing_date, "/"),
-                         "\nAnd place it in:\n",
-                         here("metadata", "munge/"),
-                         "\n\nOr rerun the 2nd script to generate it")))
-}
-
-instrument_type <- gsub("^[0-9-]+_(MiSeq|NextSeq2000)_.*", "\\1", sample_sheet_fn)
+instrument_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
 
 # suffix for the screen session log names
 session_suffix <- tolower(paste(instrument_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
@@ -434,12 +421,37 @@ nf_concat_fastq_samplesheet_pattern <- "nf_concat_fastq_samplesheet.csv"
 local_concat_samplesheet_fp <- here("metadata", "munge",
                                     tolower(paste(sequencing_date, instrument_type, sample_type_acronym, prj_description, nf_concat_fastq_samplesheet_pattern, sep = "_")))
 
+nf_concat_fastq_samplesheet_fp <- paste(nf_demux_output_path, "nf_samplesheets", basename(local_concat_samplesheet_fp), sep = "/")
+
 nf_concat_bucket_path <- paste0(s3_nextflow_work_bucket, "/concat_fastq_", sample_type_acronym, "_", sequencing_date)
+
+if(!exists(local_concat_samplesheet_fp)) {
+
+  dir.create(here("metadata", "munge"), showWarnings = FALSE)
+
+  nf_concat_dl_cmd <- paste("aws s3 cp", nf_concat_fastq_samplesheet_fp, staging_path)
+
+  # Download the concat samplesheet from S3 if found
+  download_nf_concat_sheet_session <- paste0("down-nf-concat-sheet-", session_suffix)
+  submit_screen_job(message2display = "Downloading nf-concat samplesheet from S3",
+                    screen_session_name = download_nf_concat_sheet_session,
+                    command2run = nf_concat_dl_cmd
+  )
+
+  check_screen_job(message2display = "Checking nf-concat samplesheet download job",
+                   screen_session_name = download_nf_concat_sheet_session)
+
+  # Download the SampleSheet from EC2 instance
+  run_in_terminal(paste("scp",
+                        paste0(ec2_hostname, ":", staging_path, basename(local_concat_samplesheet_fp)),
+                        here("metadata", "munge")),
+                  paste(basename(local_concat_samplesheet_fp), "does not exist at", dirname(nf_concat_fastq_samplesheet_fp),
+                        "\nPlease create a nf-concat sample sheet by running the 2nd script")
+  )
+}
 
 is_nf_concat_samplesheet_empty <- read_csv(local_concat_samplesheet_fp) %>%
   nrow() == 0
-
-nf_concat_fastq_samplesheet_fp <- paste(nf_demux_output_path, "nf_samplesheets", basename(local_concat_samplesheet_fp), sep = "/")
 
 if(!is_nf_concat_samplesheet_empty) {
 
