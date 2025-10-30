@@ -47,20 +47,7 @@ if(sequencing_date == "") {
   stop (simpleError("Please enter the date into [sequencing_date] as YYYY-MM-DD"))
 }
 
-# If this sample sheet is missing, get it from AWS S3 bucket
-sample_sheet_fn <- list.files(here("metadata", "munge"), pattern = "SampleSheet_v2.csv")
-
-if(length(sample_sheet_fn) > 1) {
-  stop(simpleError("\nThere are more than 2 sample sheets detected!! Please delete the incorrect one"))
-} else if(identical(sample_sheet_fn, character(0))) {
-  stop(simpleError(paste("\nNo SampleSheet_v2.csv found. Please download it from:\n",
-                         paste0(s3_run_bucket, "/", sequencing_date, "/"),
-                         "\nAnd place it in:\n",
-                         here("metadata", "munge/"),
-                         "\n\nOr rerun the 3rd script to generate it")))
-}
-
-instrument_type <- gsub("^[0-9-]+_(MiSeq|NextSeq2000)_.*", "\\1", sample_sheet_fn)
+instrument_type <- c("MiSeq", "NextSeq2000")[sequencer_select]
 
 # suffix for the screen session log names
 session_suffix <- tolower(paste(instrument_type, sample_type_acronym, pathogen_acronym, basename(here()), sep = "-"))
